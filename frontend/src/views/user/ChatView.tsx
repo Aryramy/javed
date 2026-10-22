@@ -18,7 +18,7 @@ import { ModelSelector } from '../../components/chat/ModelSelector';
 import { TokenCostMeter } from '../../components/chat/TokenCostMeter';
 import { MarkdownContent } from '../../components/chat/MarkdownContent';
 import { chatService } from '../../services/chatService';
-import { useBackend } from '../../context';
+import { useBackend, useMode } from '../../context';
 import { cn } from '../../lib/utils';
 import { AssistantRuntimeProvider, useExternalStoreRuntime } from '@assistant-ui/react';
 import type {
@@ -116,6 +116,7 @@ function generateMessageId(role: string): string {
 
 export const ChatView: React.FC = () => {
   const { status, latencyMs, systemStatus } = useBackend();
+  const { mode } = useMode();
   const isConnected = status === 'connected';
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -126,6 +127,7 @@ export const ChatView: React.FC = () => {
   const [catalogMeta, setCatalogMeta] = useState<ModelCatalogResponse | null>(null);
   const [input, setInput] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [showReasoning, setShowReasoning] = useState<boolean>(false);
   const [currentUsage, setCurrentUsage] = useState<StreamUsage | null>(null);
   const [totals, setTotals] = useState<ConversationTotals>({
     totalPromptTokens: 0,
@@ -542,18 +544,47 @@ export const ChatView: React.FC = () => {
                       ) : (
                         <>
                           {message.reasoning && (
-                            <details
-                              id={`reasoning-trace-${message.id}`}
-                              className="mb-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/70 p-2.5 text-xs text-zinc-400 group"
-                            >
-                              <summary className="cursor-pointer font-mono text-[11px] text-zinc-500 hover:text-cyan-400 flex items-center gap-1.5 select-none font-medium">
-                                <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
-                                <span>Model Reasoning Trace</span>
-                              </summary>
-                              <div className="mt-2 text-zinc-400 text-xs font-mono whitespace-pre-wrap pl-2 border-l border-zinc-800 leading-relaxed">
-                                {message.reasoning}
+                            (mode === 'dev' || showReasoning) ? (
+                              <details
+                                id={`reasoning-trace-${message.id}`}
+                                className="mb-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/70 p-2.5 text-xs text-zinc-400 group"
+                                open={mode === 'dev' ? false : true}
+                              >
+                                <summary className="cursor-pointer font-mono text-[11px] text-zinc-500 hover:text-cyan-400 flex items-center justify-between select-none font-medium">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                                    <span>Model Reasoning Trace</span>
+                                  </div>
+                                  {mode === 'user' && (
+                                    <span
+                                      className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowReasoning(false);
+                                      }}
+                                    >
+                                      [hide]
+                                    </span>
+                                  )}
+                                </summary>
+                                <div className="mt-2 text-zinc-400 text-xs font-mono whitespace-pre-wrap pl-2 border-l border-zinc-800 leading-relaxed">
+                                  {message.reasoning}
+                                </div>
+                              </details>
+                            ) : (
+                              <div className="mb-2">
+                                <button
+                                  type="button"
+                                  id={`toggle-reasoning-${message.id}`}
+                                  onClick={() => setShowReasoning(true)}
+                                  className="text-[11px] text-zinc-500 hover:text-cyan-400 font-mono inline-flex items-center gap-1 transition-colors"
+                                  title="Model reasoning metadata available. Click to view trace."
+                                >
+                                  <Sparkles className="w-3 h-3 text-cyan-400/60" />
+                                  <span>View reasoning trace</span>
+                                </button>
                               </div>
-                            </details>
+                            )
                           )}
                           <MarkdownContent content={message.content} />
                           {message.status === 'streaming' && (

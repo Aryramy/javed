@@ -332,8 +332,18 @@ describe('ChatView Full-Stack Integration', () => {
     const sendButton = screen.getByRole('button', { name: /send message/i });
     await user.click(sendButton);
 
+    // In ordinary User Mode, answer content is visible, but raw reasoning trace is NOT exposed by default
     await waitFor(() => {
       expect(screen.getByText('Direct final answer.')).toBeInTheDocument();
+      expect(screen.queryByText('Thinking through reasoning process step 1...')).not.toBeInTheDocument();
+      expect(screen.getByText('View reasoning trace')).toBeInTheDocument();
+    });
+
+    // Clicking View reasoning trace exposes the isolated reasoning trace
+    const viewTraceButton = screen.getByText('View reasoning trace');
+    await user.click(viewTraceButton);
+
+    await waitFor(() => {
       expect(screen.getByText('Model Reasoning Trace')).toBeInTheDocument();
       expect(screen.getByText('Thinking through reasoning process step 1...')).toBeInTheDocument();
     });

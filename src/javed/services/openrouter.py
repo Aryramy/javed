@@ -25,6 +25,22 @@ logger = logging.getLogger("javed.services.openrouter")
 AUTO_ROUTER_MODEL_ID = "openrouter/auto"
 SUPPORTED_COST_TIERS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 
+DEFAULT_SYSTEM_PROMPT: str = (
+    "You are Javed, a helpful AI assistant operating within Project Javed. "
+    "Current Stage: Stage 2 (BRICK-003: Core Conversational Intelligence). "
+    "Crucial Information & Verification Boundary: "
+    "You do not currently possess live web browsing, real-time search, or external "
+    "financial/news data feeds in this stage (browser and search tools are scheduled "
+    "for future bricks). When answering time-sensitive inquiries (such as current events, "
+    "today's news, real-time sports results, live market/cryptocurrency prices, or recent "
+    "events occurring after your pre-training knowledge cutoff): "
+    "1. You MUST clearly disclose upfront that you do not have access to live real-time "
+    "tools or a verified current information source. "
+    "2. You MUST NOT present outdated model knowledge, assumptions, or speculation as "
+    "verified current facts. "
+    "3. If providing general or historical context, explicitly identify your knowledge boundary."
+)
+
 # Pinned default favorites for quick selection (Auto Router prioritized)
 DEFAULT_FAVORITE_MODEL_IDS: list[str] = [
     AUTO_ROUTER_MODEL_ID,
@@ -426,6 +442,17 @@ class OpenRouterService:
             if should_close:
                 await client.aclose()
 
+    def _prepare_messages(self, messages: list[ChatMessage]) -> list[dict[str, str]]:
+        """Prepare outgoing messages, prepending system prompt if absent."""
+        has_system = any(m.role == "system" for m in messages)
+        formatted: list[dict[str, str]] = []
+        if not has_system:
+            system_prompt = self.settings.openrouter_system_prompt or DEFAULT_SYSTEM_PROMPT
+            formatted.append({"role": "system", "content": system_prompt})
+        for m in messages:
+            formatted.append({"role": m.role, "content": m.content})
+        return formatted
+
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
         """Stream chat tokens and usage events from OpenRouter via Server-Sent Events."""
         if not self.api_key:
@@ -438,7 +465,7 @@ class OpenRouterService:
         model_id = request.model or self.default_model
         payload: dict[str, Any] = {
             "model": model_id,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "messages": self._prepare_messages(request.messages),
             "temperature": request.temperature,
             "stream": True,
             "stream_options": {"include_usage": True},
@@ -460,11 +487,11 @@ class OpenRouterService:
                 "id": "auto-router",
                 "cost_tier": effective_cost_tier,
             }
-            if request.session_id:
-                plugin_cfg["session_id"] = request.session_id
             payload["plugins"] = [plugin_cfg]
-            if request.session_id:
-                payload["session_id"] = request.session_id
+
+        # Top-level session_id for OpenRouter session stickiness / prompt caching
+        if request.session_id:
+            payload["session_id"] = request.session_id
 
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
@@ -473,6 +500,7 @@ class OpenRouterService:
         accumulated_reasoning: list[str] = []
         reported_usage: StreamUsage | None = None
         selected_model: str | None = None
+        inside_think = False
 
         try:
             client = self._external_client or httpx.AsyncClient(timeout=self.timeout)
@@ -520,8 +548,10 @@ class OpenRouterService:
                         if choices:
                             delta = choices[0].get("delta", {})
 
-                            # Preserve model reasoning traces separately (never expose as ordinary content)
-                            reasoning_delta = delta.get("reasoning") or delta.get("reasoning_content")
+                            # Preserve model reasoning traces separately
+                            reasoning_delta = (
+                                delta.get("reasoning") or delta.get("reasoning_content")
+                            )
                             if reasoning_delta:
                                 accumulated_reasoning.append(reasoning_delta)
                                 yield ChatStreamEvent(
@@ -535,15 +565,102 @@ class OpenRouterService:
 
                             token = delta.get("content")
                             if token:
-                                accumulated_text.append(token)
-                                yield ChatStreamEvent(
-                                    type="token",
-                                    content=token,
-                                    selected_model=selected_model,
-                                    requested_model=model_id,
-                                    cost_tier=effective_cost_tier,
-                                    session_id=request.session_id,
-                                )
+                                if "<think>" in token and "</think>" in token:
+                                    import re
+                                    think_part = re.search(
+                                        r"<think>(.*?)</think>", token, re.DOTALL
+                                    )
+                                    clean_tok = re.sub(
+                                        r"<think>.*?</think>", "", token, flags=re.DOTALL
+                                    )
+                                    if think_part:
+                                        r_text = think_part.group(1)
+                                        accumulated_reasoning.append(r_text)
+                                        yield ChatStreamEvent(
+                                            type="reasoning",
+                                            reasoning=r_text,
+                                            selected_model=selected_model,
+                                            requested_model=model_id,
+                                            cost_tier=effective_cost_tier,
+                                            session_id=request.session_id,
+                                        )
+                                    if clean_tok:
+                                        accumulated_text.append(clean_tok)
+                                        yield ChatStreamEvent(
+                                            type="token",
+                                            content=clean_tok,
+                                            selected_model=selected_model,
+                                            requested_model=model_id,
+                                            cost_tier=effective_cost_tier,
+                                            session_id=request.session_id,
+                                        )
+                                elif not inside_think and "<think>" in token:
+                                    parts = token.split("<think>", 1)
+                                    if parts[0]:
+                                        accumulated_text.append(parts[0])
+                                        yield ChatStreamEvent(
+                                            type="token",
+                                            content=parts[0],
+                                            selected_model=selected_model,
+                                            requested_model=model_id,
+                                            cost_tier=effective_cost_tier,
+                                            session_id=request.session_id,
+                                        )
+                                    if parts[1]:
+                                        accumulated_reasoning.append(parts[1])
+                                        yield ChatStreamEvent(
+                                            type="reasoning",
+                                            reasoning=parts[1],
+                                            selected_model=selected_model,
+                                            requested_model=model_id,
+                                            cost_tier=effective_cost_tier,
+                                            session_id=request.session_id,
+                                        )
+                                    inside_think = True
+                                elif inside_think:
+                                    if "</think>" in token:
+                                        parts = token.split("</think>", 1)
+                                        if parts[0]:
+                                            accumulated_reasoning.append(parts[0])
+                                            yield ChatStreamEvent(
+                                                type="reasoning",
+                                                reasoning=parts[0],
+                                                selected_model=selected_model,
+                                                requested_model=model_id,
+                                                cost_tier=effective_cost_tier,
+                                                session_id=request.session_id,
+                                            )
+                                        inside_think = False
+                                        if parts[1]:
+                                            accumulated_text.append(parts[1])
+                                            yield ChatStreamEvent(
+                                                type="token",
+                                                content=parts[1],
+                                                selected_model=selected_model,
+                                                requested_model=model_id,
+                                                cost_tier=effective_cost_tier,
+                                                session_id=request.session_id,
+                                            )
+                                    else:
+                                        accumulated_reasoning.append(token)
+                                        yield ChatStreamEvent(
+                                            type="reasoning",
+                                            reasoning=token,
+                                            selected_model=selected_model,
+                                            requested_model=model_id,
+                                            cost_tier=effective_cost_tier,
+                                            session_id=request.session_id,
+                                        )
+                                else:
+                                    accumulated_text.append(token)
+                                    yield ChatStreamEvent(
+                                        type="token",
+                                        content=token,
+                                        selected_model=selected_model,
+                                        requested_model=model_id,
+                                        cost_tier=effective_cost_tier,
+                                        session_id=request.session_id,
+                                    )
 
                         # Process terminal or intermediate usage chunk
                         raw_usage = chunk.get("usage")
@@ -651,7 +768,7 @@ class OpenRouterService:
         model_id = request.model or self.default_model
         payload: dict[str, Any] = {
             "model": model_id,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "messages": self._prepare_messages(request.messages),
             "temperature": request.temperature,
             "stream": False,
         }
@@ -671,11 +788,11 @@ class OpenRouterService:
                 "id": "auto-router",
                 "cost_tier": effective_cost_tier,
             }
-            if request.session_id:
-                plugin_cfg["session_id"] = request.session_id
             payload["plugins"] = [plugin_cfg]
-            if request.session_id:
-                payload["session_id"] = request.session_id
+
+        # Top-level session_id for session stickiness and prompt caching
+        if request.session_id:
+            payload["session_id"] = request.session_id
 
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
@@ -693,6 +810,14 @@ class OpenRouterService:
             choice_msg = choice.get("message", {})
             content = choice_msg.get("content", "")
             reasoning = choice_msg.get("reasoning") or choice_msg.get("reasoning_content")
+
+            # Isolate inline <think> tags if model emits them in content
+            if not reasoning and "<think>" in content and "</think>" in content:
+                import re
+                think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+                if think_match:
+                    reasoning = think_match.group(1).strip()
+                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
             finish_reason = choice.get("finish_reason")
             selected_model = data.get("model") or model_id
 

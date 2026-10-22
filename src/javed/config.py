@@ -78,6 +78,10 @@ class Settings(BaseModel):
         default="low",
         description="Default cost tier for openrouter/auto (low, medium, high, xhigh, max)",
     )
+    openrouter_system_prompt: str | None = Field(
+        default=None,
+        description="Optional system prompt override for LLM conversations",
+    )
     app_name: str = Field(
         default="Javed Control Center",
         description="Application title for OpenRouter analytics",
@@ -111,6 +115,7 @@ def get_settings() -> Settings:
         "openrouter_daily_budget_usd": daily_budget,
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
         "openrouter_auto_router_cost_tier": os.getenv("OPENROUTER_AUTO_ROUTER_COST_TIER", "low"),
+        "openrouter_system_prompt": os.getenv("OPENROUTER_SYSTEM_PROMPT"),
     }
     if allowed_origins:
         kwargs["allowed_origins"] = allowed_origins

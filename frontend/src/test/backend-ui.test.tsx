@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider, ModeProvider, BackendProvider } from '@/context'
 import { Header } from '@/components/layout/Header'
+import { Sidebar } from '@/components/layout/Sidebar'
 import { ConnectivityView } from '@/views/dev/ConnectivityView'
 import { DiagnosticsView } from '@/views/dev/DiagnosticsView'
 import { ChatView } from '@/views/user/ChatView'
@@ -72,6 +73,21 @@ describe('Backend UI Integration Components', () => {
     // The header should contain the connection button/pill
     const statusButton = screen.getByRole('button', { name: /backend connection status/i })
     expect(statusButton).toBeInTheDocument()
+  })
+
+  it('renders Header and Sidebar with consistent verified backend connection state', async () => {
+    renderWithProviders(
+      <div>
+        <Header mobileMenuOpen={false} setMobileMenuOpen={() => {}} />
+        <Sidebar mobileOpen={false} setMobileOpen={() => {}} />
+      </div>
+    )
+
+    const statusButton = screen.getByRole('button', { name: /backend connection status/i })
+    expect(statusButton).toBeInTheDocument()
+
+    const sidebarStatus = screen.getByTestId('sidebar-connection-status')
+    expect(sidebarStatus).toBeInTheDocument()
   })
 
   it('renders ConnectivityView with subsystem monitor and live telemetry', async () => {

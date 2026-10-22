@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Terminal,
 } from 'lucide-react'
-import { useMode } from '@/context'
+import { useBackend, useMode } from '@/context'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -24,6 +24,7 @@ interface SidebarProps {
 
 export const Sidebar = ({ mobileOpen, setMobileOpen }: SidebarProps) => {
   const { mode } = useMode()
+  const { status, latencyMs } = useBackend()
 
   const userNavItems = [
     { name: 'Chat', path: '/chat', icon: MessageSquare, badge: 'BRICK-003' },
@@ -37,7 +38,12 @@ export const Sidebar = ({ mobileOpen, setMobileOpen }: SidebarProps) => {
   const devNavItems = [
     { name: 'App Info', path: '/dev/info', icon: Info, active: true },
     { name: 'Runtime Status', path: '/dev/runtime', icon: Activity, active: true },
-    { name: 'Connectivity', path: '/dev/connectivity', icon: Radio, badge: 'Offline' },
+    {
+      name: 'Connectivity',
+      path: '/dev/connectivity',
+      icon: Radio,
+      badge: status === 'connected' ? 'Connected' : 'Disconnected',
+    },
     { name: 'Diagnostics', path: '/dev/diagnostics', icon: ShieldCheck, active: true },
     { name: 'Logs & Events', path: '/dev/logs', icon: Terminal, active: true },
     { name: 'Telemetry', path: '/dev/telemetry', icon: Gauge, active: true },
@@ -99,13 +105,32 @@ export const Sidebar = ({ mobileOpen, setMobileOpen }: SidebarProps) => {
       {/* Foundation Integrity Footer */}
       <div className="p-4 border-t border-border/70 bg-secondary/30">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full',
+              status === 'connected'
+                ? 'bg-emerald-500 animate-pulse'
+                : status === 'connecting'
+                ? 'bg-blue-500 animate-ping'
+                : status === 'reconnecting'
+                ? 'bg-amber-500 animate-ping'
+                : 'bg-rose-500'
+            )}
+          />
           <span className="text-[11px] font-semibold text-foreground">
-            Stage 1 UI Shell Active
+            {status === 'connected'
+              ? 'Backend Connected'
+              : status === 'connecting'
+              ? 'Backend Connecting...'
+              : status === 'reconnecting'
+              ? 'Backend Reconnecting...'
+              : 'Backend Disconnected'}
           </span>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-tight">
-          Backend FastAPI gateway (BRICK-002) disconnected. Mocked data strictly prohibited.
+        <p className="text-[10px] text-muted-foreground leading-tight" data-testid="sidebar-connection-status">
+          {status === 'connected'
+            ? `FastAPI gateway operational${latencyMs !== null ? ` (${latencyMs}ms)` : ''}. Mocked data strictly prohibited.`
+            : 'Backend FastAPI gateway disconnected. Mocked data strictly prohibited.'}
         </p>
       </div>
     </div>

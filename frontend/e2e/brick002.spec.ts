@@ -12,6 +12,11 @@ test.describe('BRICK-002: Real FastAPI Backend & Frontend Integration', () => {
     // Check ChatView banner shows backend live connection info
     const chatBanner = page.locator('text=BACKEND CONNECTED:')
     await expect(chatBanner).toBeVisible({ timeout: 5000 })
+
+    // Check Sidebar displays matching verified connected state
+    const sidebarStatus = page.locator('[data-testid="sidebar-connection-status"]')
+    await expect(sidebarStatus).toBeVisible({ timeout: 5000 })
+    await expect(sidebarStatus).toContainText('FastAPI gateway operational', { timeout: 5000 })
   })
 
   test('02. Developer Connectivity View shows real REST, WebSocket, and subsystem states', async ({ page }) => {

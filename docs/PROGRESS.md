@@ -104,4 +104,4 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-22 | TASK-031 | BRICK-003 OpenRouter Adapter & Live Streaming Endpoints | VERIFIED | 8/8 Pytest Passed (Unit + Live Smoke) |
 | 2026-10-22 | TASK-032 | BRICK-003 React Conversational UI, Model Picker & Cost Meter | VERIFIED | 31/31 Vitest Passed, 0 Oxlint Errors |
 | 2026-10-22 | TASK-033 | BRICK-003 Chrome E2E Acceptance Verification & Report | VERIFIED | REPORT-003.md (10/10 Playwright Passed) |
-| 2026-10-22 | TASK-034 | BRICK-003 Final Acceptance Audit & Targeted Corrections | READY FOR ACCEPTANCE | REPORT-003.md Addendum (11/11 Playwright, 24 Pytest) |
+| 2026-10-22 | TASK-034 | BRICK-003 Final Acceptance Audit & Manual Acceptance Corrections | READY FOR ACCEPTANCE | REPORT-003.md (35 Pytest, 35 Vitest, 12 Playwright E2E passed) |

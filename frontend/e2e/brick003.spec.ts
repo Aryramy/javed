@@ -47,10 +47,7 @@ test.describe('BRICK-003: OpenRouter LLM Integration & Live Streaming Chat', () 
 
     // Assistant response should start and finish streaming
     const assistantBubble = page.locator('.prose');
-    await expect(assistantBubble).toBeVisible({ timeout: 15000 });
-
-    // Wait for text to arrive from OpenRouter
-    await expect(assistantBubble).toContainText(/Javed|Verified/i, { timeout: 15000 });
+    await expect(assistantBubble).toContainText(/Javed|Verified/i, { timeout: 25000 });
 
     // Verify token and cost telemetry pill rendered in assistant bubble
     const telemetryPill = page.locator('text=/tokens/i');

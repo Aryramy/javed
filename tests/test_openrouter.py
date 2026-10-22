@@ -336,7 +336,9 @@ async def test_auto_router_cost_tier_default_fallback(mock_settings: Settings) -
 
 
 @pytest.mark.asyncio
-async def test_auto_router_all_five_cost_tiers_request_serialization(mock_settings: Settings) -> None:
+async def test_auto_router_all_five_cost_tiers_request_serialization(
+    mock_settings: Settings,
+) -> None:
     """Validate all five cost tiers at request serialization without live calls."""
     tiers = ["low", "medium", "high", "xhigh", "max"]
     for tier in tiers:
@@ -391,7 +393,11 @@ async def test_auto_router_session_id_multi_turn_stickiness(mock_settings: Setti
         status_code = 200
 
         async def aiter_lines(self):
-            yield 'data: {"model":"anthropic/claude-3.5-sonnet","choices":[{"delta":{"content":"ok"}}]}'
+            chunk = json.dumps({
+                "model": "anthropic/claude-3.5-sonnet",
+                "choices": [{"delta": {"content": "ok"}}],
+            })
+            yield f"data: {chunk}"
             yield "data: [DONE]"
 
         async def __aenter__(self):
@@ -419,7 +425,7 @@ async def test_auto_router_session_id_multi_turn_stickiness(mock_settings: Setti
 
     events = [event async for event in service.stream_chat(request)]
     assert captured_payload["session_id"] == "session-user-turn-12345"
-    assert captured_payload["plugins"][0]["session_id"] == "session-user-turn-12345"
+    assert "session_id" not in captured_payload["plugins"][0]
     assert captured_payload["plugins"][0]["cost_tier"] == "medium"
     assert "costTier" not in captured_payload["plugins"][0]
 
@@ -430,8 +436,10 @@ async def test_auto_router_session_id_multi_turn_stickiness(mock_settings: Setti
 
 
 @pytest.mark.asyncio
-async def test_model_reasoning_trace_isolated_from_assistant_content(mock_settings: Settings) -> None:
-    """Ensure reasoning traces are emitted as separate reasoning events, never as ordinary content."""
+async def test_model_reasoning_trace_isolated_from_assistant_content(
+    mock_settings: Settings,
+) -> None:
+    """Ensure reasoning traces are emitted as separate events, never ordinary content."""
     class FakeReasoningStreamResponse:
         status_code = 200
 
@@ -475,3 +483,78 @@ async def test_model_reasoning_trace_isolated_from_assistant_content(mock_settin
     assert len(token_events) == 1
     assert token_events[0].content == "The answer is 42."
     assert token_events[0].reasoning is None
+
+
+def test_time_sensitive_limitation_disclosure_in_system_prompt(
+    mock_settings: Settings,
+) -> None:
+    """Verify default system prompt discloses time-sensitive limitation."""
+    service = OpenRouterService(mock_settings)
+    messages = [ChatMessage(role="user", content="What is the stock price of Apple right now?")]
+    prepared = service._prepare_messages(messages)
+
+    assert len(prepared) == 2
+    assert prepared[0]["role"] == "system"
+    system_text = prepared[0]["content"]
+    assert "Stage 2" in system_text
+    assert "time-sensitive" in system_text.lower()
+    assert "disclose" in system_text.lower()
+    assert "outdated" in system_text.lower()
+    assert prepared[1]["role"] == "user"
+
+
+def test_custom_system_prompt_overrides_default(mock_settings: Settings) -> None:
+    """Verify custom system message in request is preserved without duplicates."""
+    service = OpenRouterService(mock_settings)
+    messages = [
+        ChatMessage(role="system", content="Custom system instructions."),
+        ChatMessage(role="user", content="Hello"),
+    ]
+    prepared = service._prepare_messages(messages)
+
+    assert len(prepared) == 2
+    assert prepared[0]["role"] == "system"
+    assert prepared[0]["content"] == "Custom system instructions."
+    assert prepared[1]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_inline_think_tags_separated_from_answer_content(mock_settings: Settings) -> None:
+    """Ensure <think> tags in content tokens are isolated into reasoning events."""
+    class FakeInlineThinkResponse:
+        status_code = 200
+
+        async def aiter_lines(self):
+            content_val = "<think>Deliberating carefully...</think>The final result is 100."
+            chunk1 = json.dumps({
+                "model": "deepseek/deepseek-r1",
+                "choices": [{"delta": {"content": content_val}}],
+            })
+            yield f"data: {chunk1}"
+            yield "data: [DONE]"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.stream.return_value = FakeInlineThinkResponse()
+
+    service = OpenRouterService(mock_settings, client=mock_client)
+    request = ChatRequest(
+        model="deepseek/deepseek-r1",
+        messages=[ChatMessage(role="user", content="Compute")],
+    )
+
+    events = [event async for event in service.stream_chat(request)]
+    reasoning_events = [e for e in events if e.type == "reasoning"]
+    token_events = [e for e in events if e.type == "token"]
+
+    assert len(reasoning_events) >= 1
+    assert "Deliberating carefully..." in reasoning_events[0].reasoning
+    assert len(token_events) >= 1
+    assert "The final result is 100." in token_events[0].content
+    assert "<think>" not in token_events[0].content
+    assert "</think>" not in token_events[0].content
