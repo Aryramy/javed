@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Cpu,
   Layers,
+  Route,
 } from 'lucide-react';
 import { chatService } from '@/services/chatService';
 import type { ModelCatalogResponse } from '@/types/chat';
@@ -176,40 +177,64 @@ export const TelemetryView: React.FC = () => {
               {(catalog.models.some((m) => m.is_favorite)
                 ? catalog.models.filter((m) => m.is_favorite)
                 : catalog.models.slice(0, 6)
-              ).map((model) => (
-                <div
-                  key={model.id}
-                  className="p-3 rounded-lg border border-border/80 bg-secondary/30 flex flex-col justify-between text-xs"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-semibold text-foreground flex items-center gap-1.5">
-                      {model.name}
-                      {model.is_default && (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                          default
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-secondary">
-                      {model.provider}
-                    </span>
-                  </div>
+              ).map((model) => {
+                const isRouter = model.id === 'openrouter/auto' || !!model.is_router;
+                return (
+                  <div
+                    key={model.id}
+                    className={`p-3 rounded-lg border flex flex-col justify-between text-xs ${
+                      isRouter
+                        ? 'border-emerald-500/40 bg-emerald-950/20 shadow-sm'
+                        : 'border-border/80 bg-secondary/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-semibold text-foreground flex items-center gap-1.5">
+                        {isRouter && <Route className="w-3.5 h-3.5 text-emerald-400" />}
+                        {model.name}
+                        {isRouter ? (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                            auto-router
+                          </span>
+                        ) : model.is_default ? (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                            default
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                          isRouter
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-secondary text-muted-foreground'
+                        }`}
+                      >
+                        {model.provider}
+                      </span>
+                    </div>
 
-                  <p className="text-[11px] text-muted-foreground mb-2 line-clamp-1">{model.description}</p>
+                    <p className="text-[11px] text-muted-foreground mb-2 line-clamp-1">{model.description}</p>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono pt-1.5 border-t border-border/50 text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-zinc-500" />
-                      {(model.context_length / 1000).toFixed(0)}k tokens
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span>Prompt: <strong className="text-foreground">${model.pricing_prompt}</strong></span>
-                      <span>•</span>
-                      <span>Comp: <strong className="text-foreground">${model.pricing_completion}</strong></span>
+                    <div className="flex items-center justify-between text-[10px] font-mono pt-1.5 border-t border-border/50 text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-zinc-500" />
+                        {isRouter ? 'Dynamic Context' : `${(model.context_length / 1000).toFixed(0)}k tokens`}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {isRouter ? (
+                          <span className="text-emerald-400 font-semibold">Tiers: low | med | high | xhigh | max</span>
+                        ) : (
+                          <>
+                            <span>Prompt: <strong className="text-foreground">${model.pricing_prompt}</strong></span>
+                            <span>•</span>
+                            <span>Comp: <strong className="text-foreground">${model.pricing_completion}</strong></span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

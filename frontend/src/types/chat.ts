@@ -2,6 +2,9 @@
  * TypeScript type definitions for chat completions, streaming, and model catalog.
  */
 
+export type CostTier = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export const COST_TIERS: CostTier[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -11,6 +14,9 @@ export interface ChatMessage {
   usage?: StreamUsage;
   ttftMs?: number;
   durationMs?: number;
+  selected_model?: string;
+  requested_model?: string;
+  cost_tier?: CostTier;
 }
 
 export interface ModelInfo {
@@ -23,6 +29,8 @@ export interface ModelInfo {
   description: string;
   is_default: boolean;
   is_favorite?: boolean;
+  is_router?: boolean;
+  cost_tier?: CostTier;
 }
 
 export interface ModelCatalogResponse {
@@ -43,6 +51,9 @@ export interface StreamUsage {
   upstream_cost: number | null;
   is_estimated?: boolean;
   cost_source?: 'upstream' | 'rate_card' | 'character_estimate';
+  selected_model?: string;
+  requested_model?: string;
+  cost_tier?: CostTier;
 }
 
 export interface ChatStreamEvent {
@@ -50,6 +61,9 @@ export interface ChatStreamEvent {
   content?: string;
   usage?: StreamUsage;
   error?: string;
+  selected_model?: string;
+  requested_model?: string;
+  cost_tier?: CostTier;
 }
 
 export interface ConversationTotals {

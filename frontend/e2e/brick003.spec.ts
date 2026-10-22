@@ -129,4 +129,57 @@ test.describe('BRICK-003: OpenRouter LLM Integration & Live Streaming Chat', () 
     await expect(dropdown.locator('text=DeepSeek Chat V3')).toBeVisible();
     await expect(dropdown.locator('text=Claude Sonnet 4.5')).not.toBeVisible();
   });
+
+  test('07. Auto Router selection, cost tier switching, and dynamic model routing display', async ({ page }) => {
+    await page.goto('/');
+
+    const modelTrigger = page.locator('#model-selector-trigger');
+    await expect(modelTrigger).toBeVisible({ timeout: 10000 });
+
+    // Open dropdown and select Auto Router
+    await modelTrigger.click();
+    const dropdown = page.locator('#model-selector-dropdown');
+    await expect(dropdown).toBeVisible({ timeout: 5000 });
+
+    const autoRouterOption = dropdown.locator('button:has-text("Auto Router")');
+    await expect(autoRouterOption).toBeVisible();
+    await autoRouterOption.click();
+
+    // Verify trigger shows Auto Router and default 'low' tier
+    await expect(modelTrigger).toContainText('Auto Router');
+    const tierBadge = page.locator('#model-selector-tier-badge');
+    await expect(tierBadge).toContainText('low');
+
+    // Cost tier selector should be visible
+    const tierSelector = page.locator('#cost-tier-selector');
+    await expect(tierSelector).toBeVisible();
+
+    // Switch to medium tier
+    const medButton = page.locator('#cost-tier-button-medium');
+    await medButton.click();
+    await expect(tierBadge).toContainText('medium');
+
+    // Switch back to economical default 'low' tier
+    const lowButton = page.locator('#cost-tier-button-low');
+    await lowButton.click();
+    await expect(tierBadge).toContainText('low');
+
+    // Submit a query via Auto Router
+    const textarea = page.locator('#chat-input-textarea');
+    await textarea.fill('Reply with exactly "AutoRouter Success"');
+
+    const sendButton = page.locator('#send-message-button');
+    await sendButton.click();
+
+    // Assistant response should start streaming
+    const assistantBubble = page.locator('.prose');
+    await expect(assistantBubble).toBeVisible({ timeout: 20000 });
+    await expect(assistantBubble).toContainText(/AutoRouter|Success/i, { timeout: 20000 });
+
+    // Verify routed model badge is displayed with concrete resolved model
+    const routedBadge = page.locator('#message-routed-model-badge');
+    await expect(routedBadge).toBeVisible({ timeout: 15000 });
+    await expect(routedBadge).toContainText('Routed:');
+    await expect(routedBadge).toContainText(/low/i);
+  });
 });

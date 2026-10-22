@@ -197,4 +197,78 @@ describe('ChatView Full-Stack Integration', () => {
     expect(screen.queryByText('Response text')).not.toBeInTheDocument();
     expect(screen.getByText('Conversational AI Gateway')).toBeInTheDocument();
   });
+
+  it('supports selecting openrouter/auto, switching cost tier, and displaying routed model badge', async () => {
+    const user = userEvent.setup();
+    const routerModel: ModelInfo = {
+      id: 'openrouter/auto',
+      name: 'Auto Router',
+      provider: 'openrouter',
+      context_length: 128000,
+      pricing_prompt: 0,
+      pricing_completion: 0,
+      description: 'Intelligent multi-tier router.',
+      is_default: false,
+      is_favorite: true,
+      is_router: true,
+    };
+
+    vi.spyOn(chatService, 'getModels').mockResolvedValue({
+      models: [routerModel, ...MOCK_MODELS],
+      default_model: 'openrouter/auto',
+      authenticated: true,
+      quota_remaining_usd: 50.0,
+      daily_budget_usd: null,
+    });
+
+    let capturedParams: any = null;
+    vi.spyOn(chatService, 'streamChat').mockImplementation(async (params) => {
+      capturedParams = params;
+      params.onToken('Auto routed answer');
+      params.onUsage?.({
+        prompt_tokens: 15,
+        completion_tokens: 8,
+        total_tokens: 23,
+        cost_usd: 0.000005,
+        upstream_cost: 0.000005,
+        selected_model: 'deepseek/deepseek-v4.1-flash',
+        requested_model: 'openrouter/auto',
+        cost_tier: params.cost_tier ?? 'low',
+      });
+      params.onDone?.();
+    });
+
+    renderWithProviders(<ChatView />);
+
+    // Verify Auto Router trigger and default 'low' tier badge
+    await waitFor(() => {
+      expect(screen.getByText('Auto Router')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'low' })).toBeInTheDocument();
+    });
+
+    // Switch cost tier to medium
+    const mediumTierButton = screen.getByRole('button', { name: 'medium' });
+    await user.click(mediumTierButton);
+
+    // Send a message
+    const textarea = screen.getByPlaceholderText(/Message Javed/i);
+    await user.type(textarea, 'Auto route this query');
+    const sendButton = screen.getByRole('button', { name: /send message/i });
+    await user.click(sendButton);
+
+    // Verify streamChat was called with cost_tier 'medium' and model 'openrouter/auto'
+    await waitFor(() => {
+      expect(capturedParams).not.toBeNull();
+      expect(capturedParams.model).toBe('openrouter/auto');
+      expect(capturedParams.cost_tier).toBe('medium');
+    });
+
+    // Verify routed model badge rendered in the UI with selected model and tier
+    await waitFor(() => {
+      expect(screen.getByText('Auto routed answer')).toBeInTheDocument();
+      expect(screen.getByText('deepseek/deepseek-v4.1-flash')).toBeInTheDocument();
+      expect(screen.getAllByText(/\(medium\)/i).length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
+

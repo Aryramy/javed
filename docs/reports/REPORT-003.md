@@ -378,14 +378,91 @@ During the live automated verification tests, real OpenRouter API transactions w
 
 ---
 
-## 11. Final Status & Mandatory Stop
+## 11. OpenRouter Intelligent Auto Routing Addendum Verification
+
+### 11.1 Overview & Architecture Alignment
+As a consolidated BRICK-003 enhancement, native OpenRouter Auto Routing (`openrouter/auto`) was implemented using OpenRouter's official `auto-router` plugin, avoiding custom heuristic classifiers or hardcoded model-selection engines.
+
+- **Primary Routing Option**: `openrouter/auto` added to the curated model catalog with `is_router=True` and favorite priority.
+- **Official Plugin Payload**: Outgoing chat completions payloads for `openrouter/auto` automatically include `plugins: [{"id": "auto-router", "cost_tier": effective_tier, "costTier": effective_tier}]`.
+- **Configurable Cost Tiers**: Supports `low`, `medium`, `high`, `xhigh`, and `max`.
+- **Economical Default**: Defaults to `low` tier (`OPENROUTER_AUTO_ROUTER_COST_TIER="low"` in `src/javed/config.py`). The user can explicitly choose other tiers (`medium`, `high`, `xhigh`, `max`) in the UI or request payload.
+- **Manual Model Selection Preserved**: All 5 curated models and dynamic search across the 468+ OpenRouter catalog remain fully accessible and functional.
+- **Dynamic Model Resolution**: Captures the concrete model resolved by OpenRouter (e.g. `deepseek/deepseek-v4.1-flash-1017`) directly from the SSE event stream chunk `chunk["model"]`.
+- **Telemetry & Billing**:
+  - Displays requested mode (`Auto Router (low)`) alongside concrete resolved model in message bubbles and telemetry pills.
+  - Distinguishes provider-reported actual billing (`upstream_cost`) from rate card estimates.
+  - Multi-turn conversational context and session stickiness preserved across turns.
+- **Strict Guardrails**:
+  - Zero MCP servers or tool integration code introduced (deferred to BRICK-005).
+  - Zero automatic OpenRouter server tools enabled (no web search or code interpreter server add-ons that incur unexpected fees).
+  - No arbitrary spending escalations or highest tier defaulting.
+
+---
+
+### 11.2 Live OpenRouter Prompt Verification
+Three bounded live OpenRouter Auto Router smoke tests were executed against the upstream API with real network inference:
+
+| Test Case | Prompt Type | Cost Tier | Upstream Model Resolved | Verification Result |
+|---|---|---|---|---|
+| `test_live_openrouter_auto_router_simple_prompt` | Simple ("Reply with 'Javed AutoRouter OK'") | `low` | `deepseek/deepseek-v4.1-flash-1017` | **PASSED** (Tokens received, model resolved, usage reported) |
+| `test_live_openrouter_auto_router_reasoning_prompt` | Reasoning ("If a bat and ball cost $1.10...") | `low` | `deepseek/deepseek-v4.1-flash-1017` | **PASSED** (Reasoning tokens parsed, answer "5 cents" received) |
+| `test_live_openrouter_auto_router_coding_prompt` | Coding ("Write a Python function `is_palindrome`...") | `low` | `deepseek/deepseek-v4.1-flash-1017` | **PASSED** (Clean Python code block streamed) |
+
+---
+
+### 11.3 Automated Verification Results
+All regression suites and live verification passes were executed with 100% success:
+
+- **Backend Pytest**: **29/29 passed** (baseline 24 passed + 5 new tests including unit and 3 live Auto Router tests).
+  ```
+  tests/test_chat_smoke.py::test_live_openrouter_streaming_smoke PASSED
+  tests/test_chat_smoke.py::test_live_openrouter_multi_turn_context_smoke PASSED
+  tests/test_chat_smoke.py::test_live_openrouter_auto_router_simple_prompt PASSED
+  tests/test_chat_smoke.py::test_live_openrouter_auto_router_reasoning_prompt PASSED
+  tests/test_chat_smoke.py::test_live_openrouter_auto_router_coding_prompt PASSED
+  tests/test_openrouter.py::test_auto_router_request_payload_and_plugins PASSED
+  tests/test_openrouter.py::test_auto_router_cost_tier_default_fallback PASSED
+  ...
+  ================== 29 passed, 1 warning in 63.29s ===================
+  ```
+- **Backend Linting**: `ruff check src tests` -> **All checks passed (0 errors)**.
+- **Frontend Vitest**: **32/32 passed** across 7 test files (baseline 31 passed + 1 new Auto Router test).
+  ```
+  ✓ src/test/chat.test.tsx > ChatView Full-Stack Integration > supports selecting openrouter/auto, switching cost tier, and displaying routed model badge
+  Test Files  7 passed (7)
+  Tests  32 passed (32)
+  ```
+- **Frontend Linting**: `npm run lint` (`oxlint`) -> **0 warnings, 0 errors**.
+- **Frontend Production Build**: `npm run build` (`tsc -b && vite build`) -> **0 errors, build successful in 14.13s**.
+- **Playwright Chrome E2E (Live Real Browser)**: **12/12 passed** (baseline 11 passed + 1 new Auto Router E2E test).
+  ```
+  ok  1 e2e\brick002.spec.ts › 01. Global Header and Chat View display live backend connectivity (10.0s)
+  ok  2 e2e\brick002.spec.ts › 02. Developer Connectivity View shows real REST, WebSocket, and subsystem states (6.2s)
+  ok  3 e2e\brick002.spec.ts › 03. Developer Diagnostics View executes live REST and WebSocket probes (8.4s)
+  ok  4 e2e\brick002.spec.ts › 04. Developer Logs View displays bounded live transport event stream (5.3s)
+  ok  5 e2e\brick002.spec.ts › 05. WebSocket manual disconnect and reconnect controls update UI state (7.1s)
+  ok  6 e2e\brick003.spec.ts › 01. Chat View renders model selector with curated frontier models and allows selection (7.4s)
+  ok  7 e2e\brick003.spec.ts › 02. Live Chat Streaming generates real tokens and displays usage cost (17.0s)
+  ok  8 e2e\brick003.spec.ts › 03. Stream Cancellation stops generation immediately (7.5s)
+  ok  9 e2e\brick003.spec.ts › 04. Clear conversation resets chat history and returns to starter state (7.7s)
+  ok 10 e2e\brick003.spec.ts › 05. Developer Telemetry and Diagnostics views show live OpenRouter status (15.6s)
+  ok 11 e2e\brick003.spec.ts › 06. Model selector dynamic search filters models in dropdown (5.8s)
+  ok 12 e2e\brick003.spec.ts › 07. Auto Router selection, cost tier switching, and dynamic model routing display (17.6s)
+  12 passed (2.2m)
+  ```
+
+---
+
+## 12. Final Status & Mandatory Stop
 
 - **Status**: **READY FOR ACCEPTANCE**
-- **Action**: All audit items verified, corrections implemented and tested.
+- **Action**: All Auto Router and baseline requirements verified, test suites passing 100%, code committed locally only.
 - **Mandatory Stop Condition Met**:
-  - No Deep Agents or LangGraph installed.
-  - No MCP servers installed or executed.
+  - No Deep Agents or LangGraph installed (BRICK-004 boundary respected).
+  - No MCP servers installed or executed (BRICK-005 boundary respected).
   - No browser automation tools or voice engines installed.
-  - Did NOT begin BRICK-004.
-  - Awaiting explicit project owner review and acceptance.
+  - Committed locally only; no git push to remote performed.
+  - STOPPED and awaiting final project owner review and acceptance.
+
 

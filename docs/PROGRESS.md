@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`  
-> **Version**: 3.3 (BRICK-002 Verified; BRICK-003 Acceptance Audit Complete — Ready for Acceptance)  
+> **Version**: 3.4 (BRICK-002 Verified; BRICK-003 Auto Router Enhanced — Ready for Acceptance)  
 > **Status**: AUTHORITATIVE STATE SNAPSHOT  
 > **Last Updated**: 2026-10-22  
 
@@ -13,12 +13,12 @@
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 2 / BRICK-003 — OpenRouter Integration & Streaming Chat** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
-| **Current Brick** | **BRICK-003: OpenRouter Integration & Streaming Chat** | [BRICK-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-003.md) |
+| **Current Brick** | **BRICK-003: OpenRouter Integration & Streaming Chat (Auto Router Enhanced)** | [BRICK-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-003.md) |
 | **Brick Status** | **READY FOR ACCEPTANCE** | [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) |
 | **Last Verified Milestone** | **BRICK-002: FastAPI Integration & Real-Time Communication** | Owner Approval 2026-10-22 |
-| **Application Code** | **BRICK-003 Completed, Audited & Verified** (Dynamic OpenRouter Catalog + SSE Streaming + assistant-ui Runtime + Multi-Turn ORCHID Context + Micro-Cost Meter + Uncapped Budget Soft Controls) | Strict execution boundary |
+| **Application Code** | **BRICK-003 Completed, Auto Router Enhanced & Verified** (Dynamic OpenRouter Catalog + SSE Streaming + assistant-ui Runtime + Multi-Turn Context + OpenRouter Auto Router Multi-Tier + Micro-Cost Meter) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.5, FastAPI 0.159.1, Uvicorn 0.54.0, Pydantic 2.14.1, Node 24.19.0, React 19.3.1, Vite 8.3.5, Playwright 1.64.1 (Chrome), Vitest 5.0.5, @assistant-ui/react 0.11.45** | Host environment |
-| **Overall Status** | **READY FOR ACCEPTANCE** (BRICK-003 Acceptance Audit Complete) | Authoritative Status |
+| **Overall Status** | **READY FOR ACCEPTANCE** (BRICK-003 Auto Router Complete) | Authoritative Status |
 
 ---
 
@@ -47,7 +47,7 @@ stateDiagram-v2
 | **BRICK-000** | Master Architecture & Development Planning | **`VERIFIED`** | [REPORT-000.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-000.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-001** | Reproducible Foundation & Real React UI Shell | **`VERIFIED`** | [REPORT-001.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-001.md) | Explicitly approved by Project Owner on 2026-10-22 after manual acceptance. |
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
-| **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`READY FOR ACCEPTANCE`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Audited & verified: 24 pytest (inc. live ORCHID multi-turn context), 31 vitest, 11 Playwright Chrome E2E, dynamic catalog, assistant-ui runtime. Awaiting owner acceptance. |
+| **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`READY FOR ACCEPTANCE`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Audited & verified: 29 pytest (inc. 3 live Auto Router tests), 32 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing. Awaiting owner acceptance. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | `NOT STARTED` | Pending | Blocked pending BRICK-003 verification. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |

@@ -12,6 +12,7 @@ import {
   Server,
   Wifi,
   WifiOff,
+  Route,
 } from 'lucide-react';
 import { ModelSelector } from '../../components/chat/ModelSelector';
 import { TokenCostMeter } from '../../components/chat/TokenCostMeter';
@@ -23,6 +24,7 @@ import { AssistantRuntimeProvider, useExternalStoreRuntime } from '@assistant-ui
 import type {
   ChatMessage,
   ConversationTotals,
+  CostTier,
   ModelCatalogResponse,
   ModelInfo,
   StreamUsage,
@@ -101,6 +103,7 @@ export const ChatView: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelInfo[]>(DEFAULT_MODELS);
   const [selectedModelId, setSelectedModelId] = useState<string>('openai/gpt-4o-mini');
+  const [costTier, setCostTier] = useState<CostTier>('low');
   const [catalogMeta, setCatalogMeta] = useState<ModelCatalogResponse | null>(null);
   const [input, setInput] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -246,6 +249,7 @@ export const ChatView: React.FC = () => {
         await chatService.streamChat({
           messages: historyPayload,
           model: selectedModelId,
+          cost_tier: selectedModelId === 'openrouter/auto' ? costTier : undefined,
           signal: controller.signal,
           onToken: (token: string) => {
             if (ttftRecorded === null) {
@@ -274,6 +278,9 @@ export const ChatView: React.FC = () => {
                 ...prev[index],
                 usage,
                 durationMs: duration,
+                selected_model: usage.selected_model,
+                requested_model: usage.requested_model,
+                cost_tier: usage.cost_tier,
               };
               return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
             });
@@ -320,7 +327,7 @@ export const ChatView: React.FC = () => {
         abortControllerRef.current = null;
       }
     },
-    [input, isStreaming, messages, selectedModelId]
+    [input, isStreaming, messages, selectedModelId, costTier]
   );
 
   const runtime = useExternalStoreRuntime({
@@ -404,6 +411,8 @@ export const ChatView: React.FC = () => {
               models={models}
               selectedModelId={selectedModelId}
               onSelectModel={setSelectedModelId}
+              costTier={costTier}
+              onSelectCostTier={setCostTier}
               disabled={isStreaming}
             />
             <TokenCostMeter currentUsage={currentUsage} totals={totals} isStreaming={isStreaming} />
@@ -506,7 +515,23 @@ export const ChatView: React.FC = () => {
 
                       {/* Per-message telemetry pill */}
                       {message.usage && (
-                        <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center gap-3 text-[10px] text-zinc-500 font-mono">
+                        <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 font-mono">
+                          {message.usage.selected_model && (
+                            <span
+                              id="message-routed-model-badge"
+                              className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/40"
+                              title={`Requested: ${message.usage.requested_model || 'openrouter/auto'}`}
+                            >
+                              <Route className="w-3 h-3 text-emerald-400" />
+                              <span className="text-zinc-400">Routed:</span>
+                              <span className="font-semibold text-emerald-300">{message.usage.selected_model}</span>
+                              {message.usage.cost_tier && (
+                                <span className="text-[9px] text-emerald-400/80 font-bold uppercase">
+                                  ({message.usage.cost_tier})
+                                </span>
+                              )}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 text-zinc-400">
                             <Zap className="w-3 h-3 text-amber-400" />
                             {message.usage.total_tokens} tokens
@@ -514,6 +539,12 @@ export const ChatView: React.FC = () => {
                           <span>•</span>
                           <span className="text-emerald-400 font-semibold">
                             ${message.usage.cost_usd.toFixed(6)}
+                            {message.usage.is_estimated && (
+                              <span className="text-zinc-500 text-[9px] ml-1">(est)</span>
+                            )}
+                            {message.usage.upstream_cost !== null && !message.usage.is_estimated && (
+                              <span className="text-cyan-400 text-[9px] ml-1">(actual)</span>
+                            )}
                           </span>
                           {message.ttftMs && (
                             <>
@@ -522,6 +553,12 @@ export const ChatView: React.FC = () => {
                                 <Clock className="w-3 h-3 text-cyan-400" />
                                 {message.ttftMs}ms TTFT
                               </span>
+                            </>
+                          )}
+                          {message.durationMs && (
+                            <>
+                              <span>•</span>
+                              <span className="text-zinc-400">{message.durationMs}ms</span>
                             </>
                           )}
                         </div>
@@ -597,7 +634,14 @@ export const ChatView: React.FC = () => {
         </form>
 
         <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-zinc-500">
-          <span>Active Model: <strong className="text-zinc-400">{selectedModelId}</strong></span>
+          <span>
+            Active Model:{' '}
+            {selectedModelId === 'openrouter/auto' ? (
+              <strong className="text-emerald-400 font-mono">Auto Router ({costTier})</strong>
+            ) : (
+              <strong className="text-zinc-400">{selectedModelId}</strong>
+            )}
+          </span>
           <span>Shift + Enter for new line • Enter to submit</span>
         </div>
       </div>

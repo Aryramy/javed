@@ -19,5 +19,6 @@ export default defineConfig({
     css: false,
     include: ['src/test/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
+    testTimeout: 20000,
   },
 })

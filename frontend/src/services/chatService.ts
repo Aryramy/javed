@@ -2,11 +2,12 @@
  * Chat and streaming client service for Project Javed.
  */
 
-import type { ChatStreamEvent, ModelCatalogResponse, StreamUsage } from '../types/chat';
+import type { ChatStreamEvent, CostTier, ModelCatalogResponse, StreamUsage } from '../types/chat';
 
 export interface StreamChatParams {
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[];
   model?: string;
+  cost_tier?: CostTier;
   temperature?: number;
   max_tokens?: number;
   signal?: AbortSignal;
@@ -55,7 +56,7 @@ export const chatService = {
    * Initiate a streaming chat completion over Server-Sent Events (SSE).
    */
   async streamChat(params: StreamChatParams): Promise<void> {
-    const { messages, model, temperature, max_tokens, signal, onToken, onUsage, onError, onDone } = params;
+    const { messages, model, cost_tier, temperature, max_tokens, signal, onToken, onUsage, onError, onDone } = params;
 
     const response = await fetch(`${getBaseUrl()}/api/v1/chat/stream`, {
       method: 'POST',
@@ -66,6 +67,7 @@ export const chatService = {
       body: JSON.stringify({
         messages,
         model,
+        cost_tier,
         temperature: temperature ?? 0.7,
         max_tokens,
         stream: true,

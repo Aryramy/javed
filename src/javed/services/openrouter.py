@@ -22,8 +22,12 @@ from javed.schemas.chat import (
 
 logger = logging.getLogger("javed.services.openrouter")
 
-# Pinned default favorites for quick selection
+AUTO_ROUTER_MODEL_ID = "openrouter/auto"
+SUPPORTED_COST_TIERS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+
+# Pinned default favorites for quick selection (Auto Router prioritized)
 DEFAULT_FAVORITE_MODEL_IDS: list[str] = [
+    AUTO_ROUTER_MODEL_ID,
     "openai/gpt-4o-mini",
     "openai/gpt-4o",
     "anthropic/claude-sonnet-4.5",
@@ -34,6 +38,18 @@ DEFAULT_FAVORITE_MODEL_IDS: list[str] = [
 # Curated fallback models when offline or in isolated unit test environments
 CURATED_MODELS: list[dict[str, Any]] = [
     {
+        "id": AUTO_ROUTER_MODEL_ID,
+        "name": "OpenRouter Auto Router",
+        "provider": "OpenRouter",
+        "context_length": 128000,
+        "pricing_prompt": 0.15,
+        "pricing_completion": 0.60,
+        "description": "Dynamic auto-router with cost tiers (low, medium, high, xhigh, max).",
+        "is_default": False,
+        "is_favorite": True,
+        "is_router": True,
+    },
+    {
         "id": "openai/gpt-4o-mini",
         "name": "OpenAI GPT-4o Mini",
         "provider": "OpenAI",
@@ -43,6 +59,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "description": "Fast, economical frontier model ideal for daily tasks.",
         "is_default": True,
         "is_favorite": True,
+        "is_router": False,
     },
     {
         "id": "openai/gpt-4o",
@@ -54,6 +71,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "description": "Flagship multimodal intelligence for high-complexity analysis.",
         "is_default": False,
         "is_favorite": True,
+        "is_router": False,
     },
     {
         "id": "anthropic/claude-sonnet-4.5",
@@ -65,6 +83,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "description": "Deep reasoning, nuanced code architecture, and high-fidelity output.",
         "is_default": False,
         "is_favorite": True,
+        "is_router": False,
     },
     {
         "id": "google/gemini-2.5-flash",
@@ -76,6 +95,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "description": "High-velocity inference with massive 1M token context window.",
         "is_default": False,
         "is_favorite": True,
+        "is_router": False,
     },
     {
         "id": "deepseek/deepseek-chat",
@@ -87,6 +107,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "description": "High-efficiency open-weights architecture with strong reasoning.",
         "is_default": False,
         "is_favorite": True,
+        "is_router": False,
     },
 ]
 
@@ -127,18 +148,24 @@ class OpenRouterService:
         prompt_tokens: int,
         completion_tokens: int,
         upstream_cost: float | None = None,
+        selected_model: str | None = None,
     ) -> float:
         """Calculate total USD cost for a completion using rate card or upstream metric."""
         if upstream_cost is not None and upstream_cost > 0.0:
             return float(upstream_cost)
 
+        target_model = (
+            selected_model
+            if (model_id == AUTO_ROUTER_MODEL_ID and selected_model)
+            else model_id
+        )
         p_prompt, p_comp = 1.0, 3.0  # Default conservative fallback
         matched = False
 
         # 1. Check in cached dynamic models
         if self._cached_models:
             for m in self._cached_models:
-                if m.id == model_id:
+                if m.id == target_model:
                     p_prompt = m.pricing_prompt
                     p_comp = m.pricing_completion
                     matched = True
@@ -146,7 +173,7 @@ class OpenRouterService:
 
         # 2. Check in curated static fallback list
         if not matched:
-            model_entry = next((m for m in CURATED_MODELS if m["id"] == model_id), None)
+            model_entry = next((m for m in CURATED_MODELS if m["id"] == target_model), None)
             if model_entry:
                 p_prompt = model_entry["pricing_prompt"]
                 p_comp = model_entry["pricing_completion"]
@@ -215,6 +242,7 @@ class OpenRouterService:
                             desc = m.get("description") or f"Model provided by {provider}."
                             is_fav = mid in self.favorite_model_ids
                             is_def = (mid == self.default_model)
+                            is_router = (mid == AUTO_ROUTER_MODEL_ID)
 
                             parsed_models.append(
                                 ModelInfo(
@@ -227,13 +255,52 @@ class OpenRouterService:
                                     description=desc,
                                     is_default=is_def,
                                     is_favorite=is_fav,
+                                    is_router=is_router,
+                                    cost_tier=(
+                                        self.settings.openrouter_auto_router_cost_tier or "low"
+                                        if is_router
+                                        else None
+                                    ),
                                 )
                             )
 
                         if parsed_models:
-                            # Sort: Favorites first, then alphabetically by friendly name
+                            # Guarantee openrouter/auto is present
+                            has_auto = any(m.id == AUTO_ROUTER_MODEL_ID for m in parsed_models)
+                            tier_def = self.settings.openrouter_auto_router_cost_tier or "low"
+                            if not has_auto:
+                                parsed_models.append(
+                                    ModelInfo(
+                                        id=AUTO_ROUTER_MODEL_ID,
+                                        name="OpenRouter Auto Router",
+                                        provider="OpenRouter",
+                                        context_length=128000,
+                                        pricing_prompt=0.15,
+                                        pricing_completion=0.60,
+                                        description=(
+                                            "Dynamic auto-router with cost tiers "
+                                            "(low, medium, high, xhigh, max)."
+                                        ),
+                                        is_default=(AUTO_ROUTER_MODEL_ID == self.default_model),
+                                        is_favorite=True,
+                                        is_router=True,
+                                        cost_tier=tier_def,
+                                    )
+                                )
+                            else:
+                                for m in parsed_models:
+                                    if m.id == AUTO_ROUTER_MODEL_ID:
+                                        m.is_router = True
+                                        m.is_favorite = True
+                                        m.cost_tier = tier_def
+
+                            # Sort: Auto Router first, favorites next, then by name
                             parsed_models.sort(
-                                key=lambda item: (not item.is_favorite, item.name.lower())
+                                key=lambda item: (
+                                    item.id != AUTO_ROUTER_MODEL_ID,
+                                    not item.is_favorite,
+                                    item.name.lower(),
+                                )
                             )
                             self._cached_models = parsed_models
                             self._cache_timestamp = now
@@ -265,6 +332,12 @@ class OpenRouterService:
                     description=m["description"],
                     is_default=(m["id"] == self.default_model),
                     is_favorite=(m["id"] in self.favorite_model_ids),
+                    is_router=m.get("is_router", False),
+                    cost_tier=(
+                        self.settings.openrouter_auto_router_cost_tier or "low"
+                        if m.get("is_router")
+                        else None
+                    ),
                 )
                 for m in CURATED_MODELS
             ]
@@ -373,11 +446,30 @@ class OpenRouterService:
         if request.max_tokens:
             payload["max_tokens"] = request.max_tokens
 
+        # Configure official OpenRouter auto-router plugin if openrouter/auto requested
+        effective_cost_tier: str | None = None
+        if model_id == AUTO_ROUTER_MODEL_ID:
+            effective_cost_tier = (
+                request.cost_tier
+                or self.settings.openrouter_auto_router_cost_tier
+                or "low"
+            )
+            if effective_cost_tier not in SUPPORTED_COST_TIERS:
+                effective_cost_tier = "low"
+            payload["plugins"] = [
+                {
+                    "id": "auto-router",
+                    "cost_tier": effective_cost_tier,
+                    "costTier": effective_cost_tier,
+                }
+            ]
+
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
 
         accumulated_text: list[str] = []
         reported_usage: StreamUsage | None = None
+        selected_model: str | None = None
 
         try:
             client = self._external_client or httpx.AsyncClient(timeout=self.timeout)
@@ -416,13 +508,23 @@ class OpenRouterService:
                         except json.JSONDecodeError:
                             continue
 
+                        # Capture the underlying model selected by OpenRouter
+                        chunk_model = chunk.get("model")
+                        if chunk_model and not selected_model:
+                            selected_model = str(chunk_model)
+
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
                             token = delta.get("content")
                             if token:
                                 accumulated_text.append(token)
-                                yield ChatStreamEvent(type="token", content=token)
+                                yield ChatStreamEvent(
+                                    type="token",
+                                    content=token,
+                                    selected_model=selected_model,
+                                    requested_model=model_id,
+                                )
 
                         # Process terminal or intermediate usage chunk
                         raw_usage = chunk.get("usage")
@@ -431,6 +533,9 @@ class OpenRouterService:
                             comp_tok = int(raw_usage.get("completion_tokens", 0))
                             total_tok = int(raw_usage.get("total_tokens", prompt_tok + comp_tok))
                             upstream_cost = raw_usage.get("cost")
+                            usage_model = raw_usage.get("model") or chunk_model
+                            if usage_model:
+                                selected_model = str(usage_model)
 
                             if upstream_cost is not None and float(upstream_cost) > 0.0:
                                 cost = float(upstream_cost)
@@ -440,6 +545,7 @@ class OpenRouterService:
                                     model_id=model_id,
                                     prompt_tokens=prompt_tok,
                                     completion_tokens=comp_tok,
+                                    selected_model=selected_model,
                                 )
                                 cost_src = "rate_card"
 
@@ -454,6 +560,9 @@ class OpenRouterService:
                                 upstream_cost=up_cost_float,
                                 is_estimated=False,
                                 cost_source=cost_src,
+                                selected_model=selected_model or model_id,
+                                requested_model=model_id,
+                                cost_tier=effective_cost_tier,
                             )
             finally:
                 if should_close:
@@ -465,7 +574,12 @@ class OpenRouterService:
                 comp_chars = sum(len(t) for t in accumulated_text)
                 est_prompt_tokens = max(1, prompt_chars // 4)
                 est_comp_tokens = max(1, comp_chars // 4)
-                cost = self.calculate_cost(model_id, est_prompt_tokens, est_comp_tokens)
+                cost = self.calculate_cost(
+                    model_id=model_id,
+                    prompt_tokens=est_prompt_tokens,
+                    completion_tokens=est_comp_tokens,
+                    selected_model=selected_model,
+                )
                 reported_usage = StreamUsage(
                     prompt_tokens=est_prompt_tokens,
                     completion_tokens=est_comp_tokens,
@@ -474,10 +588,22 @@ class OpenRouterService:
                     upstream_cost=None,
                     is_estimated=True,
                     cost_source="character_estimate",
+                    selected_model=selected_model or model_id,
+                    requested_model=model_id,
+                    cost_tier=effective_cost_tier,
                 )
 
-            yield ChatStreamEvent(type="usage", usage=reported_usage)
-            yield ChatStreamEvent(type="done")
+            yield ChatStreamEvent(
+                type="usage",
+                usage=reported_usage,
+                selected_model=selected_model,
+                requested_model=model_id,
+            )
+            yield ChatStreamEvent(
+                type="done",
+                selected_model=selected_model,
+                requested_model=model_id,
+            )
 
         except asyncio.CancelledError:
             logger.info("Chat stream was cancelled by client abort.")
@@ -507,6 +633,23 @@ class OpenRouterService:
         if request.max_tokens:
             payload["max_tokens"] = request.max_tokens
 
+        effective_cost_tier: str | None = None
+        if model_id == AUTO_ROUTER_MODEL_ID:
+            effective_cost_tier = (
+                request.cost_tier
+                or self.settings.openrouter_auto_router_cost_tier
+                or "low"
+            )
+            if effective_cost_tier not in SUPPORTED_COST_TIERS:
+                effective_cost_tier = "low"
+            payload["plugins"] = [
+                {
+                    "id": "auto-router",
+                    "cost_tier": effective_cost_tier,
+                    "costTier": effective_cost_tier,
+                }
+            ]
+
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
 
@@ -522,6 +665,7 @@ class OpenRouterService:
             choice = data.get("choices", [{}])[0]
             content = choice.get("message", {}).get("content", "")
             finish_reason = choice.get("finish_reason")
+            selected_model = data.get("model") or model_id
 
             raw_usage = data.get("usage", {})
             prompt_tok = int(raw_usage.get("prompt_tokens", 0))
@@ -533,7 +677,12 @@ class OpenRouterService:
                 cost = float(upstream_cost)
                 cost_src = "upstream"
             else:
-                cost = self.calculate_cost(model_id, prompt_tok, comp_tok)
+                cost = self.calculate_cost(
+                    model_id=model_id,
+                    prompt_tokens=prompt_tok,
+                    completion_tokens=comp_tok,
+                    selected_model=selected_model,
+                )
                 cost_src = "rate_card"
 
             usage = StreamUsage(
@@ -544,11 +693,17 @@ class OpenRouterService:
                 upstream_cost=float(upstream_cost) if upstream_cost is not None else None,
                 is_estimated=False,
                 cost_source=cost_src,
+                selected_model=selected_model,
+                requested_model=model_id,
+                cost_tier=effective_cost_tier,
             )
 
             return ChatResponse(
                 id=data.get("id", "comp-default"),
                 model=model_id,
+                selected_model=selected_model,
+                requested_model=model_id,
+                cost_tier=effective_cost_tier,
                 message=ChatMessage(role="assistant", content=content),
                 usage=usage,
                 finish_reason=finish_reason,

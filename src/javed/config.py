@@ -74,6 +74,10 @@ class Settings(BaseModel):
         default=60.0,
         description="Timeout for upstream LLM inference requests in seconds",
     )
+    openrouter_auto_router_cost_tier: str = Field(
+        default="low",
+        description="Default cost tier for openrouter/auto (low, medium, high, xhigh, max)",
+    )
     app_name: str = Field(
         default="Javed Control Center",
         description="Application title for OpenRouter analytics",
@@ -106,6 +110,7 @@ def get_settings() -> Settings:
         "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openai/gpt-4o-mini"),
         "openrouter_daily_budget_usd": daily_budget,
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
+        "openrouter_auto_router_cost_tier": os.getenv("OPENROUTER_AUTO_ROUTER_COST_TIER", "low"),
     }
     if allowed_origins:
         kwargs["allowed_origins"] = allowed_origins

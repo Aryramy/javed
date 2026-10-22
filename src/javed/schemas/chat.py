@@ -21,6 +21,9 @@ class ChatMessage(BaseModel):
     )
 
 
+CostTier = Literal["low", "medium", "high", "xhigh", "max"]
+
+
 class ChatRequest(BaseModel):
     """Inbound chat completion and streaming request."""
 
@@ -31,6 +34,10 @@ class ChatRequest(BaseModel):
     model: str | None = Field(
         default=None,
         description="Optional model ID; falls back to default if omitted",
+    )
+    cost_tier: CostTier | None = Field(
+        default=None,
+        description="Optional cost tier for openrouter/auto routing (low, medium, high, max)",
     )
     temperature: float = Field(
         default=0.7,
@@ -68,6 +75,18 @@ class StreamUsage(BaseModel):
         default="upstream",
         description="Source of cost calculation: upstream, rate_card, or estimate",
     )
+    selected_model: str | None = Field(
+        default=None,
+        description="Concrete model selected by OpenRouter (e.g., when auto-routed)",
+    )
+    requested_model: str | None = Field(
+        default=None,
+        description="Original model or routing mode requested by client",
+    )
+    cost_tier: str | None = Field(
+        default=None,
+        description="Cost tier utilized if openrouter/auto was requested",
+    )
 
 
 class ChatStreamEvent(BaseModel):
@@ -84,6 +103,14 @@ class ChatStreamEvent(BaseModel):
         default=None,
         description="Usage statistics (present when type='usage')",
     )
+    selected_model: str | None = Field(
+        default=None,
+        description="Concrete model selected by OpenRouter",
+    )
+    requested_model: str | None = Field(
+        default=None,
+        description="Original requested model or routing mode",
+    )
     error: str | None = Field(
         default=None,
         description="Error description (present when type='error')",
@@ -95,6 +122,18 @@ class ChatResponse(BaseModel):
 
     id: str = Field(description="Unique completion identifier")
     model: str = Field(description="Model used for inference")
+    selected_model: str | None = Field(
+        default=None,
+        description="Concrete model selected by OpenRouter",
+    )
+    requested_model: str | None = Field(
+        default=None,
+        description="Original requested model or routing mode",
+    )
+    cost_tier: str | None = Field(
+        default=None,
+        description="Cost tier utilized if auto router was used",
+    )
     message: ChatMessage = Field(description="Assistant response message")
     usage: StreamUsage = Field(description="Token usage and cost")
     finish_reason: str | None = Field(default=None, description="Completion finish reason")
@@ -112,6 +151,11 @@ class ModelInfo(BaseModel):
     description: str = Field(description="Brief summary of recommended use cases")
     is_default: bool = Field(default=False, description="Whether this is the system default model")
     is_favorite: bool = Field(default=False, description="Whether model is in favorites")
+    is_router: bool = Field(
+        default=False,
+        description="Whether this entry is an Auto Router meta-model",
+    )
+    cost_tier: str | None = Field(default=None, description="Active or recommended cost tier")
 
 
 class ModelCatalogResponse(BaseModel):
