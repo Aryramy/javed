@@ -19,6 +19,7 @@ import { MarkdownContent } from '../../components/chat/MarkdownContent';
 import { chatService } from '../../services/chatService';
 import { useBackend } from '../../context';
 import { cn } from '../../lib/utils';
+import { AssistantRuntimeProvider, useExternalStoreRuntime } from '@assistant-ui/react';
 import type {
   ChatMessage,
   ConversationTotals,
@@ -153,9 +154,30 @@ export const ChatView: React.FC = () => {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'assistant' && last.status === 'streaming') {
+          const estCompTokens = Math.max(1, Math.round(last.content.length / 4));
+          const userMsg = prev[prev.length - 2];
+          const estPromptTokens = Math.max(1, Math.round((userMsg?.content?.length ?? 10) / 4));
+          const cancelledUsage: StreamUsage = {
+            prompt_tokens: estPromptTokens,
+            completion_tokens: estCompTokens,
+            total_tokens: estPromptTokens + estCompTokens,
+            cost_usd: Number(((estPromptTokens * 0.15 + estCompTokens * 0.6) / 1_000_000).toFixed(8)),
+            upstream_cost: null,
+            is_estimated: true,
+            cost_source: 'character_estimate',
+          };
+          setCurrentUsage(cancelledUsage);
+          setTotals((t) => ({
+            ...t,
+            totalPromptTokens: t.totalPromptTokens + estPromptTokens,
+            totalCompletionTokens: t.totalCompletionTokens + estCompTokens,
+            totalTokens: t.totalTokens + estPromptTokens + estCompTokens,
+            totalCostUsd: Number((t.totalCostUsd + cancelledUsage.cost_usd).toFixed(8)),
+            isEstimated: true,
+          }));
           return [
             ...prev.slice(0, -1),
-            { ...last, status: 'complete' as const },
+            { ...last, status: 'complete' as const, usage: cancelledUsage },
           ];
         }
         return prev;
@@ -301,6 +323,31 @@ export const ChatView: React.FC = () => {
     [input, isStreaming, messages, selectedModelId]
   );
 
+  const runtime = useExternalStoreRuntime({
+    messages,
+    isRunning: isStreaming,
+    onNew: async (msg) => {
+      const content =
+        typeof msg.content === 'string'
+          ? msg.content
+          : Array.isArray(msg.content)
+            ? msg.content.map((c: any) => ('text' in c ? c.text : '')).join('')
+            : '';
+      if (content) {
+        await handleSubmit(content);
+      }
+    },
+    onCancel: async () => {
+      handleStop();
+    },
+    convertMessage: (msg: ChatMessage) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      createdAt: new Date(msg.timestamp),
+    }),
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -309,7 +356,8 @@ export const ChatView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3">
+    <AssistantRuntimeProvider runtime={runtime}>
+      <div className="space-y-3">
       {/* Real Backend Status Banner in User Mode */}
       <div
         className={cn(
@@ -358,7 +406,7 @@ export const ChatView: React.FC = () => {
               onSelectModel={setSelectedModelId}
               disabled={isStreaming}
             />
-            <TokenCostMeter currentUsage={currentUsage} totals={totals} />
+            <TokenCostMeter currentUsage={currentUsage} totals={totals} isStreaming={isStreaming} />
           </div>
 
           <div className="flex items-center gap-2">
@@ -555,5 +603,6 @@ export const ChatView: React.FC = () => {
       </div>
     </div>
   </div>
+  </AssistantRuntimeProvider>
   );
 };

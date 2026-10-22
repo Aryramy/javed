@@ -17,8 +17,13 @@ router = APIRouter(prefix="/models", tags=["Models"])
     response_model=ModelCatalogResponse,
     summary="List available LLM models and account telemetry",
 )
-async def list_models(request: Request) -> ModelCatalogResponse:
-    """Retrieve curated model catalog with context limits, pricing, and account balance."""
+async def list_models(
+    request: Request,
+    search: str | None = None,
+    favorites_only: bool = False,
+    force_refresh: bool = False,
+) -> ModelCatalogResponse:
+    """Retrieve dynamic model catalog with context limits, pricing, and account balance."""
     openrouter_service: OpenRouterService = getattr(
         request.app.state,
         "openrouter_service",
@@ -28,4 +33,8 @@ async def list_models(request: Request) -> ModelCatalogResponse:
         settings = request.app.state.settings
         openrouter_service = OpenRouterService(settings)
 
-    return await openrouter_service.get_models()
+    return await openrouter_service.get_models(
+        search=search,
+        favorites_only=favorites_only,
+        force_refresh=force_refresh,
+    )

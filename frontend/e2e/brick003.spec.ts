@@ -96,7 +96,7 @@ test.describe('BRICK-003: OpenRouter LLM Integration & Live Streaming Chat', () 
     await page.goto('/dev/telemetry');
     await expect(page.locator('text=OpenRouter Billing & Rate Telemetry (BRICK-003 Live)')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible();
-    await expect(page.locator('text=Configured Daily Budget')).toBeVisible();
+    await expect(page.locator('text=Application Daily Budget')).toBeVisible();
     await expect(page.locator('text=Frontier Model Rate Cards')).toBeVisible();
 
     // Check Diagnostics View
@@ -110,5 +110,23 @@ test.describe('BRICK-003: OpenRouter LLM Integration & Live Streaming Chat', () 
     await expect(terminalBox).toContainText('"_test": "GET /api/v1/models"', { timeout: 10000 });
     await expect(terminalBox).toContainText('"_status": 200');
     await expect(terminalBox).toContainText('"default_model":');
+  });
+
+  test('06. Model selector dynamic search filters models in dropdown', async ({ page }) => {
+    await page.goto('/');
+
+    const modelTrigger = page.locator('#model-selector-trigger');
+    await modelTrigger.click();
+
+    const dropdown = page.locator('#model-selector-dropdown');
+    await expect(dropdown).toBeVisible({ timeout: 5000 });
+
+    // Type "DeepSeek" in the search input
+    const searchInput = dropdown.locator('input[placeholder*="Search model"]');
+    await searchInput.fill('DeepSeek');
+
+    // DeepSeek should be visible, others filtered out
+    await expect(dropdown.locator('text=DeepSeek Chat V3')).toBeVisible();
+    await expect(dropdown.locator('text=Claude Sonnet 4.5')).not.toBeVisible();
   });
 });

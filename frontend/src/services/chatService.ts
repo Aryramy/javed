@@ -25,10 +25,19 @@ const getBaseUrl = (): string => {
 
 export const chatService = {
   /**
-   * Fetch the list of available curated models and account credit telemetry.
+   * Fetch the list of available models and account credit telemetry.
    */
-  async getModels(): Promise<ModelCatalogResponse> {
-    const res = await fetch(`${getBaseUrl()}/api/v1/models`, {
+  async getModels(params?: {
+    search?: string;
+    favorites_only?: boolean;
+    force_refresh?: boolean;
+  }): Promise<ModelCatalogResponse> {
+    const url = new URL(`${getBaseUrl()}/api/v1/models`);
+    if (params?.search) url.searchParams.set('search', params.search);
+    if (params?.favorites_only) url.searchParams.set('favorites_only', 'true');
+    if (params?.force_refresh) url.searchParams.set('force_refresh', 'true');
+
+    const res = await fetch(url.toString(), {
       headers: {
         Accept: 'application/json',
       },

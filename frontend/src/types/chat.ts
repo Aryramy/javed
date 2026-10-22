@@ -22,6 +22,7 @@ export interface ModelInfo {
   pricing_completion: number;  // USD per 1M tokens
   description: string;
   is_default: boolean;
+  is_favorite?: boolean;
 }
 
 export interface ModelCatalogResponse {
@@ -29,7 +30,9 @@ export interface ModelCatalogResponse {
   default_model: string;
   authenticated: boolean;
   quota_remaining_usd: number | null;
-  daily_budget_usd: number;
+  daily_budget_usd: number | null;
+  total_models?: number;
+  is_dynamic?: boolean;
 }
 
 export interface StreamUsage {
@@ -38,6 +41,8 @@ export interface StreamUsage {
   total_tokens: number;
   cost_usd: number;
   upstream_cost: number | null;
+  is_estimated?: boolean;
+  cost_source?: 'upstream' | 'rate_card' | 'character_estimate';
 }
 
 export interface ChatStreamEvent {
@@ -53,4 +58,5 @@ export interface ConversationTotals {
   totalTokens: number;
   totalCostUsd: number;
   messageCount: number;
+  isEstimated?: boolean;
 }

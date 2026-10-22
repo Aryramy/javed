@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`  
-> **Version**: 3.2 (BRICK-002 Verified; BRICK-003 Ready for Acceptance)  
+> **Version**: 3.3 (BRICK-002 Verified; BRICK-003 Acceptance Audit Complete — Ready for Acceptance)  
 > **Status**: AUTHORITATIVE STATE SNAPSHOT  
 > **Last Updated**: 2026-10-22  
 
@@ -16,9 +16,9 @@
 | **Current Brick** | **BRICK-003: OpenRouter Integration & Streaming Chat** | [BRICK-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-003.md) |
 | **Brick Status** | **READY FOR ACCEPTANCE** | [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) |
 | **Last Verified Milestone** | **BRICK-002: FastAPI Integration & Real-Time Communication** | Owner Approval 2026-10-22 |
-| **Application Code** | **BRICK-003 Completed & Verified** (OpenRouter Adapter + SSE Streaming + assistant-ui + Dynamic Models + Token Cost Accounting) | Strict execution boundary |
+| **Application Code** | **BRICK-003 Completed, Audited & Verified** (Dynamic OpenRouter Catalog + SSE Streaming + assistant-ui Runtime + Multi-Turn ORCHID Context + Micro-Cost Meter + Uncapped Budget Soft Controls) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.5, FastAPI 0.159.1, Uvicorn 0.54.0, Pydantic 2.14.1, Node 24.19.0, React 19.3.1, Vite 8.3.5, Playwright 1.64.1 (Chrome), Vitest 5.0.5, @assistant-ui/react 0.11.45** | Host environment |
-| **Overall Status** | **READY FOR ACCEPTANCE** (BRICK-003 Verification Complete) | Authoritative Status |
+| **Overall Status** | **READY FOR ACCEPTANCE** (BRICK-003 Acceptance Audit Complete) | Authoritative Status |
 
 ---
 
@@ -47,7 +47,7 @@ stateDiagram-v2
 | **BRICK-000** | Master Architecture & Development Planning | **`VERIFIED`** | [REPORT-000.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-000.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-001** | Reproducible Foundation & Real React UI Shell | **`VERIFIED`** | [REPORT-001.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-001.md) | Explicitly approved by Project Owner on 2026-10-22 after manual acceptance. |
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
-| **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`READY FOR ACCEPTANCE`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Verified by 23 pytest, 31 vitest, 10 Playwright Chrome E2E, and live OpenRouter smoke test. Awaiting owner acceptance. |
+| **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`READY FOR ACCEPTANCE`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Audited & verified: 24 pytest (inc. live ORCHID multi-turn context), 31 vitest, 11 Playwright Chrome E2E, dynamic catalog, assistant-ui runtime. Awaiting owner acceptance. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | `NOT STARTED` | Pending | Blocked pending BRICK-003 verification. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
@@ -77,8 +77,8 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-003 implemented and fully verified (23 Pytest, 31 Vitest, 10 Playwright Chrome E2E). Status set to `READY FOR ACCEPTANCE`.
-2. **Strict Stop Condition**: Halt execution. Await project owner explicit review and acceptance of `REPORT-003.md` before advancing to BRICK-004.
+1. **Current Action**: BRICK-003 acceptance audit and targeted corrections completed and verified (24 Pytest, 31 Vitest, 11 Playwright Chrome E2E). Status remains `READY FOR ACCEPTANCE`.
+2. **Strict Stop Condition**: Halt execution. Await project owner explicit review and acceptance of `REPORT-003.md` (including Section 10 Addendum) before advancing to BRICK-004.
 
 ---
 
@@ -103,4 +103,5 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-22 | TASK-030 | Launch BRICK-003: OpenRouter Integration & Streaming Chat | VERIFIED | Owner Authorization |
 | 2026-10-22 | TASK-031 | BRICK-003 OpenRouter Adapter & Live Streaming Endpoints | VERIFIED | 8/8 Pytest Passed (Unit + Live Smoke) |
 | 2026-10-22 | TASK-032 | BRICK-003 React Conversational UI, Model Picker & Cost Meter | VERIFIED | 31/31 Vitest Passed, 0 Oxlint Errors |
-| 2026-10-22 | TASK-033 | BRICK-003 Chrome E2E Acceptance Verification & Report | READY FOR ACCEPTANCE | REPORT-003.md (10/10 Playwright Passed) |
+| 2026-10-22 | TASK-033 | BRICK-003 Chrome E2E Acceptance Verification & Report | VERIFIED | REPORT-003.md (10/10 Playwright Passed) |
+| 2026-10-22 | TASK-034 | BRICK-003 Final Acceptance Audit & Targeted Corrections | READY FOR ACCEPTANCE | REPORT-003.md Addendum (11/11 Playwright, 24 Pytest) |

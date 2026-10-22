@@ -134,19 +134,27 @@ export const TelemetryView: React.FC = () => {
             </div>
 
             <div className="p-3.5 rounded-lg bg-secondary/40 border border-border">
-              <span className="text-[11px] text-muted-foreground block mb-1">Configured Daily Budget</span>
+              <span className="text-[11px] text-muted-foreground block mb-1">Application Daily Budget</span>
               <div className="text-xl font-bold font-mono text-foreground">
-                ${catalog?.daily_budget_usd ? catalog.daily_budget_usd.toFixed(2) : '5.00'}
+                {catalog?.daily_budget_usd !== null && catalog?.daily_budget_usd !== undefined
+                  ? `$${catalog.daily_budget_usd.toFixed(2)}`
+                  : 'Uncapped'}
               </div>
-              <span className="text-[10px] text-muted-foreground">Hard cap enforcement per Rule 7</span>
+              <span className="text-[10px] text-muted-foreground">
+                {catalog?.daily_budget_usd !== null && catalog?.daily_budget_usd !== undefined
+                  ? 'Application-side soft budget limit'
+                  : 'No application-side limit configured'}
+              </span>
             </div>
 
             <div className="p-3.5 rounded-lg bg-secondary/40 border border-border">
-              <span className="text-[11px] text-muted-foreground block mb-1">Default In-Flight Model</span>
+              <span className="text-[11px] text-muted-foreground block mb-1">Default Model & Catalog</span>
               <div className="text-sm font-bold font-mono text-cyan-400 truncate">
                 {catalog?.default_model || 'openai/gpt-4o-mini'}
               </div>
-              <span className="text-[10px] text-muted-foreground">System default routing</span>
+              <span className="text-[10px] text-muted-foreground">
+                {catalog?.total_models ? `${catalog.total_models} models available` : 'Dynamic discovery'}
+              </span>
             </div>
           </div>
         )}
@@ -154,13 +162,21 @@ export const TelemetryView: React.FC = () => {
         {/* Live Model Rate Cards */}
         {catalog?.models && catalog.models.length > 0 && (
           <div className="pt-2 border-t border-border">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground mb-3">
-              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Frontier Model Rate Cards (Cost per 1M Tokens)</span>
+            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-3">
+              <div className="flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Frontier Model Rate Cards (Cost per 1M Tokens)</span>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-500">
+                {catalog.is_dynamic ? 'Dynamic Upstream Catalog' : 'Curated Catalog'}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {catalog.models.map((model) => (
+              {(catalog.models.some((m) => m.is_favorite)
+                ? catalog.models.filter((m) => m.is_favorite)
+                : catalog.models.slice(0, 6)
+              ).map((model) => (
                 <div
                   key={model.id}
                   className="p-3 rounded-lg border border-border/80 bg-secondary/30 flex flex-col justify-between text-xs"

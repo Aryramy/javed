@@ -66,9 +66,9 @@ class Settings(BaseModel):
         default="openai/gpt-4o-mini",
         description="Default LLM model identifier",
     )
-    openrouter_daily_budget_usd: float = Field(
-        default=5.00,
-        description="Maximum daily LLM spend limit in USD",
+    openrouter_daily_budget_usd: float | None = Field(
+        default=None,
+        description="Optional application-side daily LLM spend limit in USD (None if uncapped)",
     )
     openrouter_timeout_seconds: float = Field(
         default=60.0,
@@ -93,6 +93,9 @@ def get_settings() -> Settings:
         else None
     )
 
+    daily_budget_env = os.getenv("OPENROUTER_DAILY_BUDGET_USD")
+    daily_budget = float(daily_budget_env) if daily_budget_env else None
+
     kwargs = {
         "env": os.getenv("JAVED_ENV", "development"),
         "host": os.getenv("JAVED_HOST", "127.0.0.1"),
@@ -101,7 +104,7 @@ def get_settings() -> Settings:
         "openrouter_api_key": os.getenv("OPENROUTER_API_KEY"),
         "openrouter_base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openai/gpt-4o-mini"),
-        "openrouter_daily_budget_usd": float(os.getenv("OPENROUTER_DAILY_BUDGET_USD", "5.00")),
+        "openrouter_daily_budget_usd": daily_budget,
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
     }
     if allowed_origins:

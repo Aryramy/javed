@@ -76,7 +76,7 @@ describe('ModelSelector Component', () => {
     const trigger = screen.getByRole('button', { name: /OpenAI GPT-4o Mini/i });
     await user.click(trigger);
 
-    expect(screen.getByText('Available Frontier Models')).toBeInTheDocument();
+    expect(screen.getByText('OpenRouter')).toBeInTheDocument();
     expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
 
     const claudeButton = screen.getByRole('button', { name: /Claude Sonnet 4.5/i });

@@ -60,6 +60,14 @@ class StreamUsage(BaseModel):
         default=None,
         description="Exact cost reported directly by OpenRouter if available",
     )
+    is_estimated: bool = Field(
+        default=False,
+        description="Whether the cost and token counts are estimated vs provider-reconciled",
+    )
+    cost_source: Literal["upstream", "rate_card", "character_estimate"] = Field(
+        default="upstream",
+        description="Source of cost calculation: upstream, rate_card, or estimate",
+    )
 
 
 class ChatStreamEvent(BaseModel):
@@ -103,6 +111,7 @@ class ModelInfo(BaseModel):
     pricing_completion: float = Field(description="USD cost per 1M completion tokens")
     description: str = Field(description="Brief summary of recommended use cases")
     is_default: bool = Field(default=False, description="Whether this is the system default model")
+    is_favorite: bool = Field(default=False, description="Whether model is in favorites")
 
 
 class ModelCatalogResponse(BaseModel):
@@ -115,4 +124,15 @@ class ModelCatalogResponse(BaseModel):
         default=None,
         description="Remaining account balance/limit in USD from OpenRouter auth",
     )
-    daily_budget_usd: float = Field(description="Local configured daily spending budget")
+    daily_budget_usd: float | None = Field(
+        default=None,
+        description="Optional application-side daily spending budget in USD (None if uncapped)",
+    )
+    total_models: int = Field(
+        default=0,
+        description="Total models available in the upstream OpenRouter catalog",
+    )
+    is_dynamic: bool = Field(
+        default=True,
+        description="Whether this catalog was populated dynamically from OpenRouter",
+    )

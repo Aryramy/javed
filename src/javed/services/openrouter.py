@@ -1,8 +1,9 @@
-"""OpenRouter LLM service adapter with streaming, rate cards, and cost tracking."""
+"""OpenRouter LLM service adapter with dynamic discovery, streaming, and cost tracking."""
 
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -21,7 +22,16 @@ from javed.schemas.chat import (
 
 logger = logging.getLogger("javed.services.openrouter")
 
-# Curated high-performance models available on OpenRouter
+# Pinned default favorites for quick selection
+DEFAULT_FAVORITE_MODEL_IDS: list[str] = [
+    "openai/gpt-4o-mini",
+    "openai/gpt-4o",
+    "anthropic/claude-sonnet-4.5",
+    "google/gemini-2.5-flash",
+    "deepseek/deepseek-chat",
+]
+
+# Curated fallback models when offline or in isolated unit test environments
 CURATED_MODELS: list[dict[str, Any]] = [
     {
         "id": "openai/gpt-4o-mini",
@@ -32,6 +42,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "pricing_completion": 0.60,  # $0.60 per 1M tokens
         "description": "Fast, economical frontier model ideal for daily tasks.",
         "is_default": True,
+        "is_favorite": True,
     },
     {
         "id": "openai/gpt-4o",
@@ -42,16 +53,18 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "pricing_completion": 10.00,
         "description": "Flagship multimodal intelligence for high-complexity analysis.",
         "is_default": False,
+        "is_favorite": True,
     },
     {
         "id": "anthropic/claude-sonnet-4.5",
         "name": "Claude Sonnet 4.5",
         "provider": "Anthropic",
-        "context_length": 200000,
+        "context_length": 1000000,
         "pricing_prompt": 3.00,
         "pricing_completion": 15.00,
         "description": "Deep reasoning, nuanced code architecture, and high-fidelity output.",
         "is_default": False,
+        "is_favorite": True,
     },
     {
         "id": "google/gemini-2.5-flash",
@@ -62,16 +75,18 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "pricing_completion": 2.50,
         "description": "High-velocity inference with massive 1M token context window.",
         "is_default": False,
+        "is_favorite": True,
     },
     {
         "id": "deepseek/deepseek-chat",
         "name": "DeepSeek Chat V3",
         "provider": "DeepSeek",
-        "context_length": 64000,
-        "pricing_prompt": 0.26,
-        "pricing_completion": 1.03,
+        "context_length": 163840,
+        "pricing_prompt": 0.2574,
+        "pricing_completion": 1.0287,
         "description": "High-efficiency open-weights architecture with strong reasoning.",
         "is_default": False,
+        "is_favorite": True,
     },
 ]
 
@@ -88,6 +103,12 @@ class OpenRouterService:
         self.app_name = settings.app_name
         self.app_url = settings.app_url
         self._external_client = client
+
+        # Dynamic model cache state
+        self.favorite_model_ids: list[str] = list(DEFAULT_FAVORITE_MODEL_IDS)
+        self._cached_models: list[ModelInfo] | None = None
+        self._cache_timestamp: float = 0.0
+        self._cache_ttl_seconds: float = 3600.0  # 1 hour cache TTL
 
     def _get_headers(self) -> dict[str, str]:
         """Construct standard OpenRouter authentication and identification headers."""
@@ -111,18 +132,165 @@ class OpenRouterService:
         if upstream_cost is not None and upstream_cost > 0.0:
             return float(upstream_cost)
 
-        # Lookup model in curated list
-        model_entry = next((m for m in CURATED_MODELS if m["id"] == model_id), None)
-        if model_entry:
-            prompt_cost = (prompt_tokens * model_entry["pricing_prompt"]) / 1_000_000.0
-            comp_cost = (completion_tokens * model_entry["pricing_completion"]) / 1_000_000.0
-            return round(prompt_cost + comp_cost, 8)
+        p_prompt, p_comp = 1.0, 3.0  # Default conservative fallback
+        matched = False
 
-        # Default fallback pricing ($1.00 / 1M prompt, $3.00 / 1M completion)
-        return round((prompt_tokens * 1.0 + completion_tokens * 3.0) / 1_000_000.0, 8)
+        # 1. Check in cached dynamic models
+        if self._cached_models:
+            for m in self._cached_models:
+                if m.id == model_id:
+                    p_prompt = m.pricing_prompt
+                    p_comp = m.pricing_completion
+                    matched = True
+                    break
 
-    async def get_models(self) -> ModelCatalogResponse:
-        """Return the curated model catalog and live account credit status."""
+        # 2. Check in curated static fallback list
+        if not matched:
+            model_entry = next((m for m in CURATED_MODELS if m["id"] == model_id), None)
+            if model_entry:
+                p_prompt = model_entry["pricing_prompt"]
+                p_comp = model_entry["pricing_completion"]
+
+        prompt_cost = (prompt_tokens * p_prompt) / 1_000_000.0
+        comp_cost = (completion_tokens * p_comp) / 1_000_000.0
+        return round(prompt_cost + comp_cost, 8)
+
+    async def fetch_models(
+        self,
+        search: str | None = None,
+        favorites_only: bool = False,
+        force_refresh: bool = False,
+    ) -> tuple[list[ModelInfo], int, bool]:
+        """Fetch and cache dynamic model catalog from OpenRouter with text compatibility filter.
+
+        Returns (filtered_models, total_models_count, is_dynamic).
+        """
+        now = time.time()
+        needs_refresh = (
+            force_refresh
+            or self._cached_models is None
+            or (now - self._cache_timestamp > self._cache_ttl_seconds)
+        )
+
+        is_dynamic = True
+        if needs_refresh:
+            try:
+                url = f"{self.base_url}/models"
+                client = self._external_client or httpx.AsyncClient(timeout=10.0)
+                should_close = self._external_client is None
+                try:
+                    resp = await client.get(url, headers=self._get_headers())
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", [])
+                        parsed_models: list[ModelInfo] = []
+                        for m in data:
+                            mid = m.get("id", "")
+                            if not mid:
+                                continue
+
+                            # Filter for text-generation compatibility
+                            arch = m.get("architecture") or {}
+                            out_mods = arch.get("output_modalities") or []
+                            modality = arch.get("modality", "")
+                            if out_mods and "text" not in out_mods:
+                                continue
+                            if modality and "image" in modality and "text" not in modality:
+                                continue
+
+                            name = m.get("name") or mid
+                            provider = (
+                                mid.split("/")[0].capitalize() if "/" in mid else "OpenRouter"
+                            )
+                            ctx = int(m.get("context_length") or 0)
+                            pricing = m.get("pricing") or {}
+                            try:
+                                p_prompt = float(pricing.get("prompt") or 0.0) * 1_000_000.0
+                            except (ValueError, TypeError):
+                                p_prompt = 0.0
+                            try:
+                                p_comp = float(pricing.get("completion") or 0.0) * 1_000_000.0
+                            except (ValueError, TypeError):
+                                p_comp = 0.0
+
+                            desc = m.get("description") or f"Model provided by {provider}."
+                            is_fav = mid in self.favorite_model_ids
+                            is_def = (mid == self.default_model)
+
+                            parsed_models.append(
+                                ModelInfo(
+                                    id=mid,
+                                    name=name,
+                                    provider=provider,
+                                    context_length=ctx,
+                                    pricing_prompt=round(p_prompt, 4),
+                                    pricing_completion=round(p_comp, 4),
+                                    description=desc,
+                                    is_default=is_def,
+                                    is_favorite=is_fav,
+                                )
+                            )
+
+                        if parsed_models:
+                            # Sort: Favorites first, then alphabetically by friendly name
+                            parsed_models.sort(
+                                key=lambda item: (not item.is_favorite, item.name.lower())
+                            )
+                            self._cached_models = parsed_models
+                            self._cache_timestamp = now
+                    else:
+                        logger.warning(
+                            f"OpenRouter /models returned HTTP {resp.status_code}; "
+                            "using fallback catalog."
+                        )
+                finally:
+                    if should_close:
+                        await client.aclose()
+            except Exception as e:
+                logger.warning(
+                    f"Could not dynamically retrieve OpenRouter models ({e}); "
+                    "using fallback catalog."
+                )
+
+        if not self._cached_models:
+            # Fallback to curated catalog
+            is_dynamic = False
+            self._cached_models = [
+                ModelInfo(
+                    id=m["id"],
+                    name=m["name"],
+                    provider=m["provider"],
+                    context_length=m["context_length"],
+                    pricing_prompt=m["pricing_prompt"],
+                    pricing_completion=m["pricing_completion"],
+                    description=m["description"],
+                    is_default=(m["id"] == self.default_model),
+                    is_favorite=(m["id"] in self.favorite_model_ids),
+                )
+                for m in CURATED_MODELS
+            ]
+
+        total_count = len(self._cached_models)
+        results = self._cached_models
+
+        if favorites_only:
+            results = [m for m in results if m.is_favorite]
+
+        if search:
+            s = search.strip().lower()
+            results = [
+                m for m in results
+                if s in m.id.lower() or s in m.name.lower() or s in m.provider.lower()
+            ]
+
+        return results, total_count, is_dynamic
+
+    async def get_models(
+        self,
+        search: str | None = None,
+        favorites_only: bool = False,
+        force_refresh: bool = False,
+    ) -> ModelCatalogResponse:
+        """Return dynamic model catalog and live account credit status."""
         quota_remaining: float | None = None
         authenticated = bool(self.api_key)
 
@@ -137,19 +305,11 @@ class OpenRouterService:
             except Exception as e:
                 logger.warning(f"Could not retrieve OpenRouter account telemetry: {e}")
 
-        models = [
-            ModelInfo(
-                id=m["id"],
-                name=m["name"],
-                provider=m["provider"],
-                context_length=m["context_length"],
-                pricing_prompt=m["pricing_prompt"],
-                pricing_completion=m["pricing_completion"],
-                description=m["description"],
-                is_default=(m["id"] == self.default_model),
-            )
-            for m in CURATED_MODELS
-        ]
+        models, total_count, is_dynamic = await self.fetch_models(
+            search=search,
+            favorites_only=favorites_only,
+            force_refresh=force_refresh,
+        )
 
         return ModelCatalogResponse(
             models=models,
@@ -157,23 +317,41 @@ class OpenRouterService:
             authenticated=authenticated,
             quota_remaining_usd=round(quota_remaining, 4) if quota_remaining is not None else None,
             daily_budget_usd=self.settings.openrouter_daily_budget_usd,
+            total_models=total_count,
+            is_dynamic=is_dynamic,
         )
 
     async def get_account_status(self) -> dict[str, Any] | None:
-        """Query OpenRouter key auth status for balance and quota telemetry."""
+        """Query OpenRouter key status for balance and quota telemetry.
+
+        Uses the modern documented GET /key endpoint, falling back to /auth/key.
+        Credentials and raw account secrets are never exposed to the client.
+        """
         if not self.api_key:
             return None
 
-        url = f"{self.base_url}/auth/key"
         headers = self._get_headers()
+        endpoints = [f"{self.base_url}/key", f"{self.base_url}/auth/key"]
 
-        if self._external_client:
-            resp = await self._external_client.get(url, headers=headers, timeout=10.0)
-            return resp.json() if resp.status_code == 200 else None
+        client = self._external_client or httpx.AsyncClient(timeout=10.0)
+        should_close = self._external_client is None
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers=headers)
-            return resp.json() if resp.status_code == 200 else None
+        try:
+            for url in endpoints:
+                try:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        return resp.json()
+                except Exception as e:
+                    logger.debug(f"OpenRouter endpoint {url} failed: {e}")
+                    continue
+            return None
+        except Exception as e:
+            logger.warning(f"Error querying OpenRouter key status: {e}")
+            return None
+        finally:
+            if should_close:
+                await client.aclose()
 
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
         """Stream chat tokens and usage events from OpenRouter via Server-Sent Events."""
@@ -198,7 +376,7 @@ class OpenRouterService:
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
 
-        accumulated_text = []
+        accumulated_text: list[str] = []
         reported_usage: StreamUsage | None = None
 
         try:
@@ -246,18 +424,25 @@ class OpenRouterService:
                                 accumulated_text.append(token)
                                 yield ChatStreamEvent(type="token", content=token)
 
+                        # Process terminal or intermediate usage chunk
                         raw_usage = chunk.get("usage")
                         if raw_usage:
                             prompt_tok = int(raw_usage.get("prompt_tokens", 0))
                             comp_tok = int(raw_usage.get("completion_tokens", 0))
                             total_tok = int(raw_usage.get("total_tokens", prompt_tok + comp_tok))
                             upstream_cost = raw_usage.get("cost")
-                            cost = self.calculate_cost(
-                                model_id=model_id,
-                                prompt_tokens=prompt_tok,
-                                completion_tokens=comp_tok,
-                                upstream_cost=upstream_cost,
-                            )
+
+                            if upstream_cost is not None and float(upstream_cost) > 0.0:
+                                cost = float(upstream_cost)
+                                cost_src = "upstream"
+                            else:
+                                cost = self.calculate_cost(
+                                    model_id=model_id,
+                                    prompt_tokens=prompt_tok,
+                                    completion_tokens=comp_tok,
+                                )
+                                cost_src = "rate_card"
+
                             up_cost_float = (
                                 float(upstream_cost) if upstream_cost is not None else None
                             )
@@ -267,12 +452,14 @@ class OpenRouterService:
                                 total_tokens=total_tok,
                                 cost_usd=cost,
                                 upstream_cost=up_cost_float,
+                                is_estimated=False,
+                                cost_source=cost_src,
                             )
             finally:
                 if should_close:
                     await client.aclose()
 
-            # If upstream did not provide usage chunk, calculate fallback estimation
+            # If upstream did not deliver a usage chunk, calculate character-based fallback estimate
             if not reported_usage:
                 prompt_chars = sum(len(m.content) for m in request.messages)
                 comp_chars = sum(len(t) for t in accumulated_text)
@@ -285,6 +472,8 @@ class OpenRouterService:
                     total_tokens=est_prompt_tokens + est_comp_tokens,
                     cost_usd=cost,
                     upstream_cost=None,
+                    is_estimated=True,
+                    cost_source="character_estimate",
                 )
 
             yield ChatStreamEvent(type="usage", usage=reported_usage)
@@ -340,13 +529,21 @@ class OpenRouterService:
             total_tok = int(raw_usage.get("total_tokens", prompt_tok + comp_tok))
             upstream_cost = raw_usage.get("cost")
 
-            cost = self.calculate_cost(model_id, prompt_tok, comp_tok, upstream_cost)
+            if upstream_cost is not None and float(upstream_cost) > 0.0:
+                cost = float(upstream_cost)
+                cost_src = "upstream"
+            else:
+                cost = self.calculate_cost(model_id, prompt_tok, comp_tok)
+                cost_src = "rate_card"
+
             usage = StreamUsage(
                 prompt_tokens=prompt_tok,
                 completion_tokens=comp_tok,
                 total_tokens=total_tok,
                 cost_usd=cost,
                 upstream_cost=float(upstream_cost) if upstream_cost is not None else None,
+                is_estimated=False,
+                cost_source=cost_src,
             )
 
             return ChatResponse(

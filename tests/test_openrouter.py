@@ -56,7 +56,7 @@ def test_rate_card_cost_calculation(mock_settings: Settings) -> None:
 
 @pytest.mark.asyncio
 async def test_get_models_catalog(mock_settings: Settings) -> None:
-    """Verify model catalog returns curated models and settings defaults."""
+    """Verify model catalog returns models, search filters, and settings defaults."""
     service = OpenRouterService(mock_settings)
     with patch.object(service, "get_account_status", new_callable=AsyncMock) as mock_auth:
         mock_auth.return_value = {
@@ -71,11 +71,22 @@ async def test_get_models_catalog(mock_settings: Settings) -> None:
         assert catalog.default_model == "openai/gpt-4o-mini"
         assert catalog.quota_remaining_usd == 42.50
         assert catalog.daily_budget_usd == 5.00
-        assert len(catalog.models) == len(CURATED_MODELS)
+        assert len(catalog.models) >= len(CURATED_MODELS)
+        assert catalog.is_dynamic is True
 
         default_entry = next((m for m in catalog.models if m.id == "openai/gpt-4o-mini"), None)
         assert default_entry is not None
         assert default_entry.is_default is True
+        assert default_entry.is_favorite is True
+
+        # Test favorites filtering
+        fav_catalog = await service.get_models(favorites_only=True)
+        assert len(fav_catalog.models) == 5
+        assert all(m.is_favorite for m in fav_catalog.models)
+
+        # Test search filtering
+        search_catalog = await service.get_models(search="gpt-4o-mini")
+        assert any(m.id == "openai/gpt-4o-mini" for m in search_catalog.models)
 
 
 @pytest.mark.asyncio
