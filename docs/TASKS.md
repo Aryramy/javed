@@ -34,8 +34,8 @@
 | **TASK-010** | BRICK-001 | Author BRICK-001 Implementation Specification | **VERIFIED** | Requires BRICK-000 Owner Sign-Off | Detailed spec drafted in `docs/bricks/BRICK-001.md` covering uv, React, Tailwind, and shadcn/ui shell. |
 | **TASK-011** | BRICK-001 | Implement Project Scaffolding & Live React UI Shell | **VERIFIED** | TASK-010 | Python 3.12 virtualenv via `uv`; Vite + React shell running with User/Dev mode, themes, and navigation; Vitest and test discovery pass. |
 | **TASK-012** | BRICK-001 | Produce Verification Report REPORT-001 & Evidence | **VERIFIED** | Requires TASK-011 | Verification report published; automated verification harness passed (9/9 vitest, 1/1 pytest, 0 ruff errors, 0 oxlint errors); owner approval recorded. |
-| **TASK-020** | BRICK-002 | Draft & Implement FastAPI WebSocket & SSE Gateway | **READY FOR ACCEPTANCE** | Requires BRICK-001 Verification | Real-time gateway connecting UI status bar with live backend server; 15 pytest, 24 vitest, 5 Playwright E2E passed. |
-| **TASK-030** | BRICK-003 | Implement OpenRouter Adapter & Live Streaming Chat | **NOT STARTED** | Requires BRICK-002 Verification | Live LLM token streaming in assistant-ui thread with token/cost tracking. |
+| **TASK-020** | BRICK-002 | Draft & Implement FastAPI WebSocket & SSE Gateway | **VERIFIED** | Requires BRICK-001 Verification | Real-time gateway connecting UI status bar with live backend server; 15 pytest, 24 vitest, 5 Playwright E2E passed. Approved by owner 2026-10-22. |
+| **TASK-030** | BRICK-003 | Implement OpenRouter Adapter & Live Streaming Chat | **READY FOR ACCEPTANCE** | Requires BRICK-002 Verification | Live LLM token streaming in assistant-ui thread with token/cost tracking. 23 pytest, 31 vitest, 10 Playwright E2E passed. |
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **NOT STARTED** | Requires BRICK-003 Verification | Cyclic state graph with SQLite checkpointing and reasoning visualizer. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **NOT STARTED** | Requires BRICK-004 Verification | Pydantic tool validation, path sandboxing, interactive approval modal, and native LangChain MCP baseline. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **NOT STARTED** | Requires BRICK-005 Verification | Scripted browser automation, Playwright MCP evaluation, and real-time viewport preview panel. |
@@ -49,17 +49,16 @@
 
 ---
 
-## 3. Active Task Details (BRICK-002 Implementation)
+## 3. Active Task Details (BRICK-003 Implementation)
 
-### TASK-020: BRICK-002 FastAPI Backend & Real-Time UI Gateway
+### TASK-030: BRICK-003 OpenRouter Adapter & Live Streaming Chat
 - **Status**: `READY FOR ACCEPTANCE`
-- **Completed Scope**:
-  - FastAPI backend foundation with Uvicorn, Pydantic v2, lifespan management (`src/javed/`).
-  - REST endpoints: `/api/v1/health/live`, `/api/v1/health/ready`, `/api/v1/system/status`, `/api/v1/ping`.
-  - WebSocket gateway `/api/v1/ws` with heartbeat, correlation IDs, typed envelope, connection manager.
-  - Server-Sent Events `/api/v1/events` stream for diagnostic telemetry.
-  - Typed React communication layer (REST + WS + connection status) in `frontend/src/services/` and `frontend/src/context/`.
-  - Live UI features: Header backend indicator with RTT, Developer Mode Connectivity, Diagnostics, Logs.
-  - Full automated tests: 15/15 pytest, 24/24 vitest, and 5/5 Playwright E2E browser tests on real Google Chrome.
-  - REPORT-002.md delivery and documentation updates.
-- **Stop Condition**: Halt execution when BRICK-002 is ready for acceptance and await project owner review. Do not begin BRICK-003.
+- **Scope**:
+  - OpenRouter adapter service with streaming token generation, request timeout, and cancellation.
+  - Multi-model catalog endpoint (`GET /api/v1/models`) with pricing and capabilities.
+  - Streaming SSE / event endpoint (`POST /api/v1/chat/stream`) with token usage & cost metadata.
+  - React frontend interactive chat with assistant-ui integration and dynamic model picker.
+  - Multi-turn conversational context with cost & token counters.
+  - Live UI verification (User & Developer Mode) and browser E2E test suite.
+- **Stop Condition**: Halt execution when BRICK-003 reaches `READY FOR ACCEPTANCE` with `REPORT-003.md`. Await project owner review before beginning BRICK-004.
+

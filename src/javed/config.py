@@ -1,8 +1,10 @@
-"""Application configuration and settings for Project Javed."""
-
 import os
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Load environment variables from .env if present
+load_dotenv()
 
 
 class Settings(BaseModel):
@@ -51,6 +53,36 @@ class Settings(BaseModel):
         description="Max request body in bytes (1MB)",
     )
 
+    # OpenRouter LLM Settings
+    openrouter_api_key: str | None = Field(
+        default=None,
+        description="OpenRouter API Key",
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter API Base URL",
+    )
+    openrouter_default_model: str = Field(
+        default="openai/gpt-4o-mini",
+        description="Default LLM model identifier",
+    )
+    openrouter_daily_budget_usd: float = Field(
+        default=5.00,
+        description="Maximum daily LLM spend limit in USD",
+    )
+    openrouter_timeout_seconds: float = Field(
+        default=60.0,
+        description="Timeout for upstream LLM inference requests in seconds",
+    )
+    app_name: str = Field(
+        default="Javed Control Center",
+        description="Application title for OpenRouter analytics",
+    )
+    app_url: str = Field(
+        default="http://localhost:5173",
+        description="Application origin for OpenRouter analytics",
+    )
+
 
 def get_settings() -> Settings:
     """Load settings from environment variables with safe defaults."""
@@ -66,8 +98,14 @@ def get_settings() -> Settings:
         "host": os.getenv("JAVED_HOST", "127.0.0.1"),
         "port": int(os.getenv("JAVED_PORT", "8000")),
         "log_level": os.getenv("JAVED_LOG_LEVEL", "INFO"),
+        "openrouter_api_key": os.getenv("OPENROUTER_API_KEY"),
+        "openrouter_base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openai/gpt-4o-mini"),
+        "openrouter_daily_budget_usd": float(os.getenv("OPENROUTER_DAILY_BUDGET_USD", "5.00")),
+        "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
     }
     if allowed_origins:
         kwargs["allowed_origins"] = allowed_origins
 
     return Settings(**kwargs)
+

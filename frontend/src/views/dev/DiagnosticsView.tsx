@@ -3,16 +3,19 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Cpu,
   Lock,
   Play,
   Radio,
   ShieldCheck,
+  Sparkles,
   Terminal,
   Wifi,
   WifiOff,
 } from 'lucide-react'
 import { useBackend } from '@/context'
 import { apiService } from '@/services/api'
+import { chatService } from '@/services/chatService'
 import { cn } from '@/lib/utils'
 
 export const DiagnosticsView: React.FC = () => {
@@ -164,6 +167,74 @@ export const DiagnosticsView: React.FC = () => {
     }
   }
 
+  const runCheckModels = async () => {
+    setActiveAction('models')
+    try {
+      const start = performance.now()
+      const data = await chatService.getModels()
+      const duration = Math.round((performance.now() - start) * 10) / 10
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/models',
+            _status: 200,
+            _duration_ms: duration,
+            ...data,
+          },
+          null,
+          2
+        )
+      )
+    } catch (err: unknown) {
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/models',
+            _status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          2
+        )
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
+  const runCheckOpenRouterStream = async () => {
+    setActiveAction('stream')
+    let output = '// Initiating live SSE stream to /api/v1/chat/stream...\n'
+    setConsoleOutput(output)
+    try {
+      const start = performance.now()
+      await chatService.streamChat({
+        messages: [{ role: 'user', content: 'Respond with exactly: "Javed Live Streaming Verified"' }],
+        onToken: (tok) => {
+          output += tok
+          setConsoleOutput(output)
+        },
+        onUsage: (u) => {
+          output += `\n\n// Usage Telemetry:\n// Total Tokens: ${u.total_tokens} (prompt: ${u.prompt_tokens}, comp: ${u.completion_tokens})\n// Cost: $${u.cost_usd.toFixed(6)}`
+          setConsoleOutput(output)
+        },
+        onDone: () => {
+          const duration = Math.round((performance.now() - start) * 10) / 10
+          output += `\n// Stream Completed in ${duration}ms`
+          setConsoleOutput(output)
+        },
+        onError: (err) => {
+          output += `\n// Stream Error: ${err}`
+          setConsoleOutput(output)
+        },
+      })
+    } catch (err: unknown) {
+      setConsoleOutput(output + `\n// Exception: ${err}`)
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
   const tiers = [
     {
       tier: 'Tier 0: Pure Informational',
@@ -289,6 +360,24 @@ export const DiagnosticsView: React.FC = () => {
           >
             <WifiOff className="w-3.5 h-3.5" />
             <span>Disconnect Socket</span>
+          </button>
+
+          <button
+            onClick={runCheckModels}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Query Model Catalog</span>
+          </button>
+
+          <button
+            onClick={runCheckOpenRouterStream}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>Test Live LLM Stream</span>
           </button>
         </div>
 

@@ -14,6 +14,7 @@ from starlette.responses import Response
 
 from javed.api.v1.router import api_v1_router
 from javed.config import Settings, get_settings
+from javed.services.openrouter import OpenRouterService
 from javed.transport.sse import SSEManager
 from javed.transport.websocket import WebSocketManager
 from javed.version import __version__
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.startup_time = time.time()
     app.state.ws_manager = WebSocketManager(app_settings)
     app.state.sse_manager = SSEManager()
+    app.state.openrouter_service = OpenRouterService(app_settings)
 
     # 1. Body Size Limiter Middleware
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=app_settings.max_request_body_bytes)
