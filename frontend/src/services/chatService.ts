@@ -8,10 +8,12 @@ export interface StreamChatParams {
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[];
   model?: string;
   cost_tier?: CostTier;
+  session_id?: string;
   temperature?: number;
   max_tokens?: number;
   signal?: AbortSignal;
   onToken: (token: string) => void;
+  onReasoning?: (reasoning: string) => void;
   onUsage?: (usage: StreamUsage) => void;
   onError?: (error: string) => void;
   onDone?: () => void;
@@ -56,7 +58,20 @@ export const chatService = {
    * Initiate a streaming chat completion over Server-Sent Events (SSE).
    */
   async streamChat(params: StreamChatParams): Promise<void> {
-    const { messages, model, cost_tier, temperature, max_tokens, signal, onToken, onUsage, onError, onDone } = params;
+    const {
+      messages,
+      model,
+      cost_tier,
+      session_id,
+      temperature,
+      max_tokens,
+      signal,
+      onToken,
+      onReasoning,
+      onUsage,
+      onError,
+      onDone,
+    } = params;
 
     const response = await fetch(`${getBaseUrl()}/api/v1/chat/stream`, {
       method: 'POST',
@@ -68,6 +83,7 @@ export const chatService = {
         messages,
         model,
         cost_tier,
+        session_id,
         temperature: temperature ?? 0.7,
         max_tokens,
         stream: true,
@@ -126,6 +142,11 @@ export const chatService = {
               case 'token':
                 if (event.content) {
                   onToken(event.content);
+                }
+                break;
+              case 'reasoning':
+                if (event.reasoning) {
+                  onReasoning?.(event.reasoning);
                 }
                 break;
               case 'usage':

@@ -20,7 +20,7 @@ def mock_settings() -> Settings:
         env="test",
         openrouter_api_key="sk-or-v1-mock-test-key",
         openrouter_base_url="https://openrouter.ai/api/v1",
-        openrouter_default_model="openai/gpt-4o-mini",
+        openrouter_default_model="openrouter/auto",
         openrouter_daily_budget_usd=5.00,
     )
 
@@ -68,13 +68,13 @@ async def test_get_models_catalog(mock_settings: Settings) -> None:
         catalog = await service.get_models()
 
         assert catalog.authenticated is True
-        assert catalog.default_model == "openai/gpt-4o-mini"
+        assert catalog.default_model == "openrouter/auto"
         assert catalog.quota_remaining_usd == 42.50
         assert catalog.daily_budget_usd == 5.00
         assert len(catalog.models) >= len(CURATED_MODELS)
         assert catalog.is_dynamic is True
 
-        default_entry = next((m for m in catalog.models if m.id == "openai/gpt-4o-mini"), None)
+        default_entry = next((m for m in catalog.models if m.id == "openrouter/auto"), None)
         assert default_entry is not None
         assert default_entry.is_default is True
         assert default_entry.is_favorite is True
@@ -186,7 +186,7 @@ def test_api_models_endpoint(mock_settings: Settings) -> None:
     data = response.json()
     assert "models" in data
     assert "default_model" in data
-    assert data["default_model"] == "openai/gpt-4o-mini"
+    assert data["default_model"] == "openrouter/auto"
     assert data["authenticated"] is True
 
 
@@ -279,7 +279,7 @@ async def test_auto_router_request_payload_and_plugins(mock_settings: Settings) 
     plugin = captured_payload["plugins"][0]
     assert plugin["id"] == "auto-router"
     assert plugin["cost_tier"] == "high"
-    assert plugin["costTier"] == "high"
+    assert "costTier" not in plugin
 
     # Verify selected model extraction
     token_events = [e for e in events if e.type == "token"]
@@ -330,5 +330,148 @@ async def test_auto_router_cost_tier_default_fallback(mock_settings: Settings) -
     events = [event async for event in service.stream_chat(request)]
 
     assert captured_payload["plugins"][0]["cost_tier"] == "low"
+    assert "costTier" not in captured_payload["plugins"][0]
     assert events[0].selected_model == "openai/gpt-4o-mini"
     assert events[0].requested_model == "openrouter/auto"
+
+
+@pytest.mark.asyncio
+async def test_auto_router_all_five_cost_tiers_request_serialization(mock_settings: Settings) -> None:
+    """Validate all five cost tiers at request serialization without live calls."""
+    tiers = ["low", "medium", "high", "xhigh", "max"]
+    for tier in tiers:
+        captured_payload: dict = {}
+
+        class FakeStreamResponse:
+            status_code = 200
+
+            async def aiter_lines(self):
+                yield 'data: {"model":"openai/gpt-4o-mini","choices":[{"delta":{"content":"ok"}}]}'
+                yield "data: [DONE]"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        def fake_stream(method, url, headers=None, json=None, timeout=None):
+            nonlocal captured_payload
+            captured_payload = json
+            return FakeStreamResponse()
+
+        mock_client.stream.side_effect = fake_stream
+
+        service = OpenRouterService(mock_settings, client=mock_client)
+        request = ChatRequest(
+            model="openrouter/auto",
+            cost_tier=tier,
+            messages=[ChatMessage(role="user", content="Tier test")],
+        )
+
+        events = [event async for event in service.stream_chat(request)]
+        assert len(events) >= 1
+        assert captured_payload["model"] == "openrouter/auto"
+        assert "plugins" in captured_payload
+        assert len(captured_payload["plugins"]) == 1
+        plugin = captured_payload["plugins"][0]
+        assert plugin["id"] == "auto-router"
+        assert plugin["cost_tier"] == tier
+        assert "costTier" not in plugin
+
+
+@pytest.mark.asyncio
+async def test_auto_router_session_id_multi_turn_stickiness(mock_settings: Settings) -> None:
+    """Verify session_id is serialized in plugin and payload for Auto Router stickiness."""
+    captured_payload: dict = {}
+
+    class FakeStreamResponse:
+        status_code = 200
+
+        async def aiter_lines(self):
+            yield 'data: {"model":"anthropic/claude-3.5-sonnet","choices":[{"delta":{"content":"ok"}}]}'
+            yield "data: [DONE]"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+    def fake_stream(method, url, headers=None, json=None, timeout=None):
+        nonlocal captured_payload
+        captured_payload = json
+        return FakeStreamResponse()
+
+    mock_client.stream.side_effect = fake_stream
+
+    service = OpenRouterService(mock_settings, client=mock_client)
+    request = ChatRequest(
+        model="openrouter/auto",
+        cost_tier="medium",
+        session_id="session-user-turn-12345",
+        messages=[ChatMessage(role="user", content="Turn 1")],
+    )
+
+    events = [event async for event in service.stream_chat(request)]
+    assert captured_payload["session_id"] == "session-user-turn-12345"
+    assert captured_payload["plugins"][0]["session_id"] == "session-user-turn-12345"
+    assert captured_payload["plugins"][0]["cost_tier"] == "medium"
+    assert "costTier" not in captured_payload["plugins"][0]
+
+    # Events should also reflect session_id
+    done_event = next((e for e in events if e.type == "done"), None)
+    assert done_event is not None
+    assert done_event.session_id == "session-user-turn-12345"
+
+
+@pytest.mark.asyncio
+async def test_model_reasoning_trace_isolated_from_assistant_content(mock_settings: Settings) -> None:
+    """Ensure reasoning traces are emitted as separate reasoning events, never as ordinary content."""
+    class FakeReasoningStreamResponse:
+        status_code = 200
+
+        async def aiter_lines(self):
+            chunk1 = json.dumps({
+                "model": "deepseek/deepseek-r1",
+                "choices": [{"delta": {"reasoning": "Analyzing problem step 1..."}}],
+            })
+            chunk2 = json.dumps({
+                "model": "deepseek/deepseek-r1",
+                "choices": [{"delta": {"content": "The answer is 42."}}],
+            })
+            yield f"data: {chunk1}"
+            yield f"data: {chunk2}"
+            yield "data: [DONE]"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.stream.return_value = FakeReasoningStreamResponse()
+
+    service = OpenRouterService(mock_settings, client=mock_client)
+    request = ChatRequest(
+        model="deepseek/deepseek-r1",
+        messages=[ChatMessage(role="user", content="Calculate")],
+    )
+
+    events = [event async for event in service.stream_chat(request)]
+
+    reasoning_events = [e for e in events if e.type == "reasoning"]
+    token_events = [e for e in events if e.type == "token"]
+
+    assert len(reasoning_events) == 1
+    assert reasoning_events[0].reasoning == "Analyzing problem step 1..."
+    assert reasoning_events[0].content is None
+
+    assert len(token_events) == 1
+    assert token_events[0].content == "The answer is 42."
+    assert token_events[0].reasoning is None

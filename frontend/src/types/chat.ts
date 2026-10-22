@@ -9,6 +9,8 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  reasoning?: string;
+  session_id?: string;
   timestamp: string;
   status?: 'sending' | 'streaming' | 'complete' | 'error';
   usage?: StreamUsage;
@@ -54,11 +56,14 @@ export interface StreamUsage {
   selected_model?: string;
   requested_model?: string;
   cost_tier?: CostTier;
+  session_id?: string;
 }
 
 export interface ChatStreamEvent {
-  type: 'token' | 'usage' | 'error' | 'done';
+  type: 'token' | 'reasoning' | 'usage' | 'error' | 'done';
   content?: string;
+  reasoning?: string;
+  session_id?: string;
   usage?: StreamUsage;
   error?: string;
   selected_model?: string;

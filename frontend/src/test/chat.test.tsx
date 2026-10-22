@@ -270,5 +270,74 @@ describe('ChatView Full-Stack Integration', () => {
       expect(screen.getAllByText(/\(medium\)/i).length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  it('validates all five cost tiers at the UI level without live calls', async () => {
+    const user = userEvent.setup();
+    const routerModel: ModelInfo = {
+      id: 'openrouter/auto',
+      name: 'OpenRouter Auto Router',
+      provider: 'OpenRouter',
+      context_length: 128000,
+      pricing_prompt: 0.15,
+      pricing_completion: 0.60,
+      description: 'Auto router.',
+      is_default: true,
+      is_router: true,
+      cost_tier: 'low',
+    };
+
+    vi.spyOn(chatService, 'getModels').mockResolvedValue({
+      models: [routerModel],
+      default_model: 'openrouter/auto',
+      authenticated: true,
+      quota_remaining_usd: 50.0,
+      daily_budget_usd: null,
+    });
+
+    renderWithProviders(<ChatView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'low' })).toBeInTheDocument();
+    });
+
+    const tiers = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+    for (const tier of tiers) {
+      const tierButton = screen.getByRole('button', { name: tier });
+      expect(tierButton).toBeInTheDocument();
+      await user.click(tierButton);
+      expect(tierButton).toHaveClass('bg-emerald-500');
+    }
+  });
+
+  it('isolates reasoning traces from ordinary assistant response content', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(chatService, 'getModels').mockResolvedValue({
+      models: MOCK_MODELS,
+      default_model: 'openai/gpt-4o-mini',
+      authenticated: true,
+      quota_remaining_usd: 50.0,
+      daily_budget_usd: null,
+    });
+
+    vi.spyOn(chatService, 'streamChat').mockImplementation(async (params) => {
+      params.onReasoning?.('Thinking through reasoning process step 1...');
+      params.onToken('Direct final answer.');
+      params.onDone?.();
+    });
+
+    renderWithProviders(<ChatView />);
+
+    const textarea = screen.getByPlaceholderText(/Message Javed/i);
+    await user.type(textarea, 'Explain problem');
+    const sendButton = screen.getByRole('button', { name: /send message/i });
+    await user.click(sendButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Direct final answer.')).toBeInTheDocument();
+      expect(screen.getByText('Model Reasoning Trace')).toBeInTheDocument();
+      expect(screen.getByText('Thinking through reasoning process step 1...')).toBeInTheDocument();
+    });
+  });
 });
+
 

@@ -7,7 +7,7 @@ test.describe('BRICK-003: OpenRouter LLM Integration & Live Streaming Chat', () 
     // Wait for model selector trigger
     const modelTrigger = page.locator('#model-selector-trigger');
     await expect(modelTrigger).toBeVisible({ timeout: 10000 });
-    await expect(modelTrigger).toContainText('OpenAI GPT-4o Mini');
+    await expect(modelTrigger).toContainText('Auto Router');
 
     // Click trigger to open dropdown
     await modelTrigger.click();

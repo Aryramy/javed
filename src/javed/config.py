@@ -63,7 +63,7 @@ class Settings(BaseModel):
         description="OpenRouter API Base URL",
     )
     openrouter_default_model: str = Field(
-        default="openai/gpt-4o-mini",
+        default="openrouter/auto",
         description="Default LLM model identifier",
     )
     openrouter_daily_budget_usd: float | None = Field(
@@ -107,7 +107,7 @@ def get_settings() -> Settings:
         "log_level": os.getenv("JAVED_LOG_LEVEL", "INFO"),
         "openrouter_api_key": os.getenv("OPENROUTER_API_KEY"),
         "openrouter_base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-        "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openai/gpt-4o-mini"),
+        "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openrouter/auto"),
         "openrouter_daily_budget_usd": daily_budget,
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
         "openrouter_auto_router_cost_tier": os.getenv("OPENROUTER_AUTO_ROUTER_COST_TIER", "low"),

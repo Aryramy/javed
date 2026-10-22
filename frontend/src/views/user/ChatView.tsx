@@ -32,6 +32,19 @@ import type {
 
 const DEFAULT_MODELS: ModelInfo[] = [
   {
+    id: 'openrouter/auto',
+    name: 'OpenRouter Auto Router',
+    provider: 'OpenRouter',
+    context_length: 128000,
+    pricing_prompt: 0.15,
+    pricing_completion: 0.60,
+    description: 'Dynamic auto-router with cost tiers (low, medium, high, xhigh, max).',
+    is_default: true,
+    is_favorite: true,
+    is_router: true,
+    cost_tier: 'low',
+  },
+  {
     id: 'openai/gpt-4o-mini',
     name: 'OpenAI GPT-4o Mini',
     provider: 'OpenAI',
@@ -39,7 +52,8 @@ const DEFAULT_MODELS: ModelInfo[] = [
     pricing_prompt: 0.15,
     pricing_completion: 0.60,
     description: 'Fast, economical frontier model ideal for daily tasks.',
-    is_default: true,
+    is_default: false,
+    is_favorite: true,
   },
   {
     id: 'openai/gpt-4o',
@@ -50,6 +64,7 @@ const DEFAULT_MODELS: ModelInfo[] = [
     pricing_completion: 10.00,
     description: 'Flagship multimodal intelligence for high-complexity analysis.',
     is_default: false,
+    is_favorite: true,
   },
   {
     id: 'anthropic/claude-sonnet-4.5',
@@ -60,6 +75,7 @@ const DEFAULT_MODELS: ModelInfo[] = [
     pricing_completion: 15.00,
     description: 'Deep reasoning, nuanced code architecture, and high-fidelity output.',
     is_default: false,
+    is_favorite: true,
   },
   {
     id: 'google/gemini-2.5-flash',
@@ -70,6 +86,7 @@ const DEFAULT_MODELS: ModelInfo[] = [
     pricing_completion: 2.50,
     description: 'High-velocity inference with massive 1M token context window.',
     is_default: false,
+    is_favorite: true,
   },
   {
     id: 'deepseek/deepseek-chat',
@@ -80,6 +97,7 @@ const DEFAULT_MODELS: ModelInfo[] = [
     pricing_completion: 1.03,
     description: 'High-efficiency open-weights architecture with strong reasoning.',
     is_default: false,
+    is_favorite: true,
   },
 ];
 
@@ -102,8 +120,9 @@ export const ChatView: React.FC = () => {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelInfo[]>(DEFAULT_MODELS);
-  const [selectedModelId, setSelectedModelId] = useState<string>('openai/gpt-4o-mini');
+  const [selectedModelId, setSelectedModelId] = useState<string>('openrouter/auto');
   const [costTier, setCostTier] = useState<CostTier>('low');
+  const [sessionId, setSessionId] = useState<string>(() => `session-${crypto.randomUUID()}`);
   const [catalogMeta, setCatalogMeta] = useState<ModelCatalogResponse | null>(null);
   const [input, setInput] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -194,6 +213,7 @@ export const ChatView: React.FC = () => {
     }
     setMessages([]);
     setCurrentUsage(null);
+    setSessionId(`session-${crypto.randomUUID()}`);
     setTotals({
       totalPromptTokens: 0,
       totalCompletionTokens: 0,
@@ -220,6 +240,7 @@ export const ChatView: React.FC = () => {
         id: userMessageId,
         role: 'user',
         content: promptText,
+        session_id: sessionId,
         timestamp: nowIso,
         status: 'complete',
       };
@@ -228,6 +249,7 @@ export const ChatView: React.FC = () => {
         id: assistantMessageId,
         role: 'assistant',
         content: '',
+        session_id: sessionId,
         timestamp: nowIso,
         status: 'streaming',
       };
@@ -250,6 +272,7 @@ export const ChatView: React.FC = () => {
           messages: historyPayload,
           model: selectedModelId,
           cost_tier: selectedModelId === 'openrouter/auto' ? costTier : undefined,
+          session_id: sessionId,
           signal: controller.signal,
           onToken: (token: string) => {
             if (ttftRecorded === null) {
@@ -263,6 +286,18 @@ export const ChatView: React.FC = () => {
                 ...target,
                 content: target.content + token,
                 ttftMs: ttftRecorded ?? target.ttftMs,
+              };
+              return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
+            });
+          },
+          onReasoning: (reasoningChunk: string) => {
+            setMessages((prev) => {
+              const index = prev.findIndex((m) => m.id === assistantMessageId);
+              if (index === -1) return prev;
+              const target = prev[index];
+              const updated = {
+                ...target,
+                reasoning: (target.reasoning || '') + reasoningChunk,
               };
               return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
             });
@@ -327,7 +362,7 @@ export const ChatView: React.FC = () => {
         abortControllerRef.current = null;
       }
     },
-    [input, isStreaming, messages, selectedModelId, costTier]
+    [input, isStreaming, messages, selectedModelId, costTier, sessionId]
   );
 
   const runtime = useExternalStoreRuntime({
@@ -506,6 +541,20 @@ export const ChatView: React.FC = () => {
                         </div>
                       ) : (
                         <>
+                          {message.reasoning && (
+                            <details
+                              id={`reasoning-trace-${message.id}`}
+                              className="mb-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/70 p-2.5 text-xs text-zinc-400 group"
+                            >
+                              <summary className="cursor-pointer font-mono text-[11px] text-zinc-500 hover:text-cyan-400 flex items-center gap-1.5 select-none font-medium">
+                                <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                                <span>Model Reasoning Trace</span>
+                              </summary>
+                              <div className="mt-2 text-zinc-400 text-xs font-mono whitespace-pre-wrap pl-2 border-l border-zinc-800 leading-relaxed">
+                                {message.reasoning}
+                              </div>
+                            </details>
+                          )}
                           <MarkdownContent content={message.content} />
                           {message.status === 'streaming' && (
                             <span className="inline-block w-1.5 h-4 ml-1 bg-cyan-400 animate-pulse align-middle" />

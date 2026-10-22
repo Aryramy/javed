@@ -15,6 +15,10 @@ class ChatMessage(BaseModel):
     content: str = Field(
         description="Text content of the message",
     )
+    reasoning: str | None = Field(
+        default=None,
+        description="Separate model reasoning/thought trace (not part of ordinary assistant response content)",
+    )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         description="Message creation timestamp (UTC)",
@@ -37,7 +41,11 @@ class ChatRequest(BaseModel):
     )
     cost_tier: CostTier | None = Field(
         default=None,
-        description="Optional cost tier for openrouter/auto routing (low, medium, high, max)",
+        description="Optional cost tier for openrouter/auto routing (low, medium, high, xhigh, max)",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Optional conversation/session identifier for Auto Router session stickiness",
     )
     temperature: float = Field(
         default=0.7,
@@ -87,17 +95,25 @@ class StreamUsage(BaseModel):
         default=None,
         description="Cost tier utilized if openrouter/auto was requested",
     )
+    session_id: str | None = Field(
+        default=None,
+        description="Session identifier associated with this usage record",
+    )
 
 
 class ChatStreamEvent(BaseModel):
     """Server-Sent Event envelope for chat streaming."""
 
-    type: Literal["token", "usage", "error", "done"] = Field(
+    type: Literal["token", "reasoning", "usage", "error", "done"] = Field(
         description="Event type",
     )
     content: str | None = Field(
         default=None,
         description="Text token increment (present when type='token')",
+    )
+    reasoning: str | None = Field(
+        default=None,
+        description="Reasoning/thought token increment preserved separately from content (present when type='reasoning')",
     )
     usage: StreamUsage | None = Field(
         default=None,
@@ -110,6 +126,14 @@ class ChatStreamEvent(BaseModel):
     requested_model: str | None = Field(
         default=None,
         description="Original requested model or routing mode",
+    )
+    cost_tier: str | None = Field(
+        default=None,
+        description="Cost tier utilized if openrouter/auto was requested",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Session identifier associated with this stream event",
     )
     error: str | None = Field(
         default=None,
@@ -133,6 +157,14 @@ class ChatResponse(BaseModel):
     cost_tier: str | None = Field(
         default=None,
         description="Cost tier utilized if auto router was used",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Session identifier associated with this response",
+    )
+    reasoning: str | None = Field(
+        default=None,
+        description="Separate model reasoning trace if emitted",
     )
     message: ChatMessage = Field(description="Assistant response message")
     usage: StreamUsage = Field(description="Token usage and cost")

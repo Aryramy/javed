@@ -45,7 +45,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "pricing_prompt": 0.15,
         "pricing_completion": 0.60,
         "description": "Dynamic auto-router with cost tiers (low, medium, high, xhigh, max).",
-        "is_default": False,
+        "is_default": True,
         "is_favorite": True,
         "is_router": True,
     },
@@ -57,7 +57,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "pricing_prompt": 0.15,      # $0.15 per 1M tokens
         "pricing_completion": 0.60,  # $0.60 per 1M tokens
         "description": "Fast, economical frontier model ideal for daily tasks.",
-        "is_default": True,
+        "is_default": False,
         "is_favorite": True,
         "is_router": False,
     },
@@ -456,18 +456,21 @@ class OpenRouterService:
             )
             if effective_cost_tier not in SUPPORTED_COST_TIERS:
                 effective_cost_tier = "low"
-            payload["plugins"] = [
-                {
-                    "id": "auto-router",
-                    "cost_tier": effective_cost_tier,
-                    "costTier": effective_cost_tier,
-                }
-            ]
+            plugin_cfg: dict[str, Any] = {
+                "id": "auto-router",
+                "cost_tier": effective_cost_tier,
+            }
+            if request.session_id:
+                plugin_cfg["session_id"] = request.session_id
+            payload["plugins"] = [plugin_cfg]
+            if request.session_id:
+                payload["session_id"] = request.session_id
 
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
 
         accumulated_text: list[str] = []
+        accumulated_reasoning: list[str] = []
         reported_usage: StreamUsage | None = None
         selected_model: str | None = None
 
@@ -516,6 +519,20 @@ class OpenRouterService:
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
+
+                            # Preserve model reasoning traces separately (never expose as ordinary content)
+                            reasoning_delta = delta.get("reasoning") or delta.get("reasoning_content")
+                            if reasoning_delta:
+                                accumulated_reasoning.append(reasoning_delta)
+                                yield ChatStreamEvent(
+                                    type="reasoning",
+                                    reasoning=reasoning_delta,
+                                    selected_model=selected_model,
+                                    requested_model=model_id,
+                                    cost_tier=effective_cost_tier,
+                                    session_id=request.session_id,
+                                )
+
                             token = delta.get("content")
                             if token:
                                 accumulated_text.append(token)
@@ -524,6 +541,8 @@ class OpenRouterService:
                                     content=token,
                                     selected_model=selected_model,
                                     requested_model=model_id,
+                                    cost_tier=effective_cost_tier,
+                                    session_id=request.session_id,
                                 )
 
                         # Process terminal or intermediate usage chunk
@@ -563,6 +582,7 @@ class OpenRouterService:
                                 selected_model=selected_model or model_id,
                                 requested_model=model_id,
                                 cost_tier=effective_cost_tier,
+                                session_id=request.session_id,
                             )
             finally:
                 if should_close:
@@ -591,6 +611,7 @@ class OpenRouterService:
                     selected_model=selected_model or model_id,
                     requested_model=model_id,
                     cost_tier=effective_cost_tier,
+                    session_id=request.session_id,
                 )
 
             yield ChatStreamEvent(
@@ -598,11 +619,15 @@ class OpenRouterService:
                 usage=reported_usage,
                 selected_model=selected_model,
                 requested_model=model_id,
+                cost_tier=effective_cost_tier,
+                session_id=request.session_id,
             )
             yield ChatStreamEvent(
                 type="done",
                 selected_model=selected_model,
                 requested_model=model_id,
+                cost_tier=effective_cost_tier,
+                session_id=request.session_id,
             )
 
         except asyncio.CancelledError:
@@ -642,13 +667,15 @@ class OpenRouterService:
             )
             if effective_cost_tier not in SUPPORTED_COST_TIERS:
                 effective_cost_tier = "low"
-            payload["plugins"] = [
-                {
-                    "id": "auto-router",
-                    "cost_tier": effective_cost_tier,
-                    "costTier": effective_cost_tier,
-                }
-            ]
+            plugin_cfg: dict[str, Any] = {
+                "id": "auto-router",
+                "cost_tier": effective_cost_tier,
+            }
+            if request.session_id:
+                plugin_cfg["session_id"] = request.session_id
+            payload["plugins"] = [plugin_cfg]
+            if request.session_id:
+                payload["session_id"] = request.session_id
 
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
@@ -663,7 +690,9 @@ class OpenRouterService:
 
             data = resp.json()
             choice = data.get("choices", [{}])[0]
-            content = choice.get("message", {}).get("content", "")
+            choice_msg = choice.get("message", {})
+            content = choice_msg.get("content", "")
+            reasoning = choice_msg.get("reasoning") or choice_msg.get("reasoning_content")
             finish_reason = choice.get("finish_reason")
             selected_model = data.get("model") or model_id
 
@@ -696,6 +725,7 @@ class OpenRouterService:
                 selected_model=selected_model,
                 requested_model=model_id,
                 cost_tier=effective_cost_tier,
+                session_id=request.session_id,
             )
 
             return ChatResponse(
@@ -704,7 +734,13 @@ class OpenRouterService:
                 selected_model=selected_model,
                 requested_model=model_id,
                 cost_tier=effective_cost_tier,
-                message=ChatMessage(role="assistant", content=content),
+                session_id=request.session_id,
+                reasoning=reasoning,
+                message=ChatMessage(
+                    role="assistant",
+                    content=content,
+                    reasoning=reasoning,
+                ),
                 usage=usage,
                 finish_reason=finish_reason,
             )

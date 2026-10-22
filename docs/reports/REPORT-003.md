@@ -378,25 +378,39 @@ During the live automated verification tests, real OpenRouter API transactions w
 
 ---
 
-## 11. OpenRouter Intelligent Auto Routing Addendum Verification
+## 11. OpenRouter Intelligent Auto Routing Addendum & Final Compatibility Verification
 
-### 11.1 Overview & Architecture Alignment
-As a consolidated BRICK-003 enhancement, native OpenRouter Auto Routing (`openrouter/auto`) was implemented using OpenRouter's official `auto-router` plugin, avoiding custom heuristic classifiers or hardcoded model-selection engines.
+### 11.1 Final Compatibility Checklist Audit
+Following the initial Auto Router implementation, a final compatibility audit was conducted against OpenRouter's documented specifications:
 
-- **Primary Routing Option**: `openrouter/auto` added to the curated model catalog with `is_router=True` and favorite priority.
-- **Official Plugin Payload**: Outgoing chat completions payloads for `openrouter/auto` automatically include `plugins: [{"id": "auto-router", "cost_tier": effective_tier, "costTier": effective_tier}]`.
-- **Configurable Cost Tiers**: Supports `low`, `medium`, `high`, `xhigh`, and `max`.
-- **Economical Default**: Defaults to `low` tier (`OPENROUTER_AUTO_ROUTER_COST_TIER="low"` in `src/javed/config.py`). The user can explicitly choose other tiers (`medium`, `high`, `xhigh`, `max`) in the UI or request payload.
-- **Manual Model Selection Preserved**: All 5 curated models and dynamic search across the 468+ OpenRouter catalog remain fully accessible and functional.
-- **Dynamic Model Resolution**: Captures the concrete model resolved by OpenRouter (e.g. `deepseek/deepseek-v4.1-flash-1017`) directly from the SSE event stream chunk `chunk["model"]`.
-- **Telemetry & Billing**:
-  - Displays requested mode (`Auto Router (low)`) alongside concrete resolved model in message bubbles and telemetry pills.
-  - Distinguishes provider-reported actual billing (`upstream_cost`) from rate card estimates.
-  - Multi-turn conversational context and session stickiness preserved across turns.
-- **Strict Guardrails**:
-  - Zero MCP servers or tool integration code introduced (deferred to BRICK-005).
-  - Zero automatic OpenRouter server tools enabled (no web search or code interpreter server add-ons that incur unexpected fees).
-  - No arbitrary spending escalations or highest tier defaulting.
+1. **Payload Serialization Audit (`costTier` Removal)**:
+   - OpenRouter's documented plugin format strictly specifies `cost_tier`:
+     ```json
+     {
+       "model": "openrouter/auto",
+       "plugins": [
+         {
+           "id": "auto-router",
+           "cost_tier": "low"
+         }
+       ]
+     }
+     ```
+   - The redundant camelCase `costTier` parameter was audited and completely removed from outgoing HTTP request payloads in both `stream_chat` and `complete_chat`.
+2. **Default Model Selection Mode**:
+   - `openrouter/auto` is verified as JAVED's default model-selection mode for new conversations across `Settings.openrouter_default_model`, the curated model catalog (`is_default=True`), and the frontend React state (`selectedModelId`).
+   - Searchable manual model selection across 468+ models and user overrides remain fully preserved.
+3. **Multi-Turn Session Identification & Cache Stickiness**:
+   - Independent session identities (`session-[UUID]`) are generated for new conversations.
+   - The `session_id` is maintained across all subsequent conversational turns, serialized into the top-level payload (`payload["session_id"]`) and plugin configuration (`plugin["session_id"]`), ensuring OpenRouter preserves model stickiness and prompt cache hits.
+   - Starting a new conversation or clearing history generates a fresh, independent session ID.
+4. **Validation of All Five Cost Tiers**:
+   - All five tiers (`low`, `medium`, `high`, `xhigh`, `max`) were validated at request serialization (asserting exact plugin JSON without `costTier`) and UI level (verifying active button state and tier switching) without incurring expensive live API charges.
+5. **Developer Mode Telemetry & Cost Distinction**:
+   - Actual routed model, requested tier, provider-reported cost (`actual`), and local rate-card estimated cost (`est`) remain clearly distinguishable in Developer Mode and message telemetry pills.
+6. **Reasoning Trace Isolation**:
+   - Model reasoning tokens (e.g. DeepSeek R1 `delta.reasoning` / `delta.reasoning_content`) are intercepted and emitted as separate SSE events (`type="reasoning"`).
+   - Reasoning is preserved in separate metadata and displayed in a collapsible `<details>` element in the UI, completely isolated from ordinary assistant response text (`content`).
 
 ---
 
@@ -414,7 +428,7 @@ Three bounded live OpenRouter Auto Router smoke tests were executed against the 
 ### 11.3 Automated Verification Results
 All regression suites and live verification passes were executed with 100% success:
 
-- **Backend Pytest**: **29/29 passed** (baseline 24 passed + 5 new tests including unit and 3 live Auto Router tests).
+- **Backend Pytest**: **32/32 passed** (including unit tests, rate cards, Auto Router 5-tier serialization, session stickiness, reasoning trace isolation, and 5 live OpenRouter smoke tests).
   ```
   tests/test_chat_smoke.py::test_live_openrouter_streaming_smoke PASSED
   tests/test_chat_smoke.py::test_live_openrouter_multi_turn_context_smoke PASSED
@@ -423,33 +437,36 @@ All regression suites and live verification passes were executed with 100% succe
   tests/test_chat_smoke.py::test_live_openrouter_auto_router_coding_prompt PASSED
   tests/test_openrouter.py::test_auto_router_request_payload_and_plugins PASSED
   tests/test_openrouter.py::test_auto_router_cost_tier_default_fallback PASSED
-  ...
-  ================== 29 passed, 1 warning in 63.29s ===================
+  tests/test_openrouter.py::test_auto_router_all_five_cost_tiers_request_serialization PASSED
+  tests/test_openrouter.py::test_auto_router_session_id_multi_turn_stickiness PASSED
+  tests/test_openrouter.py::test_model_reasoning_trace_isolated_from_assistant_content PASSED
+  ================== 32 passed, 1 warning in 61.27s ===================
   ```
 - **Backend Linting**: `ruff check src tests` -> **All checks passed (0 errors)**.
-- **Frontend Vitest**: **32/32 passed** across 7 test files (baseline 31 passed + 1 new Auto Router test).
+- **Frontend Vitest**: **34/34 passed** across 7 test files (including model selector, token cost meter, chat lifecycle, Auto Router 5-tier switching UI validation, and reasoning trace isolation).
   ```
-  ✓ src/test/chat.test.tsx > ChatView Full-Stack Integration > supports selecting openrouter/auto, switching cost tier, and displaying routed model badge
+  ✓ src/test/chat.test.tsx > ChatView Full-Stack Integration > validates all five cost tiers at the UI level without live calls
+  ✓ src/test/chat.test.tsx > ChatView Full-Stack Integration > isolates reasoning traces from ordinary assistant response content
   Test Files  7 passed (7)
-  Tests  32 passed (32)
+  Tests  34 passed (34)
   ```
-- **Frontend Linting**: `npm run lint` (`oxlint`) -> **0 warnings, 0 errors**.
-- **Frontend Production Build**: `npm run build` (`tsc -b && vite build`) -> **0 errors, build successful in 14.13s**.
-- **Playwright Chrome E2E (Live Real Browser)**: **12/12 passed** (baseline 11 passed + 1 new Auto Router E2E test).
+- **Frontend Linting**: `npm run lint` (`oxlint`) -> **0 warnings, 0 errors across 52 files**.
+- **Frontend Production Build**: `npm run build` (`tsc -b && vite build`) -> **0 errors, build successful in 23.43s**.
+- **Playwright Chrome E2E (Live Real Browser)**: **12/12 passed** (all 5 BRICK-002 and 7 BRICK-003 tests passing).
   ```
-  ok  1 e2e\brick002.spec.ts › 01. Global Header and Chat View display live backend connectivity (10.0s)
-  ok  2 e2e\brick002.spec.ts › 02. Developer Connectivity View shows real REST, WebSocket, and subsystem states (6.2s)
-  ok  3 e2e\brick002.spec.ts › 03. Developer Diagnostics View executes live REST and WebSocket probes (8.4s)
-  ok  4 e2e\brick002.spec.ts › 04. Developer Logs View displays bounded live transport event stream (5.3s)
-  ok  5 e2e\brick002.spec.ts › 05. WebSocket manual disconnect and reconnect controls update UI state (7.1s)
-  ok  6 e2e\brick003.spec.ts › 01. Chat View renders model selector with curated frontier models and allows selection (7.4s)
-  ok  7 e2e\brick003.spec.ts › 02. Live Chat Streaming generates real tokens and displays usage cost (17.0s)
-  ok  8 e2e\brick003.spec.ts › 03. Stream Cancellation stops generation immediately (7.5s)
-  ok  9 e2e\brick003.spec.ts › 04. Clear conversation resets chat history and returns to starter state (7.7s)
-  ok 10 e2e\brick003.spec.ts › 05. Developer Telemetry and Diagnostics views show live OpenRouter status (15.6s)
-  ok 11 e2e\brick003.spec.ts › 06. Model selector dynamic search filters models in dropdown (5.8s)
-  ok 12 e2e\brick003.spec.ts › 07. Auto Router selection, cost tier switching, and dynamic model routing display (17.6s)
-  12 passed (2.2m)
+  ok  1 e2e\brick002.spec.ts › 01. Global Header and Chat View display live backend connectivity (9.3s)
+  ok  2 e2e\brick002.spec.ts › 02. Developer Connectivity View shows real REST, WebSocket, and subsystem states (5.7s)
+  ok  3 e2e\brick002.spec.ts › 03. Developer Diagnostics View executes live REST and WebSocket probes (6.1s)
+  ok  4 e2e\brick002.spec.ts › 04. Developer Logs View displays bounded live transport event stream (5.2s)
+  ok  5 e2e\brick002.spec.ts › 05. WebSocket manual disconnect and reconnect controls update UI state (5.9s)
+  ok  6 e2e\brick003.spec.ts › 01. Chat View renders model selector with curated frontier models and allows selection (5.9s)
+  ok  7 e2e\brick003.spec.ts › 02. Live Chat Streaming generates real tokens and displays usage cost (16.4s)
+  ok  8 e2e\brick003.spec.ts › 03. Stream Cancellation stops generation immediately (7.1s)
+  ok  9 e2e\brick003.spec.ts › 04. Clear conversation resets chat history and returns to starter state (5.8s)
+  ok 10 e2e\brick003.spec.ts › 05. Developer Telemetry and Diagnostics views show live OpenRouter status (15.9s)
+  ok 11 e2e\brick003.spec.ts › 06. Model selector dynamic search filters models in dropdown (5.5s)
+  ok 12 e2e\brick003.spec.ts › 07. Auto Router selection, cost tier switching, and dynamic model routing display (17.9s)
+  12 passed (2.1m)
   ```
 
 ---
@@ -457,12 +474,13 @@ All regression suites and live verification passes were executed with 100% succe
 ## 12. Final Status & Mandatory Stop
 
 - **Status**: **READY FOR ACCEPTANCE**
-- **Action**: All Auto Router and baseline requirements verified, test suites passing 100%, code committed locally only.
+- **Action**: All Auto Router and final compatibility requirements verified, test suites passing 100%, code committed locally only.
 - **Mandatory Stop Condition Met**:
   - No Deep Agents or LangGraph installed (BRICK-004 boundary respected).
   - No MCP servers installed or executed (BRICK-005 boundary respected).
   - No browser automation tools or voice engines installed.
   - Committed locally only; no git push to remote performed.
   - STOPPED and awaiting final project owner review and acceptance.
+
 
 
