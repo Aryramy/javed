@@ -1,9 +1,9 @@
 # AGENTS.md — Agent Onboarding and Operating Protocol
 
 > **Project**: Javed — New JARVIS  
-> **Status**: READY FOR ACCEPTANCE  
-> **Current Stage**: Stage 2 — Intelligence & Models (BRICK-003)  
-> **Active Brick**: BRICK-003 (BRICK-001 & BRICK-002 VERIFIED; BRICK-003 READY FOR ACCEPTANCE)  
+> **Status**: VERIFIED  
+> **Current Stage**: Stage 2 — Intelligence & Models (BRICK-003 Complete; Awaiting BRICK-004 Authorization)  
+> **Active Brick**: BRICK-003 (BRICK-001, BRICK-002, and BRICK-003 VERIFIED)  
 > **Last Revision**: 2026-10-22  
 
 ---
@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: We are currently in **Stage 2 (Intelligence & Models — BRICK-003)**. BRICK-001 and BRICK-002 are VERIFIED. BRICK-003 is complete and READY FOR ACCEPTANCE. Do not install agent frameworks (Deep Agents, LangGraph), browser automation, persistent memory, or voice until authorized in subsequent bricks.
+- **Strict Stage Boundaries**: We are currently in **Stage 2 (Intelligence & Models — BRICK-003)**. BRICK-001, BRICK-002, and BRICK-003 are VERIFIED. Do not install agent frameworks (Deep Agents, LangGraph), browser automation, persistent memory, or voice until authorized in subsequent bricks.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.
