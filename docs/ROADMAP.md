@@ -19,12 +19,12 @@ flowchart LR
     B1 --> B2["BRICK-002<br/>FastAPI & WS"]
     B2 --> B3["BRICK-003<br/>OpenRouter"]
     B3 --> B4["BRICK-004<br/>LangGraph"]
-    B4 --> B5["BRICK-005<br/>Tools & HITL"]
-    B5 --> B6["BRICK-006<br/>Playwright"]
+    B4 --> B5["BRICK-005<br/>Tools, HITL & MCP"]
+    B5 --> B6["BRICK-006<br/>Playwright & MCP Eval"]
     B6 --> B7["BRICK-007<br/>Crawl4AI/Docling"]
     B7 --> B8["BRICK-008<br/>Browser Use"]
     B8 --> B9["BRICK-009<br/>Memory & RAG"]
-    B9 --> B10["BRICK-010<br/>MCP Tools"]
+    B9 --> B10["BRICK-010<br/>Managed MCP Ecosystem"]
     B10 --> B11["BRICK-011<br/>Subagents"]
     B11 --> B12["BRICK-012<br/>Multilingual Voice"]
     B12 --> B13["BRICK-013<br/>Hardening"]
@@ -87,24 +87,24 @@ flowchart LR
 
 ---
 
-### BRICK-005: Tool Registry, Validation & Permissions (HITL)
-- **Objective**: Build the 4-tier tool execution engine with Pydantic validation, workspace path sandboxing, and the Human-in-the-Loop approval modal.
+### BRICK-005: Tool Registry, Validation, Permissions (HITL) & Initial MCP Integration
+- **Objective**: Build the 4-tier tool execution engine with Pydantic validation, workspace path sandboxing, Human-in-the-Loop approval modal, and establish baseline Model Context Protocol (MCP) integration reusing native LangChain MCP (`langchain.mcp`).
 - **Prerequisite**: BRICK-004 verified.
-- **Backend Scope**: Tool registry, Pydantic input schemas, risk evaluator (Tier 0 to Tier 3), LangGraph `NodeInterrupt` gate for Tier 3 actions, safe filesystem runner, shell runner.
+- **Backend Scope**: Tool registry, Pydantic input schemas, risk evaluator (Tier 0 to Tier 3), LangGraph `NodeInterrupt` gate for Tier 3 actions, safe filesystem runner, shell runner, initial MCP client integration using native LangChain MCP adapters (`langchain.mcp`, subject to compatibility verification).
 - **Frontend Scope**: Custom inline tool cards in `assistant-ui`, Human-in-the-Loop approval modal with Approve/Deny buttons and countdown timer.
-- **UI Deliverable**: Agent attempts a Tier 3 shell action -> UI displays prominent approval modal -> user approves -> real execution runs -> stdout displays in custom tool card.
-- **Test Requirements**: Path traversal security test; HITL approval and rejection contract tests; Playwright modal interaction test.
+- **UI Deliverable**: Agent attempts a Tier 3 shell or MCP action -> UI displays prominent approval modal -> user approves -> real execution runs -> stdout displays in custom tool card.
+- **Test Requirements**: Path traversal security test; HITL approval and rejection contract tests; MCP schema validation and tool dispatch test; Playwright modal interaction test.
 - **Status**: `NOT STARTED`
 
 ---
 
-### BRICK-006: Deterministic Playwright Browser Execution
-- **Objective**: Integrate Playwright Python for deterministic web tasks (navigating URLs, extracting DOM, filling forms, downloading files, capturing screenshots).
+### BRICK-006: Deterministic Playwright Browser Execution & Playwright MCP Evaluation
+- **Objective**: Integrate Playwright Python for deterministic web tasks (navigating URLs, extracting DOM, filling forms, downloading files, capturing screenshots) and evaluate Playwright MCP for standard browser actions.
 - **Prerequisite**: BRICK-005 verified.
-- **Backend Scope**: Playwright browser manager, ephemeral context isolation, screenshot streamer, download quarantine runner.
+- **Backend Scope**: Playwright browser manager, ephemeral context isolation, screenshot streamer, download quarantine runner, Playwright MCP server evaluation and integration alongside direct Python Playwright automation.
 - **Frontend Scope**: Live Browser Preview panel in right workspace split displaying real-time viewport frames and step indicators.
-- **UI Deliverable**: User requests to scrape or inspect a URL -> Playwright opens page -> UI Browser Preview panel renders live page snapshot and highlights clicked elements.
-- **Test Requirements**: Headless Playwright integration test; screenshot capture assertion; Playwright UI preview test.
+- **UI Deliverable**: User requests to scrape or inspect a URL -> Playwright/Playwright MCP opens page -> UI Browser Preview panel renders live page snapshot and highlights clicked elements.
+- **Test Requirements**: Headless Playwright integration test; Playwright MCP tool verification test; screenshot capture assertion; Playwright UI preview test.
 - **Status**: `NOT STARTED`
 
 ---
@@ -142,13 +142,13 @@ flowchart LR
 
 ---
 
-### BRICK-010: Model Context Protocol (MCP) Integrations
-- **Objective**: Implement an extensible MCP client host to discover, validate, and invoke external tools and data sources.
+### BRICK-010: Managed Model Context Protocol (MCP) Server Ecosystem
+- **Objective**: Expand the baseline MCP integration into a full managed MCP server ecosystem with live Developer Mode UI controls, dynamic discovery, health monitoring, and tool toggles.
 - **Prerequisite**: BRICK-009 verified.
-- **Backend Scope**: MCP client manager, stdio/SSE transport adapters, external tool schema validator, subprocess isolation wrapper.
-- **Frontend Scope**: MCP Server Management tab in Developer Mode (connected servers, exposed tools, permission toggles).
-- **UI Deliverable**: Developer Mode displays list of active MCP servers -> agent discovers external tool -> calls tool with HITL gating -> output appears in chat card.
-- **Test Requirements**: MCP schema validation test; untrusted server isolation test; tool execution integration test.
+- **Backend Scope**: Multi-server MCP manager, stdio/SSE transport adapters, external tool schema validator, subprocess isolation wrapper, live health telemetry stream.
+- **Frontend Scope**: Managed MCP Server tab in Developer Mode (connected servers, exposed tools, permission toggles, connection latency, and audit logs).
+- **UI Deliverable**: Developer Mode displays live list of active MCP servers -> agent discovers external tool -> calls tool with HITL gating -> real-time tool state and output appear in chat card and audit tab.
+- **Test Requirements**: MCP multi-server schema validation test; untrusted server isolation and failure recovery test; tool execution integration test; live Developer Mode UI test.
 - **Status**: `NOT STARTED`
 
 ---

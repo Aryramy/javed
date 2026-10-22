@@ -16,6 +16,7 @@
 3. **Decoupled Providers**: All external LLM, browser, retrieval, and voice engines interact through clean adapter interfaces. OpenRouter (`https://openrouter.ai/api/v1`) is the sole preapproved paid gateway, swappable for local engines (Ollama, Faster-Whisper, Kokoro).
 4. **Observable State Graphs with Native HITL**: The agent core is implemented via the Deep Agents harness running on top of LangGraph cyclic state graphs, utilizing native `interrupt()` and `Command(resume=...)` with persistent checkpointing and side-effect replay protection.
 5. **UI-Integrated Vertical Slices**: Every backend capability connects to a live React/Tailwind interface featuring both a consumer-grade User Mode and a deep diagnostic Developer Mode.
+6. **MCP-First Tool Integration Strategy**: Adopt proven, actively maintained, free/open-source Model Context Protocol (MCP) servers for external tool capabilities rather than creating redundant custom integrations. Prefer maintained LangChain MCP integration (`langchain.mcp`), subject to compatibility verification. All MCP tools remain strictly subject to host-controlled authorization, argument validation, and HITL safety tiers.
 
 ---
 
@@ -156,12 +157,16 @@ flowchart TB
   - Enforce strict timeouts, exponential backoff retries, and token budgets.
 
 ### 3.5 Tool Execution & Sandbox Engine (`src/tools/`)
-- **Technology**: Python subprocess, Pydantic v2, Model Context Protocol (MCP) SDK.
-- **Responsibilities**:
-  - Maintain a typed registry of available tools with Pydantic input/output schemas.
-  - Enforce the 4-tier security authorization taxonomy defined in [SECURITY.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/SECURITY.md).
-  - Restrict filesystem access to canonical workspace paths; block unauthorized access to `.env` or system directories.
-  - Provide an isolated host runner for third-party MCP servers.
+- **Technology**: Python subprocess, Pydantic v2, native LangChain MCP integration (`langchain.mcp` / official LangChain MCP capabilities, subject to compatibility verification), Model Context Protocol (MCP) servers.
+- **Responsibilities & Architecture**:
+  - **MCP-First Tool Strategy**: Prefer proven, actively maintained, free/open-source MCP servers for external tool capabilities over redundant custom implementations. Write custom integrations only when no suitable, trustworthy solution exists.
+  - **Native LangChain MCP Integration**: Reuse maintained LangChain MCP client adapters rather than building a bespoke client framework.
+  - **Central Host Authorization & Risk Taxonomy**: Enforce the 4-tier security authorization taxonomy defined in [SECURITY.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/SECURITY.md). All tool invocations—whether native or MCP-provided—must route through host-controlled argument validation (Pydantic v2 schemas), permission checks, and mandatory HITL approval for Tier 3 actions via LangGraph `interrupt()`.
+  - **Filesystem & Subprocess Isolation**: Run external MCP servers in isolated subprocess execution environments with least-privilege credentials; restrict filesystem operations to canonical workspace paths and block access to `.env` or system directories.
+  - **Phased MCP Delivery Roadmap**:
+    - **BRICK-005**: Establish baseline MCP client integration alongside central tool authorization and the 4-tier HITL approval engine.
+    - **BRICK-006**: Evaluate and integrate Playwright MCP for browser tasks alongside direct Playwright automation.
+    - **BRICK-010**: Expand to a full managed MCP server ecosystem with Developer Mode UI discovery and runtime management controls.
 
 ### 3.6 Browser Automation Subsystem (`src/browser/`)
 - **Technology**: Playwright Python + Browser Use.

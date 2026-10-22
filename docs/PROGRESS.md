@@ -49,12 +49,12 @@ stateDiagram-v2
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`READY FOR ACCEPTANCE`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | 15 pytest, 24 vitest, 5 Playwright E2E passed. Awaiting Owner sign-off. |
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | `NOT STARTED` | Pending | Blocked pending BRICK-002 verification. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | `NOT STARTED` | Pending | Blocked pending BRICK-003 verification. |
-| **BRICK-005** | Tool Registry, Validation & Permissions (HITL) | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
-| **BRICK-006** | Deterministic Playwright Browser Execution | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
+| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
+| **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
 | **BRICK-009** | Persistent Memory & Knowledge Retrieval (RAG) | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. |
-| **BRICK-010** | Model Context Protocol (MCP) Integrations | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. |
+| **BRICK-010** | Managed Model Context Protocol (MCP) Server Ecosystem | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. |
 | **BRICK-011** | Advanced Tasks, Subagents & Durable Execution | `NOT STARTED` | Pending | Blocked pending BRICK-010 verification. |
 | **BRICK-012** | Real-Time Multilingual Voice (Urdu/English/Arabic) | `NOT STARTED` | Pending | Blocked pending BRICK-011 verification. |
 | **BRICK-013** | Production Hardening, PG Migration & Release | `NOT STARTED` | Pending | Blocked pending BRICK-012 verification. |

@@ -15,9 +15,34 @@ This document establishes the twelve immutable core rules governing all developm
 
 ## 2. The Twelve Core Rules
 
-### Rule 1: Reuse Before Build
+### Rule 1: Reuse Before Build (Including MCP-First Tool Policy)
 - **Policy**: Prioritize proven, actively maintained, and battle-tested open-source libraries, packages, and frameworks over custom reinvention.
 - **Enforcement**: Before implementing custom infrastructure (such as custom ORMs, homegrown vector stores, custom RPC layers, or parser engines), agents must evaluate existing ecosystem solutions and document the selection in [TECH_STACK.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TECH_STACK.md).
+- **MCP-First Tool Integration Policy**:
+  - **Primary Principle**: Use proven, actively maintained, free/open-source Model Context Protocol (MCP) servers for tool calling wherever they satisfy JARVIS requirements. Avoid implementing custom tools or integrations when reliable, maintained MCP implementations already exist.
+  - **14 Mandatory MCP Rules**:
+    1. Search official repositories and the MCP Registry before developing new external tool integrations.
+    2. Prefer maintained, established, open-source MCP servers.
+    3. Reuse the current native LangChain MCP integration (`langchain.mcp`) rather than building a custom MCP client framework.
+    4. Do not introduce archived or unmaintained MCP adapter libraries.
+    5. Validate licensing, source authenticity, version compatibility, security, resource usage, and Windows support.
+    6. Never automatically trust or install a server solely because it appears in an MCP registry.
+    7. Route all tool calls through host-controlled authorization, argument validation, approval, and audit mechanisms.
+    8. Require explicit approval for consequential or destructive actions (Tier 3 HITL).
+    9. Use isolated execution environments and least-privilege credentials.
+    10. Pin reviewed MCP versions and detect unexpected changes in server behavior or tool definitions.
+    11. Test MCP servers using real application interactions before declaring them operational.
+    12. Avoid installing multiple MCP servers that perform the same function without clear justification.
+    13. Prefer native Python libraries when they are measurably simpler, faster, more secure, or more reliable than an MCP alternative.
+    14. Write custom integrations only when no suitable, trustworthy solution exists.
+  - **Required Build vs Reuse Evaluation**: Before implementing any new tool integration, document:
+    - Required capability.
+    - Existing MCP candidates.
+    - Maintenance and license status.
+    - Security and permission requirements.
+    - Integration compatibility.
+    - Expected performance.
+    - Selected solution and justification.
 
 ### Rule 2: Free and Open-Source Components by Default
 - **Policy**: All runtime components, frameworks, libraries, tools, and local models must be free and open-source software (FOSS) carrying permissive licenses (e.g., MIT, Apache 2.0, BSD, ISC, or MPL 2.0).

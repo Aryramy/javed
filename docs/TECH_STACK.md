@@ -18,6 +18,7 @@ Per [RULES.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/RULES.md)
 4. **Sole Paid Exception**: [OpenRouter](https://openrouter.ai/) (`https://openrouter.ai/api/v1`) is the only preapproved proprietary paid service, strictly isolated behind a replaceable adapter interface.
 5. **No Overlapping Frameworks**: Exactly one primary technology per functional layer. Redundant, competing libraries are rejected.
 6. **Zero Administrative Elevation**: All tools, runtimes, package managers, and browsers must install and run cleanly in standard Windows user space without requiring administrator privileges.
+7. **MCP-First Tool Selection Law**: Prioritize proven, actively maintained, free/open-source Model Context Protocol (MCP) servers for external tools rather than implementing custom integrations (Rule 1). Reuse the native LangChain MCP integration (`langchain.mcp`). Validate licensing, authenticity, security, Windows compatibility, and resource consumption. Prefer native Python libraries only when measurably simpler, faster, more secure, or more reliable.
 
 ---
 
@@ -49,7 +50,7 @@ Per [RULES.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/RULES.md)
 | **Voice Activity Detection** | **Silero VAD** | MIT | **PROPOSED (BRICK-012)** | Ultra-fast local ONNX VAD for instant voice detection and immediate barge-in cut-off. | [ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md) |
 | **Speech-to-Text (STT)** | **openai/whisper-large-v3-turbo** (Remote) / **Faster-Whisper** (Local) | Commercial API / MIT | **PROPOSED (BRICK-012)** | Dual-path: provisional OpenRouter Whisper endpoint with local Faster-Whisper fallback. | [ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md) |
 | **Text-to-Speech (TTS)** | **elevenlabs/eleven-v4-turbo (voice: george)** (Remote) / **Local Candidates** | Commercial API / FOSS | **PROPOSED (BRICK-012)** | Dual-path: OpenRouter ElevenLabs endpoint + reopened evaluation of local TTS for Urdu/Arabic/English. | [ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md) |
-| **Tool Interoperability** | **Model Context Protocol (MCP)** | MIT | **PROPOSED (BRICK-010)** | Anthropic open-source standard for connecting external tools and data sources safely. | [ARCH-001](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ARCHITECTURE.md) |
+| **Tool Interoperability** | **Model Context Protocol (MCP)** via native **LangChain MCP (`langchain.mcp`)** | MIT | **PROPOSED (BRICK-005 Baseline, BRICK-006 Browser, BRICK-010 Ecosystem)** | Open standard for tool calling. MCP-first strategy prefers maintained, open-source MCP servers over custom tools. Evaluated for licenses, authenticity, Windows compatibility, and security. | [ARCH-001](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ARCHITECTURE.md) |
 | **Observability** | **OpenTelemetry + Langfuse OSS** | Apache 2.0 / MIT | **PROPOSED (Self-Hosted)** | Open instrumentation and self-hosted trace monitoring; zero proprietary cloud telemetry. | [ARCH-001](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ARCHITECTURE.md) |
 | **Testing Harness** | **pytest + Vitest + Playwright Test** | MIT / Apache 2.0 | **PROPOSED** | Automated unit, contract, and browser-driven live UI verification. | [TEST-001](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TEST_STRATEGY.md) |
 
@@ -70,6 +71,15 @@ Per [RULES.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/RULES.md)
 - **LlamaIndex**: Open source (MIT). Rich RAG framework, but introduces severe overlap with LangGraph's native document loaders and vector store retrievers.
 - **Qdrant**: Dedicated vector database. Deferred until vector scale (> 1M vectors) benchmarks prove pgvector is insufficient.
 - **SQLite -> PostgreSQL + pgvector**: Unified database storing relational entities, checkpoints, and embeddings without running multiple database daemons.
+
+### 3.4 Tool Execution Architecture: MCP-First Strategy vs Custom Tooling
+- **MCP-First Strategy**: Prefer proven, actively maintained, free/open-source MCP servers for tool calling rather than developing custom tools or bespoke integration code.
+- **Client Framework**: Reuse the current native LangChain MCP integration (`langchain.mcp` / official LangChain MCP capabilities), subject to compatibility verification, rather than inventing a custom MCP client protocol runner.
+- **Phased Rollout**:
+  - **BRICK-005**: Establish central tool authorization, Pydantic argument validation, and initial MCP client integration.
+  - **BRICK-006**: Evaluate and integrate Playwright MCP for browser tasks alongside direct Playwright execution.
+  - **BRICK-010**: Expand to a managed MCP server ecosystem with Developer Mode UI management and health monitoring.
+- **Required Build vs Reuse Criteria**: Every prospective tool must document required capability, existing MCP candidates, maintenance/license status, security/permissions, integration compatibility, expected performance, and justification before implementation. Write custom integrations only when no suitable, trustworthy solution exists. Native Python libraries are preferred when measurably simpler, faster, more secure, or more reliable.
 
 ---
 
