@@ -120,23 +120,35 @@ The project environment configures provisional remote voice models accessible th
 
 ---
 
-## 6. Planned Setup Sequence for BRICK-001 (For Reference Only)
+## 6. Service Execution & Verification Commands (BRICK-002)
 
-> [!WARNING]
-> In accordance with Stage 0 execution boundaries, **NO installation commands may be run at this time**. The commands below are documented strictly as the verified blueprint for BRICK-001 execution once approved.
-
+### 6.1 Backend FastAPI Service
+Run from project root using the `.venv` Python runtime:
 ```powershell
-# 1. Initialize Python virtual environment with uv
-uv venv .venv --python 3.12
-.venv\Scripts\activate
-
-# 2. Install backend foundation dependencies
-uv pip install fastapi uvicorn[standard] pydantic httpx ruff pytest pytest-asyncio
-
-# 3. Initialize React Vite frontend
-npm create vite@latest frontend -- --template react-ts
-cd frontend
-npm install
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
+.\.venv\Scripts\python.exe -m uvicorn javed.main:app --host 127.0.0.1 --port 8000
 ```
+- Listens on `http://127.0.0.1:8000` (loopback only; never binds to `0.0.0.0`).
+- Validates origins: `http://localhost:5173`, `http://127.0.0.1:5173`.
+- Tests: `.\.venv\Scripts\pytest.exe`
+- Linter: `.\.venv\Scripts\ruff.exe check .`
+
+### 6.2 Frontend Development Server
+Run from `frontend/` directory:
+```powershell
+cd frontend
+npm.cmd run dev
+```
+- Listens on `http://localhost:5173`.
+- Proxies `/api` and WebSocket `/api/v1/ws` to `http://127.0.0.1:8000`.
+- Unit tests: `npm.cmd run test` (Vitest)
+- Linter: `npm.cmd run lint` (Oxlint)
+- Production build: `npm.cmd run build`
+
+### 6.3 Real Browser Acceptance Testing (Playwright on Google Chrome)
+Automated E2E browser verification runs against running backend and frontend servers:
+```powershell
+cd frontend
+npm.cmd run test:e2e
+```
+- Configured with `channel: 'chrome'` to leverage the pre-installed system Google Chrome (`155.0.8059.40`).
+- Resolves previous Azure CDN Chromium download restrictions cleanly in user space.

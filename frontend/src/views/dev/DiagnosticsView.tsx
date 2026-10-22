@@ -1,6 +1,169 @@
-import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react'
+import React, { useState } from 'react'
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Lock,
+  Play,
+  Radio,
+  ShieldCheck,
+  Terminal,
+  Wifi,
+  WifiOff,
+} from 'lucide-react'
+import { useBackend } from '@/context'
+import { apiService } from '@/services/api'
+import { cn } from '@/lib/utils'
 
 export const DiagnosticsView: React.FC = () => {
+  const { status, latencyMs, ping, reconnect, disconnect } = useBackend()
+
+  const [consoleOutput, setConsoleOutput] = useState<string>(
+    '// Diagnostic test output will appear here.\n// Click any test action above to execute real requests.'
+  )
+  const [activeAction, setActiveAction] = useState<string | null>(null)
+
+  const runCheckStatus = async () => {
+    setActiveAction('status')
+    try {
+      const start = performance.now()
+      const data = await apiService.getSystemStatus()
+      const duration = Math.round((performance.now() - start) * 10) / 10
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/system/status',
+            _status: 200,
+            _duration_ms: duration,
+            ...data,
+          },
+          null,
+          2
+        )
+      )
+    } catch (err: unknown) {
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/system/status',
+            _status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          2
+        )
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
+  const runCheckLive = async () => {
+    setActiveAction('live')
+    try {
+      const start = performance.now()
+      const data = await apiService.getLive()
+      const duration = Math.round((performance.now() - start) * 10) / 10
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/health/live',
+            _status: 200,
+            _duration_ms: duration,
+            ...data,
+          },
+          null,
+          2
+        )
+      )
+    } catch (err: unknown) {
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/health/live',
+            _status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          2
+        )
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
+  const runCheckReady = async () => {
+    setActiveAction('ready')
+    try {
+      const start = performance.now()
+      const data = await apiService.getReady()
+      const duration = Math.round((performance.now() - start) * 10) / 10
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/health/ready',
+            _status: 200,
+            _duration_ms: duration,
+            ...data,
+          },
+          null,
+          2
+        )
+      )
+    } catch (err: unknown) {
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'GET /api/v1/health/ready',
+            _status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          2
+        )
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
+  const runPing = async () => {
+    setActiveAction('ping')
+    try {
+      const start = performance.now()
+      const ms = await ping()
+      const duration = Math.round((performance.now() - start) * 10) / 10
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'Round-Trip Latency Ping',
+            _status: 'ACKNOWLEDGED',
+            measured_rtt_ms: ms,
+            total_call_duration_ms: duration,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        )
+      )
+    } catch (err: unknown) {
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            _test: 'Round-Trip Latency Ping',
+            _status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          2
+        )
+      )
+    } finally {
+      setActiveAction(null)
+    }
+  }
+
   const tiers = [
     {
       tier: 'Tier 0: Pure Informational',
@@ -37,14 +200,109 @@ export const DiagnosticsView: React.FC = () => {
       <div>
         <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider mb-1">
           <ShieldCheck className="w-4 h-4" />
-          <span>Security Sandbox & Permission Architecture</span>
+          <span>Interactive Transport Testing & Sandbox Matrix</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Security Sandbox & Diagnostics Matrix
+          Diagnostics & Live Transport Console
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Authoritative 4-tier security taxonomy and human-in-the-loop interruption boundaries defined in docs/SECURITY.md.
+          Direct testing controls for REST endpoints, WebSocket lifecycle, and security boundaries.
         </p>
+      </div>
+
+      {/* Live Transport Testing Console */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Radio className="w-4 h-4 text-primary" />
+            <span>Interactive Transport Diagnostic Controls</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="text-muted-foreground">Socket State:</span>
+            <span
+              className={cn(
+                'px-2 py-0.5 rounded font-bold uppercase text-[10px] border',
+                status === 'connected'
+                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+              )}
+            >
+              {status}
+            </span>
+            {latencyMs !== null && (
+              <span className="text-muted-foreground">({latencyMs}ms)</span>
+            )}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={runCheckStatus}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            <Play className={cn('w-3.5 h-3.5', activeAction === 'status' && 'animate-spin')} />
+            <span>Check System Status</span>
+          </button>
+
+          <button
+            onClick={runCheckLive}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Liveness Probe</span>
+          </button>
+
+          <button
+            onClick={runCheckReady}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+            <span>Readiness Probe</span>
+          </button>
+
+          <button
+            onClick={runPing}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <Activity className="w-3.5 h-3.5 text-primary" />
+            <span>Measure Ping</span>
+          </button>
+
+          <button
+            onClick={reconnect}
+            disabled={activeAction !== null}
+            className="px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-secondary text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <Wifi className="w-3.5 h-3.5 text-amber-500" />
+            <span>Reconnect Socket</span>
+          </button>
+
+          <button
+            onClick={disconnect}
+            disabled={activeAction !== null || status === 'disconnected'}
+            className="px-3 py-1.5 rounded-lg border border-border text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <WifiOff className="w-3.5 h-3.5" />
+            <span>Disconnect Socket</span>
+          </button>
+        </div>
+
+        {/* Live Terminal Console Output */}
+        <div className="bg-slate-950 text-slate-100 rounded-lg p-3 font-mono text-xs border border-border shadow-inner overflow-x-auto max-h-64">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1.5 mb-2">
+            <span className="flex items-center gap-1">
+              <Terminal className="w-3 h-3 text-primary" />
+              <span>DIAGNOSTIC TEST RESPONSE</span>
+            </span>
+            <span>UTF-8 JSON</span>
+          </div>
+          <pre className="text-emerald-400 whitespace-pre-wrap">{consoleOutput}</pre>
+        </div>
       </div>
 
       {/* Security Policies */}

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Bot, Code2, Menu, User, X } from 'lucide-react'
-import { useMode } from '@/context'
+import { useBackend, useMode } from '@/context'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpen }) => {
   const { mode, setMode } = useMode()
+  const { status, latencyMs, reconnectAttempts } = useBackend()
   const navigate = useNavigate()
 
   const handleModeSwitch = (newMode: 'user' | 'dev') => {
@@ -87,12 +88,59 @@ export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpe
         </button>
       </div>
 
-      {/* Right Tools (Theme + Status Indicator) */}
+      {/* Right Tools (Theme + Real Backend Connection Indicator) */}
       <div className="flex items-center gap-3">
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Shell Ready</span>
-        </div>
+        <button
+          data-testid="backend-status-badge"
+          onClick={() => navigate('/dev/connectivity')}
+          title="Click to view connectivity diagnostics"
+          aria-label={`Backend connection status: ${status}`}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-150',
+            status === 'connected' && (latencyMs !== null && latencyMs > 100)
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+              : status === 'connected'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+              : status === 'connecting'
+              ? 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400'
+              : status === 'reconnecting'
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+              : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+          )}
+        >
+          {status === 'connected' ? (
+            <>
+              <span
+                className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  latencyMs !== null && latencyMs > 100 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'
+                )}
+              />
+              <span className="font-mono">
+                {latencyMs !== null && latencyMs > 100
+                  ? `Degraded • ${latencyMs}ms`
+                  : latencyMs !== null
+                  ? `Connected • ${latencyMs}ms`
+                  : 'Connected'}
+              </span>
+            </>
+          ) : status === 'connecting' ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+              <span>Connecting...</span>
+            </>
+          ) : status === 'reconnecting' ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+              <span>Reconnecting ({reconnectAttempts})...</span>
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span>Disconnected</span>
+            </>
+          )}
+        </button>
 
         <ThemeToggle />
       </div>

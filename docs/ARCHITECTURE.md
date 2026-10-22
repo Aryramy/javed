@@ -116,12 +116,27 @@ flowchart TB
   - Maintain a live **Browser Preview Panel** showing current viewport frames and screenshots.
   - Expose a collapsible **Developer Mode Panel** displaying live LangGraph state transitions, raw token usage, latency meters, and event logs.
 
-### 3.2 Transport & API Gateway (`src/gateway/`)
-- **Technology**: FastAPI, Starlette WebSockets, HTTPX, Pydantic v2.
-- **Responsibilities**:
-  - Route HTTP REST requests for session creation, file uploads, document ingestion, and configuration.
-  - Maintain bidirectional WebSocket connections for real-time prompt streaming, human approvals, browser frame streams, and voice audio packets.
-  - Enforce correlation IDs across all requests, agent loops, and tool logs for non-repudiation.
+### 3.2 Transport & API Gateway (`src/javed/`)
+- **Technology**: FastAPI 0.159+, Starlette WebSockets, Uvicorn, Pydantic v2.
+- **Responsibilities & Endpoints**:
+  - **REST Endpoints (`/api/v1`)**:
+    - `GET /api/v1/health/live`: Process liveness check returning `LiveResponse`.
+    - `GET /api/v1/health/ready`: Subsystem dependency readiness probe returning `ReadyResponse`.
+    - `GET /api/v1/system/status`: Application metadata, version, uptime, and honest capability state matrix returning `SystemStatusResponse`.
+    - `GET /api/v1/ping`: Ultra-low latency probe (~2.4ms RTT) returning `PingResponse`.
+  - **WebSocket Gateway (`/api/v1/ws`)**:
+    - Native Starlette WebSocket with `EventEnvelope` JSON framing.
+    - Keep-alive heartbeat (`HEARTBEAT_PING` -> `HEARTBEAT_PONG`) with 25s cadence.
+    - Diagnostics probe (`PING` -> `PING_ACK`) with millisecond timestamp correlation.
+    - Origin verification against strict whitelist (`http://localhost:5173`, `http://127.0.0.1:5173`).
+    - Max frame size bounded at 64 KB (`65,536 bytes`).
+    - Lifespan graceful closure with code `1001`.
+  - **Server-Sent Events (`/api/v1/events`)**:
+    - Unidirectional system telemetry and audit broadcast stream (`text/event-stream`).
+  - **Security & Body Limits**:
+    - Request body size limiter middleware capping payloads at 1 MB.
+    - Strict CORS configuration preventing wildcard origins.
+    - Frontend Vite proxy on `/api` preserving local Origin headers.
 
 ### 3.3 Agent Orchestration Core (`src/agent/`)
 - **Technology**: Deep Agents harness, LangGraph execution runtime, LangChain Core interfaces.

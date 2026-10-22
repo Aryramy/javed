@@ -1,0 +1,135 @@
+"""FastAPI application factory and main entry point for Project Javed."""
+
+import logging
+import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+from javed.api.v1.router import api_v1_router
+from javed.config import Settings, get_settings
+from javed.transport.sse import SSEManager
+from javed.transport.websocket import WebSocketManager
+from javed.version import __version__
+
+# Configure standard logging format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("javed.main")
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Enforce maximum request body size limit on incoming HTTP requests."""
+
+    def __init__(self, app: FastAPI, max_bytes: int) -> None:
+        super().__init__(app)
+        self.max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > self.max_bytes:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={
+                    "error": {
+                        "code": "REQUEST_ENTITY_TOO_LARGE",
+                        "message": f"Request body exceeds limit of {self.max_bytes} bytes",
+                    }
+                },
+            )
+        return await call_next(request)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Manage application lifespan: startup logging and graceful shutdown."""
+    settings: Settings = app.state.settings
+
+    logger.info(
+        "Starting Javed Backend %s on %s:%d (env: %s)",
+        __version__,
+        settings.host,
+        settings.port,
+        settings.env,
+    )
+
+    # Yield control to run the application
+    yield
+
+    # Graceful shutdown: close all active WebSocket connections
+    logger.info("Shutting down Javed Backend; closing active connections...")
+    await app.state.ws_manager.close_all(code=1001, reason="Server shutting down")
+    logger.info("Javed Backend shutdown complete")
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Create and configure the FastAPI application instance."""
+    app_settings = settings or get_settings()
+
+    app = FastAPI(
+        title="Javed — New JARVIS API",
+        description="High-performance async REST & WebSocket gateway for JARVIS.",
+        version=__version__,
+        lifespan=lifespan,
+        docs_url="/docs" if app_settings.env != "production" else None,
+        redoc_url="/redoc" if app_settings.env != "production" else None,
+    )
+
+    # Initialize state attributes on app creation so they are always available
+    app.state.settings = app_settings
+    app.state.startup_time = time.time()
+    app.state.ws_manager = WebSocketManager(app_settings)
+    app.state.sse_manager = SSEManager()
+
+    # 1. Body Size Limiter Middleware
+    app.add_middleware(RequestSizeLimitMiddleware, max_bytes=app_settings.max_request_body_bytes)
+
+    # 2. CORS Middleware with strictly controlled origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=app_settings.allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Correlation-ID"],
+    )
+
+    # 3. Global Exception Handler to prevent raw traceback leakage
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error("Unhandled server exception at %s: %s", request.url.path, exc, exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "An unexpected server error occurred.",
+                }
+            },
+        )
+
+    # 4. Include API v1 Router
+    app.include_router(api_v1_router)
+
+    # 5. Root status endpoint
+    @app.get("/", summary="Root Health & Identity")
+    async def root_index() -> dict[str, str]:
+        return {
+            "name": "Javed — New JARVIS",
+            "version": __version__,
+            "status": "online",
+            "server_time": datetime.now(UTC).isoformat(),
+        }
+
+    return app
+
+
+# Module-level default app instance for ASGI servers (Uvicorn)
+app = create_app()

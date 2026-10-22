@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Activity, Database, Laptop, Wifi } from 'lucide-react'
-import { useTheme, useMode } from '@/context'
+import { useTheme, useMode, useBackend } from '@/context'
 
 export const RuntimeStatusView: React.FC = () => {
   const location = useLocation()
   const { theme, resolvedTheme } = useTheme()
   const { mode } = useMode()
+  const { status, latencyMs, systemStatus } = useBackend()
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -128,6 +129,22 @@ export const RuntimeStatusView: React.FC = () => {
             <span className="text-muted-foreground">Resolved DOM Theme</span>
             <span className="font-mono font-semibold capitalize text-foreground">{resolvedTheme}</span>
           </div>
+          <div className="py-2.5 flex justify-between">
+            <span className="text-muted-foreground">Backend Service Link</span>
+            <span className="font-mono font-semibold uppercase text-foreground">
+              {status === 'connected' ? (
+                <span className="text-emerald-500">Connected ({latencyMs ?? 0}ms)</span>
+              ) : (
+                <span className="text-rose-500">{status}</span>
+              )}
+            </span>
+          </div>
+          {systemStatus && (
+            <div className="py-2.5 flex justify-between">
+              <span className="text-muted-foreground">Backend Process Uptime</span>
+              <span className="font-mono text-foreground">{systemStatus.uptime_seconds}s</span>
+            </div>
+          )}
           <div className="py-2.5 flex justify-between">
             <span className="text-muted-foreground">Browser User Agent</span>
             <span className="font-mono text-foreground text-[11px] truncate max-w-md">{navigator.userAgent}</span>

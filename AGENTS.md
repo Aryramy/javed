@@ -1,9 +1,9 @@
 # AGENTS.md — Agent Onboarding and Operating Protocol
 
 > **Project**: Javed — New JARVIS  
-> **Status**: IN PROGRESS  
+> **Status**: READY FOR ACCEPTANCE  
 > **Current Stage**: Stage 1 — Foundation & Real UI Shell (BRICK-002)  
-> **Active Brick**: BRICK-002 (BRICK-001 VERIFIED; BRICK-002 IN PROGRESS)  
+> **Active Brick**: BRICK-002 (BRICK-001 VERIFIED; BRICK-002 READY FOR ACCEPTANCE)  
 > **Last Revision**: 2026-10-22  
 
 ---
@@ -15,14 +15,14 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 1. **Read Project Rules**: Review [RULES.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/RULES.md). All 12 core rules are strictly binding. Violations will halt work immediately.
 2. **Check Current Progress & State**: Inspect [PROGRESS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/PROGRESS.md) to understand current project state, active brick, and last verified milestone.
 3. **Inspect Task Registry**: Check [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) to verify active task IDs, blockers, prerequisites, and explicit acceptance criteria.
-4. **Read Active Brick Specification**: Check [BRICK-001.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-001.md) (or currently active brick in [docs/bricks/](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/)). Do not touch code outside the scope of the active brick.
+4. **Read Active Brick Specification**: Check [BRICK-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-002.md) (or currently active brick in [docs/bricks/](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/)). Do not touch code outside the scope of the active brick.
 5. **Verify Single Source of Truth**: Never duplicate authoritative data across files. Refer to the designated owner document (see [Section 3](#3-single-source-of-truth-map)).
 
 ---
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: We are currently in **Stage 1 (Foundation & Real UI Shell)**. Do not begin BRICK-002, do not generate FastAPI endpoints, and do not invoke external OpenRouter APIs until authorized.
+- **Strict Stage Boundaries**: We are currently in **Stage 1 (Foundation & Real UI Shell)**. BRICK-002 is complete and READY FOR ACCEPTANCE. Do not begin BRICK-003, do not invoke external OpenRouter APIs, and do not install agent frameworks until authorized.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.
