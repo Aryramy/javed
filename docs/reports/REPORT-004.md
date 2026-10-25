@@ -3,8 +3,9 @@
 
 > **Project**: Javed — New JARVIS  
 > **Brick**: `BRICK-004`  
-> **Status**: `READY FOR ACCEPTANCE`  
+> **Status**: `VERIFIED — OWNER ACCEPTED`  
 > **Date**: 2026-10-25  
+> **Acceptance Date**: 2026-10-25  
 > **Verification Engineer**: Antigravity Full-Stack Agent  
 > **Working Branch**: `recovery/brick-004-hardened`  
 > **Baseline Anchor**: Commit `42103bb` (Anchored to common ancestor `e3eddae`)  
@@ -246,11 +247,21 @@ All four mandatory live scenarios were verified via automated Playwright Chrome 
 
 ---
 
-## 8. Milestone Completion & Stop Condition
+## 8. Milestone Completion & Verification Summary
 
 All functional, security, concurrency, and persistence requirements for **BRICK-004** have been implemented, tested, and verified.
 
-- **Milestone Status**: `READY FOR ACCEPTANCE`
-- **Task Status (TASK-040)**: `READY FOR ACCEPTANCE`
-- **Next Milestone (BRICK-005)**: `NOT STARTED` (Strictly blocked pending formal owner approval)
+- **Milestone Status**: `VERIFIED — OWNER ACCEPTED`
+- **Task Status (TASK-040)**: `VERIFIED`
+- **Next Milestone (BRICK-005)**: `NOT STARTED` (Strictly blocked pending formal owner authorization)
 - **Branch**: `recovery/brick-004-hardened`
+
+---
+
+## 9. Formal Owner Acceptance Record
+
+- **Acceptance Status**: `VERIFIED — OWNER ACCEPTED`
+- **Acceptance Date**: 2026-10-25
+- **Authorized By**: Project Owner
+- **Action Authorized**: Fast-forward local master and push to origin/master without force.
+- **BRICK-005 Boundary**: Strict boundary enforced. BRICK-005 has not started.

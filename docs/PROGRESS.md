@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`  
-> **Version**: 4.0 (BRICK-001, BRICK-002, BRICK-003 Verified — BRICK-004 READY FOR ACCEPTANCE)  
+> **Version**: 4.1 (BRICK-001, BRICK-002, BRICK-003, BRICK-004 VERIFIED)  
 > **Status**: AUTHORITATIVE STATE SNAPSHOT  
 > **Last Updated**: 2026-10-25  
 
@@ -12,13 +12,13 @@
 | Parameter | Current Value | Authority Reference |
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
-| **Current Stage** | **Stage 2 / BRICK-004 — Deep Agents & LangGraph Runtime** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
+| **Current Stage** | **Stage 2 / BRICK-004 — Deep Agents & LangGraph Runtime (VERIFIED)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-004: Deep Agents & LangGraph Runtime** | [BRICK-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-004.md) |
-| **Brick Status** | **`READY FOR ACCEPTANCE`** | Implementation & Verification Complete (2026-10-25) |
-| **Last Verified Milestone** | **BRICK-003: OpenRouter Integration & Streaming Chat (Auto Router Enhanced)** | Owner Approval 2026-10-22 |
-| **Application Code** | **BRICK-004 Fully Implemented & Verified** (Deep Agents SDK + LangGraph cyclic execution + SQLite Checkpointer + Task Planning write_todos + Tool Gating) | Strict execution boundary |
+| **Brick Status** | **`VERIFIED`** | Formally Accepted by Project Owner on 2026-10-25 |
+| **Last Verified Milestone** | **BRICK-004: Deep Agents & LangGraph Runtime (Security Hardened)** | Owner Approval 2026-10-25 |
+| **Application Code** | **BRICK-004 Fully Implemented & Verified** (Deep Agents SDK + LangGraph cyclic execution + SQLite Checkpointer + Task Planning write_todos + 3-Layer Positive Allowlist + Concurrency Serialization) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.5, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-004 READY FOR ACCEPTANCE** | Authoritative Status |
+| **Overall Status** | **BRICK-004 VERIFIED — READY FOR BRICK-005** | Authoritative Status |
 
 ---
 
@@ -30,8 +30,8 @@ stateDiagram-v2
     BRICK_000_Planning --> BRICK_001_Foundation: VERIFIED (2026-10-22)
     BRICK_001_Foundation --> BRICK_002_FastAPI: VERIFIED (2026-10-22)
     BRICK_002_FastAPI --> BRICK_003_OpenRouter: VERIFIED (2026-10-22)
-    BRICK_003_OpenRouter --> BRICK_004_LangGraph: READY FOR ACCEPTANCE (2026-10-25)
-    BRICK_004_LangGraph --> BRICK_005_Tools_HITL: Blocked
+    BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
+    BRICK_004_LangGraph --> BRICK_005_Tools_HITL: Authorized / Next Milestone
     BRICK_005_Tools_HITL --> BRICK_006_Playwright: Blocked
     BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: Blocked
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
@@ -48,7 +48,7 @@ stateDiagram-v2
 | **BRICK-001** | Reproducible Foundation & Real React UI Shell | **`VERIFIED`** | [REPORT-001.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-001.md) | Explicitly approved by Project Owner on 2026-10-22 after manual acceptance. |
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
-| **BRICK-004** | Deep Agents & LangGraph Runtime | **`READY FOR ACCEPTANCE`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Hardened on recovery/brick-004-hardened. Awaiting Project Owner review. |
+| **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
