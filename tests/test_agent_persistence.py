@@ -1,5 +1,11 @@
-"""Tests for LangGraph SQLite checkpointer persistence and thread isolation."""
+"""Tests for LangGraph SQLite checkpointer persistence.
 
+Covers thread isolation, concurrency serialization, and cross-process recovery.
+"""
+
+import asyncio
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +22,7 @@ from javed.schemas.agent import AgentStreamRequest
 class PersistentMockChatModel(BaseChatModel):
     """Deterministic mock model that records conversational turns."""
 
-    reply: str = "Default reply"
+    reply: Any = "Default reply"
 
     @property
     def _llm_type(self) -> str:
@@ -124,3 +130,137 @@ async def test_thread_context_isolation(tmp_path: Path) -> None:
         assert "42" not in msg.content
 
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_thread_runs_are_serialized(tmp_path: Path) -> None:
+    """Verify that concurrent requests on same thread ID are safely serialized by lock."""
+    db_file = str(tmp_path / "concurrent_checkpoints.db")
+    cp_mgr = AgentCheckpointerManager(db_path=db_file)
+    model = PersistentMockChatModel(reply="Serialized response.")
+    runtime = AgentRuntimeManager(checkpointer_manager=cp_mgr, model_override=model)
+    await runtime.initialize()
+
+    req_1 = AgentStreamRequest(thread_id="thread_shared", message="Message 1")
+    req_2 = AgentStreamRequest(thread_id="thread_shared", message="Message 2")
+
+    # Run both concurrently
+    async def run_req(r: AgentStreamRequest) -> list[Any]:
+        return [ev async for ev in runtime.stream_agent(r)]
+
+    results = await asyncio.gather(run_req(req_1), run_req(req_2))
+    assert len(results) == 2
+    for events in results:
+        assert any(e.event == "run_completed" for e in events)
+
+    # State must reflect both messages cleanly without database corruption
+    state = await runtime.get_thread_state("thread_shared")
+    assert state.exists is True
+    assert len(state.messages) >= 4  # 2 user messages + 2 assistant messages
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_multipart_message_content_restoration(tmp_path: Path) -> None:
+    """Verify multipart content blocks (list of dicts) are properly restored into clean text."""
+    db_file = str(tmp_path / "multipart_checkpoints.db")
+    cp_mgr = AgentCheckpointerManager(db_path=db_file)
+    multipart_content = [
+        {"type": "text", "text": "Implementation Step 1. "},
+        {"type": "text", "text": "Validation Step 2."},
+    ]
+    model = PersistentMockChatModel(reply=multipart_content)
+    runtime = AgentRuntimeManager(checkpointer_manager=cp_mgr, model_override=model)
+    await runtime.initialize()
+
+    req = AgentStreamRequest(thread_id="thread_multipart", message="Generate steps")
+    _ = [ev async for ev in runtime.stream_agent(req)]
+
+    state = await runtime.get_thread_state("thread_multipart")
+    assert state.exists is True
+    assistant_msgs = [m for m in state.messages if m.role == "assistant"]
+    assert len(assistant_msgs) >= 1
+    assert assistant_msgs[0].content == "Implementation Step 1. Validation Step 2."
+
+    await runtime.close()
+
+
+def test_cross_process_sqlite_recovery(tmp_path: Path) -> None:
+    """Demonstrate genuine cross-process durability using two separate OS subprocesses."""
+    db_file = str(tmp_path / "cross_process.db")
+    secret_marker = "PROJECT_ORCHID_PROC_RECOVERY_9941"
+
+    # Process 1: Write a checkpoint using Python subprocess
+    proc1_code = """
+import asyncio
+import sys
+from pathlib import Path
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
+from javed.agent.checkpointer import AgentCheckpointerManager
+from javed.agent.runtime import AgentRuntimeManager
+from javed.schemas.agent import AgentStreamRequest
+
+db_path = sys.argv[1]
+secret = sys.argv[2]
+
+class Model(BaseChatModel):
+    def _generate(self, messages, **kwargs):
+        gen = ChatGeneration(message=AIMessage(content=f'Acknowledged {secret}'))
+        return ChatResult(generations=[gen])
+    def bind_tools(self, tools, **kwargs): return self
+    @property
+    def _llm_type(self): return 'proc-mock'
+
+async def run():
+    mgr = AgentCheckpointerManager(db_path)
+    runtime = AgentRuntimeManager(checkpointer_manager=mgr, model_override=Model())
+    await runtime.initialize()
+    req = AgentStreamRequest(thread_id='thread_proc', message=f'Remember {secret}')
+    async for _ in runtime.stream_agent(req): pass
+    await runtime.close()
+
+asyncio.run(run())
+"""
+    result1 = subprocess.run(
+        [sys.executable, "-c", proc1_code, db_file, secret_marker],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result1.returncode == 0, f"Process 1 failed: {result1.stderr}"
+    assert Path(db_file).exists()
+
+    # Process 2: Read state from the database in a completely separate process
+    proc2_code = """
+import asyncio
+import sys
+from javed.agent.checkpointer import AgentCheckpointerManager
+from javed.agent.runtime import AgentRuntimeManager
+
+db_path = sys.argv[1]
+secret = sys.argv[2]
+
+async def run():
+    mgr = AgentCheckpointerManager(db_path)
+    runtime = AgentRuntimeManager(checkpointer_manager=mgr)
+    await runtime.initialize()
+    state = await runtime.get_thread_state('thread_proc')
+    assert state.exists is True
+    found = any(secret in m.content for m in state.messages)
+    assert found, 'Secret marker not found in restored messages'
+    await runtime.close()
+    print('SUCCESS')
+
+asyncio.run(run())
+"""
+    result2 = subprocess.run(
+        [sys.executable, "-c", proc2_code, db_file, secret_marker],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result2.returncode == 0, f"Process 2 failed: {result2.stderr}"
+    assert "SUCCESS" in result2.stdout

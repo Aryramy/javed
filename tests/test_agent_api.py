@@ -81,7 +81,7 @@ async def test_get_agent_status(test_app) -> None:
         data = resp.json()
         assert data["status"] == "ready"
         assert data["checkpointer"] == "sqlite"
-        assert data["security_profile"] == "zero-trust-planning-only"
+        assert "zero-trust" in data["security_profile"]
         assert data["allowed_tools"] == ["write_todos"]
         assert "execute" in data["excluded_tools"]
         assert "ls" in data["excluded_tools"]
@@ -140,11 +140,29 @@ async def test_get_thread_state_endpoint(test_app) -> None:
         stream_resp = await client.post("/api/v1/agent/stream", json=payload)
         assert stream_resp.status_code == 200
 
-        # Retrieve state for populated thread
-        resp = await client.get("/api/v1/agent/threads/thread_persisted_api")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["exists"] is True
-        assert len(data["messages"]) >= 2
-        assert len(data["todos"]) == 2
-        assert data["todos"][0]["content"] == "Step 1: Check data"
+        # Retrieve saved thread state
+        resp_state = await client.get("/api/v1/agent/threads/thread_persisted_api")
+        assert resp_state.status_code == 200
+        state_data = resp_state.json()
+        assert state_data["exists"] is True
+        assert state_data["thread_id"] == "thread_persisted_api"
+        assert len(state_data["todos"]) == 2
+        assert any("API response completed." in m["content"] for m in state_data["messages"])
+
+
+@pytest.mark.asyncio
+async def test_thread_id_security_validation_in_api(test_app) -> None:
+    """Verify invalid thread IDs are rejected by both GET and POST endpoints."""
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. GET with path traversal thread ID returns 400 Bad Request
+        resp_bad_get = await client.get("/api/v1/agent/threads/..traversal_bad")
+        assert resp_bad_get.status_code == 400
+        assert "Invalid thread_id" in resp_bad_get.json()["detail"]
+
+        # 2. POST with invalid thread ID returns 422 Unprocessable Entity
+        resp_bad_post = await client.post(
+            "/api/v1/agent/stream",
+            json={"thread_id": "bad/path/traversal", "message": "hello"},
+        )
+        assert resp_bad_post.status_code == 422

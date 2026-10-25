@@ -1,13 +1,91 @@
 """Pydantic schemas for Deep Agents & LangGraph agent runtime."""
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from javed.schemas.chat import ChatMessage, CostTier
 
 AgentTodoStatus = Literal["pending", "in_progress", "completed"]
+
+THREAD_ID_REGEX = r"^[a-zA-Z0-9_\-]+$"
+_THREAD_ID_PATTERN = re.compile(THREAD_ID_REGEX)
+
+
+def validate_thread_id(thread_id: str) -> str:
+    """Validate thread identifier to prevent path traversal, injection, or malformed input.
+
+    Rejects:
+        - None or non-string input
+        - Empty or whitespace-only strings
+        - Strings containing path separators ('/', '\\') or traversal patterns ('..')
+        - Strings with null bytes or control characters
+        - Strings exceeding 128 characters
+        - Strings with characters outside [a-zA-Z0-9_-]
+
+    Returns:
+        Validated, stripped thread identifier string.
+
+    Raises:
+        ValueError: If thread_id fails any security validation constraint.
+    """
+    if not isinstance(thread_id, str):
+        raise ValueError("thread_id must be a string")
+
+    stripped = thread_id.strip()
+    if not stripped:
+        raise ValueError("thread_id cannot be empty or whitespace only")
+
+    if len(stripped) > 128:
+        raise ValueError(
+            f"thread_id exceeds maximum length of 128 characters (got {len(stripped)})"
+        )
+
+    # Explicit path traversal and separator rejection
+    if ".." in stripped or "/" in stripped or "\\" in stripped:
+        raise ValueError(f"thread_id contains illegal path traversal characters: '{thread_id}'")
+
+    if "\x00" in stripped:
+        raise ValueError("thread_id contains null byte character")
+
+    if not _THREAD_ID_PATTERN.match(stripped):
+        raise ValueError(
+            f"Invalid thread_id format '{thread_id}'. Only alphanumeric characters, "
+            f"hyphens, and underscores are permitted (pattern: {THREAD_ID_REGEX})."
+        )
+
+    return stripped
+
+
+def extract_message_text(content: Any) -> str:
+    """Extract plain text from string or multipart message content blocks.
+
+    Handles:
+        - Plain string content: returns as-is
+        - List of strings: joins strings
+        - List of dicts (OpenAI/Anthropic blocks): extracts 'text' or 'content' keys
+        - None: returns empty string
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if block.get("type") == "text" and "text" in block:
+                    parts.append(str(block["text"]))
+                elif "content" in block:
+                    parts.append(str(block["content"]))
+                elif "text" in block:
+                    parts.append(str(block["text"]))
+        return "".join(parts)
+    return str(content)
 
 
 class AgentTodoItem(BaseModel):
@@ -26,7 +104,8 @@ class AgentStreamRequest(BaseModel):
 
     thread_id: str = Field(
         min_length=1,
-        max_length=255,
+        max_length=128,
+        pattern=THREAD_ID_REGEX,
         description="Thread identifier for persistent LangGraph checkpoints",
     )
     message: str = Field(
@@ -45,6 +124,11 @@ class AgentStreamRequest(BaseModel):
         default=None,
         description="Optional OpenRouter session ID for prompt caching and stickiness",
     )
+
+    @field_validator("thread_id")
+    @classmethod
+    def validate_thread_id_field(cls, v: str) -> str:
+        return validate_thread_id(v)
 
 
 class AgentStreamEvent(BaseModel):
@@ -85,6 +169,10 @@ class AgentThreadStateResponse(BaseModel):
     exists: bool = Field(
         default=False,
         description="Whether this thread has committed checkpoints",
+    )
+    active_model: str | None = Field(
+        default=None,
+        description="Active model identifier associated with this thread run",
     )
 
 

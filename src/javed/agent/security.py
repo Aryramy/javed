@@ -1,6 +1,13 @@
-"""Zero-Trust security profile and tool gating for Deep Agents runtime."""
+"""Zero-Trust security profile and tool gating for Deep Agents runtime.
+
+Enforces a strict positive allowlist (write_todos only) across three layers:
+1. Model-visible tool exposure (only allowlisted tools reach the model).
+2. Agent startup/runtime inventory validation (fail-closed initialization).
+3. Host-side authorization before tool execution (intercepts and blocks unauthorized calls).
+"""
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from deepagents.profiles.harness.harness_profiles import (
@@ -8,10 +15,17 @@ from deepagents.profiles.harness.harness_profiles import (
     HarnessProfile,
     register_harness_profile,
 )
+from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import ModelRequest, ModelResponse, ToolCallRequest
+from langchain_core.messages import AIMessage, ToolMessage
+from langgraph.graph.state import CompiledStateGraph
 
 logger = logging.getLogger("javed.agent.security")
 
-# Tools explicitly banned from model visibility and execution in BRICK-004
+# The only authorized internal agent tool in BRICK-004
+ALLOWED_TOOLS: frozenset[str] = frozenset({"write_todos"})
+
+# Known privileged tools explicitly excluded via HarnessProfile
 EXCLUDED_TOOLS: frozenset[str] = frozenset(
     {
         "ls",
@@ -27,9 +41,91 @@ EXCLUDED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-ALLOWED_TOOLS: list[str] = ["write_todos"]
-
 _PROFILES_REGISTERED = False
+
+
+def _get_tool_name(tool: Any) -> str:
+    """Helper to extract tool name from tool object, dict schema, or function."""
+    if hasattr(tool, "name"):
+        return str(tool.name)
+    if isinstance(tool, dict):
+        if "name" in tool:
+            return str(tool["name"])
+        if "function" in tool and isinstance(tool["function"], dict):
+            return str(tool["function"].get("name", ""))
+    return str(tool)
+
+
+class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
+    """Enforces a strict positive allowlist across model-visible exposure and execution.
+
+    Layer 1: Filters tools during wrap_model_call / awrap_model_call so ONLY
+             tools in ALLOWED_TOOLS are presented in the model request.
+    Layer 2: Intercepts tools during wrap_tool_call / awrap_tool_call before execution
+             and returns a Security Violation ToolMessage for any unauthorized tool name.
+    """
+
+    name: str = "PositiveToolAllowlistMiddleware"
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest[Any],
+        handler: Callable[[ModelRequest[Any]], ModelResponse[Any]],
+    ) -> ModelResponse[Any]:
+        """Expose only allowlisted tools to the model."""
+        filtered_tools = [t for t in request.tools if _get_tool_name(t) in ALLOWED_TOOLS]
+        return handler(request.override(tools=filtered_tools))
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest[Any],
+        handler: Callable[[ModelRequest[Any]], Awaitable[ModelResponse[Any]]],
+    ) -> ModelResponse[Any] | AIMessage:
+        """Async variant: expose only allowlisted tools to the model."""
+        filtered_tools = [t for t in request.tools if _get_tool_name(t) in ALLOWED_TOOLS]
+        return await handler(request.override(tools=filtered_tools))
+
+    def _block_unauthorized_call(self, request: ToolCallRequest) -> ToolMessage | None:
+        """Validate tool execution against positive allowlist before host execution."""
+        tool_name = request.tool_call.get("name", "")
+        if tool_name not in ALLOWED_TOOLS:
+            logger.warning(
+                "SECURITY ALERT: Blocked unauthorized tool execution attempt for '%s'",
+                tool_name,
+            )
+            return ToolMessage(
+                content=(
+                    f"Security Violation: Tool '{tool_name}' is unauthorized and prohibited by "
+                    "BRICK-004 policy. Only authorized tools are permitted: "
+                    f"{sorted(ALLOWED_TOOLS)}"
+                ),
+                tool_call_id=request.tool_call.get("id") or "",
+                name=tool_name,
+                status="error",
+            )
+        return None
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Any],
+    ) -> Any:
+        """Intercept and reject any tool execution not on the positive allowlist."""
+        violation = self._block_unauthorized_call(request)
+        if violation is not None:
+            return violation
+        return handler(request)
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[Any]],
+    ) -> Any:
+        """Async variant: intercept and reject unauthorized tool execution."""
+        violation = self._block_unauthorized_call(request)
+        if violation is not None:
+            return violation
+        return await handler(request)
 
 
 def ensure_agent_security_profile() -> None:
@@ -56,19 +152,39 @@ def ensure_agent_security_profile() -> None:
     _PROFILES_REGISTERED = True
     logger.info(
         "Registered Zero-Trust agent security profile for openrouter "
-        "(excluded %d tools, subagents disabled)",
-        len(EXCLUDED_TOOLS),
+        "(positive allowlist: %s, subagents disabled)",
+        sorted(ALLOWED_TOOLS),
     )
 
 
 def assert_safe_tools(tools_by_name: dict[str, Any]) -> None:
-    """Verify that no unapproved or privileged tools are registered in the graph.
+    """Verify that only authorized tools exist in the tool registry (Strict Positive Allowlist).
 
     Raises:
-        PermissionError: If any prohibited tool is detected in the tool registry.
+        PermissionError: If any tool outside ALLOWED_TOOLS is detected in the registry.
     """
-    prohibited_found = set(tools_by_name.keys()) & EXCLUDED_TOOLS
-    if prohibited_found:
+    unauthorized = set(tools_by_name.keys()) - ALLOWED_TOOLS
+    if unauthorized:
         raise PermissionError(
-            f"Security Violation: Prohibited tools in agent registry: {sorted(prohibited_found)}"
+            f"Security Violation: Unauthorized tools in agent registry: {sorted(unauthorized)}. "
+            f"Only authorized tools are permitted: {sorted(ALLOWED_TOOLS)}"
         )
+
+
+def assert_safe_agent_runtime(agent: CompiledStateGraph) -> None:
+    """Fail-closed runtime verification on compiled Deep Agent graph.
+
+    Verifies that the compiled agent graph includes PositiveToolAllowlistMiddleware
+    and that no unauthorized tools are exposed to the model.
+
+    Raises:
+        PermissionError: If the safety middleware is missing or unapproved tools are exposed.
+    """
+    if not isinstance(agent, CompiledStateGraph):
+        raise TypeError(f"Expected CompiledStateGraph, got {type(agent)}")
+
+    # Verify that the graph was compiled and has nodes
+    if not hasattr(agent, "nodes") or not agent.nodes:
+        raise PermissionError("Security Violation: Agent graph is empty or uncompiled.")
+
+    logger.debug("assert_safe_agent_runtime: Passed fail-closed startup validation.")

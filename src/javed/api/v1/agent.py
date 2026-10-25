@@ -12,6 +12,7 @@ from javed.schemas.agent import (
     AgentStreamEvent,
     AgentStreamRequest,
     AgentThreadStateResponse,
+    validate_thread_id,
 )
 
 logger = logging.getLogger("javed.api.v1.agent")
@@ -89,9 +90,17 @@ async def get_thread_state(
     request: Request,
 ) -> AgentThreadStateResponse:
     """Retrieve committed LangGraph checkpoints and plan state for a conversation thread."""
+    try:
+        validated_id = validate_thread_id(thread_id)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid thread_id: {ve!s}",
+        ) from ve
+
     runtime = get_agent_runtime(request)
     try:
-        return await runtime.get_thread_state(thread_id)
+        return await runtime.get_thread_state(validated_id)
     except Exception as e:
         logger.exception("Error retrieving thread state for %s: %s", thread_id, e)
         raise HTTPException(
