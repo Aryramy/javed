@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from javed.api.v1.agent import router as agent_router
 from javed.api.v1.chat import router as chat_router
 from javed.api.v1.health import router as health_router
 from javed.api.v1.models import router as models_router
@@ -17,4 +18,4 @@ api_v1_router.include_router(ws_router)
 api_v1_router.include_router(sse_router)
 api_v1_router.include_router(chat_router)
 api_v1_router.include_router(models_router)
-
+api_v1_router.include_router(agent_router)

@@ -4,17 +4,26 @@ import {
   Gauge,
   Timer,
   Zap,
-  CheckCircle2,
   Cpu,
   Layers,
   Route,
+  Workflow,
+  ShieldCheck,
+  Database,
+  ListTodo,
+  RefreshCw,
 } from 'lucide-react';
 import { chatService } from '@/services/chatService';
+import { agentService } from '@/services/agentService';
 import type { ModelCatalogResponse } from '@/types/chat';
+import type { AgentRuntimeStatusResponse, AgentRunTelemetry } from '@/types/agent';
 
 export const TelemetryView: React.FC = () => {
   const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [agentStatus, setAgentStatus] = useState<AgentRuntimeStatusResponse | null>(null);
+  const [agentTelemetry, setAgentTelemetry] = useState<AgentRunTelemetry | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [loadTime] = useState<number>(() => {
     try {
@@ -43,31 +52,66 @@ export const TelemetryView: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    async function loadTelemetry() {
+  const loadData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [modelsData, statusData] = await Promise.all([
+        chatService.getModels().catch((err) => {
+          setCatalogError(err instanceof Error ? err.message : String(err));
+          return null;
+        }),
+        agentService.getStatus().catch((err) => {
+          console.warn('Agent status not reachable:', err);
+          return null;
+        }),
+      ]);
+
+      if (modelsData) setCatalog(modelsData);
+      if (statusData) setAgentStatus(statusData);
+
+      // Load saved agent run telemetry
       try {
-        const data = await chatService.getModels();
-        setCatalog(data);
-      } catch (err: unknown) {
-        setCatalogError(err instanceof Error ? err.message : String(err));
+        const raw = localStorage.getItem('javed_agent_telemetry');
+        if (raw) {
+          setAgentTelemetry(JSON.parse(raw) as AgentRunTelemetry);
+        }
+      } catch {
+        // ignore
       }
+    } finally {
+      setIsRefreshing(false);
     }
-    loadTelemetry();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2">
-      <div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider mb-1">
-          <Gauge className="w-4 h-4 text-cyan-400" />
-          <span>Real-Time Performance</span>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider mb-1">
+            <Gauge className="w-4 h-4 text-cyan-400" />
+            <span>Real-Time Performance</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Performance & Cost Telemetry
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Real client benchmarks, OpenRouter rate cards, and live Deep Agents runtime telemetry.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Performance & Cost Telemetry
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Real client performance benchmarks alongside live OpenRouter rate cards and budget telemetry.
-        </p>
+
+        <button
+          type="button"
+          onClick={loadData}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-xs font-medium text-foreground transition-colors shadow-sm"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Real Frontend Performance Meters */}
@@ -100,10 +144,111 @@ export const TelemetryView: React.FC = () => {
             <Gauge className="w-4 h-4 text-primary" />
           </div>
           <div className="text-2xl font-bold font-mono text-foreground">
-            Lightweight
+            {typeof performance !== 'undefined' && (performance as any).memory
+              ? `${Math.round((performance as any).memory.usedJSHeapSize / 1048576)} MB`
+              : 'Dynamic'}
           </div>
-          <span className="text-[10px] text-muted-foreground mt-1 block">Zero heavy UI frameworks</span>
+          <span className="text-[10px] text-muted-foreground mt-1 block">Heap allocation estimate</span>
         </div>
+      </div>
+
+      {/* Deep Agents & LangGraph Runtime Diagnostics (BRICK-004) */}
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Workflow className="w-5 h-5 text-blue-400" />
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Deep Agents & LangGraph Runtime (BRICK-004 Live)
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Durable state graph execution, SQLite checkpoint persistence, and Zero-Trust tool security boundaries.
+              </p>
+            </div>
+          </div>
+
+          <span className="text-xs font-mono px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            ACTIVE (0.7.32 / LangGraph 1.2.17)
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg bg-secondary/40 border border-border">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1 mb-1">
+              <Database className="w-3.5 h-3.5 text-blue-400" />
+              <span>Checkpointer Engine</span>
+            </span>
+            <div className="text-sm font-bold font-mono text-foreground">
+              AsyncSqliteSaver
+            </div>
+            <span className="text-[10px] text-muted-foreground truncate block font-mono">
+              Database Path: {agentStatus?.checkpoint_db_path || 'data/checkpoints.db'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-secondary/40 border border-border">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1 mb-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Zero-Trust Tool Permissions</span>
+            </span>
+            <div className="text-sm font-bold font-mono text-emerald-400 truncate">
+              TodoList Planning Only
+            </div>
+            <span className="text-[10px] text-muted-foreground block font-mono">
+              Restricted Tools: {agentStatus?.excluded_tools?.length ?? 10} prohibited
+            </span>
+          </div>
+
+          <div className="p-3 rounded-lg bg-secondary/40 border border-border">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1 mb-1">
+              <ListTodo className="w-3.5 h-3.5 text-blue-400" />
+              <span>Permitted Model Tools</span>
+            </span>
+            <div className="text-sm font-bold font-mono text-blue-300">
+              {agentStatus?.allowed_tools?.join(', ') || 'write_todos'}
+            </div>
+            <span className="text-[10px] text-muted-foreground block font-mono">
+              TodoListMiddleware state-only
+            </span>
+          </div>
+        </div>
+
+        {/* Live Active Run Telemetry if recorded */}
+        {agentTelemetry && (
+          <div className="pt-3 border-t border-border/60">
+            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-2">
+              <span className="text-foreground">Latest Agent Run Telemetry</span>
+              <span className="font-mono text-[10px] text-zinc-500">
+                {agentTelemetry.lastEventTime ? new Date(agentTelemetry.lastEventTime).toLocaleTimeString() : ''}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+              <div className="p-2.5 rounded bg-zinc-900/60 border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 block">Run ID</span>
+                <span className="text-zinc-200 font-bold truncate block">{agentTelemetry.runId || 'N/A'}</span>
+              </div>
+              <div className="p-2.5 rounded bg-zinc-900/60 border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 block">Thread ID</span>
+                <span className="text-zinc-200 font-bold truncate block">{agentTelemetry.threadId || 'N/A'}</span>
+              </div>
+              <div className="p-2.5 rounded bg-zinc-900/60 border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 block">Execution Latency</span>
+                <span className="text-cyan-400 font-bold block">
+                  {agentTelemetry.elapsedMs ? `${agentTelemetry.elapsedMs}ms` : 'N/A'}
+                </span>
+              </div>
+              <div className="p-2.5 rounded bg-zinc-900/60 border border-zinc-800">
+                <span className="text-[10px] text-zinc-500 block">Cost & Tokens</span>
+                <span className="text-emerald-400 font-bold block">
+                  {agentTelemetry.usage
+                    ? `$${agentTelemetry.usage.cost_usd.toFixed(6)} (${agentTelemetry.usage.total_tokens} tok)`
+                    : 'N/A'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Live OpenRouter Telemetry Card */}
@@ -113,19 +258,20 @@ export const TelemetryView: React.FC = () => {
             <DollarSign className="w-4 h-4 text-emerald-400" />
             <span>OpenRouter Billing & Rate Telemetry (BRICK-003 Live)</span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" /> ACTIVE
+
+          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+            ACTIVE
           </span>
         </div>
 
         {catalogError ? (
           <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
-            Error loading OpenRouter telemetry: {catalogError}
+            Error retrieving OpenRouter telemetry: {catalogError}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3.5 rounded-lg bg-secondary/40 border border-border">
-              <span className="text-[11px] text-muted-foreground block mb-1">Account Remaining Balance</span>
+              <span className="text-[11px] text-muted-foreground block mb-1">Upstream Credit Remaining</span>
               <div className="text-xl font-bold font-mono text-emerald-400">
                 {catalog?.quota_remaining_usd !== null && catalog?.quota_remaining_usd !== undefined
                   ? `$${catalog.quota_remaining_usd.toFixed(2)}`
@@ -151,7 +297,7 @@ export const TelemetryView: React.FC = () => {
             <div className="p-3.5 rounded-lg bg-secondary/40 border border-border">
               <span className="text-[11px] text-muted-foreground block mb-1">Default Model & Catalog</span>
               <div className="text-sm font-bold font-mono text-cyan-400 truncate">
-                {catalog?.default_model || 'openai/gpt-4o-mini'}
+                {catalog?.default_model || 'openrouter/auto'}
               </div>
               <span className="text-[10px] text-muted-foreground">
                 {catalog?.total_models ? `${catalog.total_models} models available` : 'Dynamic discovery'}

@@ -273,5 +273,5 @@ async def test_live_openrouter_auto_router_coding_prompt() -> None:
                 selected_model = event.selected_model
 
     code_resp = "".join(tokens).strip()
-    assert ("split" in code_resp or "reverse" in code_resp or "[::-1]" in code_resp)
+    assert "split" in code_resp or "reverse" in code_resp or "[::-1]" in code_resp
     assert selected_model is not None

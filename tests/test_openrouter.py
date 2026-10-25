@@ -152,6 +152,7 @@ async def test_stream_chat_mock_success(mock_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_stream_chat_upstream_error(mock_settings: Settings) -> None:
     """Verify upstream HTTP error yields clean error envelope."""
+
     class FakeErrorResponse:
         status_code = 401
 
@@ -197,6 +198,7 @@ def test_api_chat_stream_endpoint(mock_settings: Settings) -> None:
     # Mock openrouter_service on app.state
     async def fake_stream(_request):
         from javed.schemas.chat import ChatStreamEvent, StreamUsage
+
         yield ChatStreamEvent(type="token", content="Test")
         usage = StreamUsage(
             prompt_tokens=5,
@@ -235,15 +237,19 @@ async def test_auto_router_request_payload_and_plugins(mock_settings: Settings) 
         status_code = 200
 
         async def aiter_lines(self):
-            chunk1 = json.dumps({
-                "model": "anthropic/claude-3.5-sonnet",
-                "choices": [{"delta": {"content": "Hi"}}],
-            })
-            chunk2 = json.dumps({
-                "model": "anthropic/claude-3.5-sonnet",
-                "choices": [],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 1, "cost": 0.00002},
-            })
+            chunk1 = json.dumps(
+                {
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "choices": [{"delta": {"content": "Hi"}}],
+                }
+            )
+            chunk2 = json.dumps(
+                {
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "choices": [],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 1, "cost": 0.00002},
+                }
+            )
             yield f"data: {chunk1}"
             yield f"data: {chunk2}"
             yield "data: [DONE]"
@@ -393,10 +399,12 @@ async def test_auto_router_session_id_multi_turn_stickiness(mock_settings: Setti
         status_code = 200
 
         async def aiter_lines(self):
-            chunk = json.dumps({
-                "model": "anthropic/claude-3.5-sonnet",
-                "choices": [{"delta": {"content": "ok"}}],
-            })
+            chunk = json.dumps(
+                {
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "choices": [{"delta": {"content": "ok"}}],
+                }
+            )
             yield f"data: {chunk}"
             yield "data: [DONE]"
 
@@ -440,18 +448,23 @@ async def test_model_reasoning_trace_isolated_from_assistant_content(
     mock_settings: Settings,
 ) -> None:
     """Ensure reasoning traces are emitted as separate events, never ordinary content."""
+
     class FakeReasoningStreamResponse:
         status_code = 200
 
         async def aiter_lines(self):
-            chunk1 = json.dumps({
-                "model": "deepseek/deepseek-r1",
-                "choices": [{"delta": {"reasoning": "Analyzing problem step 1..."}}],
-            })
-            chunk2 = json.dumps({
-                "model": "deepseek/deepseek-r1",
-                "choices": [{"delta": {"content": "The answer is 42."}}],
-            })
+            chunk1 = json.dumps(
+                {
+                    "model": "deepseek/deepseek-r1",
+                    "choices": [{"delta": {"reasoning": "Analyzing problem step 1..."}}],
+                }
+            )
+            chunk2 = json.dumps(
+                {
+                    "model": "deepseek/deepseek-r1",
+                    "choices": [{"delta": {"content": "The answer is 42."}}],
+                }
+            )
             yield f"data: {chunk1}"
             yield f"data: {chunk2}"
             yield "data: [DONE]"
@@ -521,15 +534,18 @@ def test_custom_system_prompt_overrides_default(mock_settings: Settings) -> None
 @pytest.mark.asyncio
 async def test_inline_think_tags_separated_from_answer_content(mock_settings: Settings) -> None:
     """Ensure <think> tags in content tokens are isolated into reasoning events."""
+
     class FakeInlineThinkResponse:
         status_code = 200
 
         async def aiter_lines(self):
             content_val = "<think>Deliberating carefully...</think>The final result is 100."
-            chunk1 = json.dumps({
-                "model": "deepseek/deepseek-r1",
-                "choices": [{"delta": {"content": content_val}}],
-            })
+            chunk1 = json.dumps(
+                {
+                    "model": "deepseek/deepseek-r1",
+                    "choices": [{"delta": {"content": content_val}}],
+                }
+            )
             yield f"data: {chunk1}"
             yield "data: [DONE]"
 

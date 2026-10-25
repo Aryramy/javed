@@ -70,7 +70,7 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "name": "OpenAI GPT-4o Mini",
         "provider": "OpenAI",
         "context_length": 128000,
-        "pricing_prompt": 0.15,      # $0.15 per 1M tokens
+        "pricing_prompt": 0.15,  # $0.15 per 1M tokens
         "pricing_completion": 0.60,  # $0.60 per 1M tokens
         "description": "Fast, economical frontier model ideal for daily tasks.",
         "is_default": False,
@@ -171,9 +171,7 @@ class OpenRouterService:
             return float(upstream_cost)
 
         target_model = (
-            selected_model
-            if (model_id == AUTO_ROUTER_MODEL_ID and selected_model)
-            else model_id
+            selected_model if (model_id == AUTO_ROUTER_MODEL_ID and selected_model) else model_id
         )
         p_prompt, p_comp = 1.0, 3.0  # Default conservative fallback
         matched = False
@@ -240,7 +238,8 @@ class OpenRouterService:
                             if modality and "image" in modality and "text" not in modality:
                                 continue
 
-                            name = m.get("name") or mid
+                            curated_names = {c["id"]: c["name"] for c in CURATED_MODELS}
+                            name = curated_names.get(mid, m.get("name") or mid)
                             provider = (
                                 mid.split("/")[0].capitalize() if "/" in mid else "OpenRouter"
                             )
@@ -257,8 +256,8 @@ class OpenRouterService:
 
                             desc = m.get("description") or f"Model provided by {provider}."
                             is_fav = mid in self.favorite_model_ids
-                            is_def = (mid == self.default_model)
-                            is_router = (mid == AUTO_ROUTER_MODEL_ID)
+                            is_def = mid == self.default_model
+                            is_router = mid == AUTO_ROUTER_MODEL_ID
 
                             parsed_models.append(
                                 ModelInfo(
@@ -367,7 +366,8 @@ class OpenRouterService:
         if search:
             s = search.strip().lower()
             results = [
-                m for m in results
+                m
+                for m in results
                 if s in m.id.lower() or s in m.name.lower() or s in m.provider.lower()
             ]
 
@@ -477,9 +477,7 @@ class OpenRouterService:
         effective_cost_tier: str | None = None
         if model_id == AUTO_ROUTER_MODEL_ID:
             effective_cost_tier = (
-                request.cost_tier
-                or self.settings.openrouter_auto_router_cost_tier
-                or "low"
+                request.cost_tier or self.settings.openrouter_auto_router_cost_tier or "low"
             )
             if effective_cost_tier not in SUPPORTED_COST_TIERS:
                 effective_cost_tier = "low"
@@ -549,8 +547,8 @@ class OpenRouterService:
                             delta = choices[0].get("delta", {})
 
                             # Preserve model reasoning traces separately
-                            reasoning_delta = (
-                                delta.get("reasoning") or delta.get("reasoning_content")
+                            reasoning_delta = delta.get("reasoning") or delta.get(
+                                "reasoning_content"
                             )
                             if reasoning_delta:
                                 accumulated_reasoning.append(reasoning_delta)
@@ -567,6 +565,7 @@ class OpenRouterService:
                             if token:
                                 if "<think>" in token and "</think>" in token:
                                     import re
+
                                     think_part = re.search(
                                         r"<think>(.*?)</think>", token, re.DOTALL
                                     )
@@ -778,9 +777,7 @@ class OpenRouterService:
         effective_cost_tier: str | None = None
         if model_id == AUTO_ROUTER_MODEL_ID:
             effective_cost_tier = (
-                request.cost_tier
-                or self.settings.openrouter_auto_router_cost_tier
-                or "low"
+                request.cost_tier or self.settings.openrouter_auto_router_cost_tier or "low"
             )
             if effective_cost_tier not in SUPPORTED_COST_TIERS:
                 effective_cost_tier = "low"
@@ -814,6 +811,7 @@ class OpenRouterService:
             # Isolate inline <think> tags if model emits them in content
             if not reasoning and "<think>" in content and "</think>" in content:
                 import re
+
                 think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
                 if think_match:
                     reasoning = think_match.group(1).strip()

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+from javed.agent.runtime import AgentRuntimeManager
 from javed.api.v1.router import api_v1_router
 from javed.config import Settings, get_settings
 from javed.services.openrouter import OpenRouterService
@@ -62,11 +63,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.env,
     )
 
+    # Initialize Deep Agents runtime & SQLite checkpointer
+    if hasattr(app.state, "agent_runtime") and app.state.agent_runtime:
+        try:
+            await app.state.agent_runtime.initialize()
+        except Exception as e:
+            logger.warning("Agent runtime initialization deferred or degraded: %s", e)
+
     # Yield control to run the application
     yield
 
-    # Graceful shutdown: close all active WebSocket connections
+    # Graceful shutdown: close agent runtime checkpointer and active WebSocket connections
     logger.info("Shutting down Javed Backend; closing active connections...")
+    if hasattr(app.state, "agent_runtime") and app.state.agent_runtime:
+        try:
+            await app.state.agent_runtime.close()
+        except Exception as e:
+            logger.warning("Error closing agent runtime: %s", e)
+
     await app.state.ws_manager.close_all(code=1001, reason="Server shutting down")
     logger.info("Javed Backend shutdown complete")
 
@@ -90,6 +104,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ws_manager = WebSocketManager(app_settings)
     app.state.sse_manager = SSEManager()
     app.state.openrouter_service = OpenRouterService(app_settings)
+    app.state.agent_runtime = AgentRuntimeManager(
+        app_settings,
+        openrouter_service=app.state.openrouter_service,
+    )
 
     # 1. Body Size Limiter Middleware
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=app_settings.max_request_body_bytes)

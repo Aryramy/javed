@@ -91,6 +91,16 @@ class Settings(BaseModel):
         description="Application origin for OpenRouter analytics",
     )
 
+    # Deep Agents & LangGraph Runtime Settings
+    agent_checkpoint_db_path: str = Field(
+        default="data/checkpoints.db",
+        description="Path to SQLite database for LangGraph checkpoints",
+    )
+    agent_stream_timeout_seconds: float = Field(
+        default=120.0,
+        description="Timeout for agent stream runs in seconds",
+    )
+
 
 def get_settings() -> Settings:
     """Load settings from environment variables with safe defaults."""
@@ -116,9 +126,14 @@ def get_settings() -> Settings:
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
         "openrouter_auto_router_cost_tier": os.getenv("OPENROUTER_AUTO_ROUTER_COST_TIER", "low"),
         "openrouter_system_prompt": os.getenv("OPENROUTER_SYSTEM_PROMPT"),
+        "agent_checkpoint_db_path": os.getenv(
+            "JAVED_AGENT_CHECKPOINT_DB_PATH", "data/checkpoints.db"
+        ),
+        "agent_stream_timeout_seconds": float(
+            os.getenv("JAVED_AGENT_STREAM_TIMEOUT_SECONDS", "120.0")
+        ),
     }
     if allowed_origins:
         kwargs["allowed_origins"] = allowed_origins
 
     return Settings(**kwargs)
-
