@@ -12,13 +12,13 @@
 | Parameter | Current Value | Authority Reference |
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
-| **Current Stage** | **Stage 2 / BRICK-004 — Deep Agents & LangGraph Runtime (VERIFIED)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
-| **Current Brick** | **BRICK-004: Deep Agents & LangGraph Runtime** | [BRICK-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-004.md) |
-| **Brick Status** | **`VERIFIED`** | Formally Accepted by Project Owner on 2026-10-25 |
+| **Current Stage** | **Stage 2 / BRICK-005 — Dynamic MCP Tool Registry & Security Gateway** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
+| **Current Brick** | **BRICK-005: Dynamic MCP Tool Registry, Validation, Permissions (HITL)** | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) |
+| **Brick Status** | **`IN PROGRESS` (Phase 5: VERIFIED — READY FOR OWNER ACCEPTANCE)** | Phase 5B E2E & Cross-Process Isolation Verified |
 | **Last Verified Milestone** | **BRICK-004: Deep Agents & LangGraph Runtime (Security Hardened)** | Owner Approval 2026-10-25 |
-| **Application Code** | **BRICK-004 Fully Implemented & Verified** (Deep Agents SDK + LangGraph cyclic execution + SQLite Checkpointer + Task Planning write_todos + 3-Layer Positive Allowlist + Concurrency Serialization) | Strict execution boundary |
-| **Installed Packages** | **Python 3.12.15, uv 0.13.5, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-004 VERIFIED — READY FOR BRICK-005** | Authoritative Status |
+| **Application Code** | **BRICK-005 Phase 5 & 5B Verified** (Real Chrome Playwright HITL E2E approve and reject scenarios passed, genuine cross-process recovery verified across distinct OS subprocesses with PIDs 21876 & 23876, execution identity and policy version binding verified, duplicate dispatch prevented, same-origin and sec-fetch-site protection enforced, 2/2 Chrome Playwright E2E passed, 1/1 cross-process recovery pytest passed, 27/27 HITL pytests passed, 20/20 gateway pytests passed, 46/46 frontend Vitest tests passed) | Strict execution boundary |
+| **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
+| **Overall Status** | **BRICK-005 IN PROGRESS — Phase 5: VERIFIED — READY FOR OWNER ACCEPTANCE** | Authoritative Status |
 
 ---
 
@@ -49,7 +49,7 @@ stateDiagram-v2
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
-| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `NOT STARTED` | Pending | Blocked pending BRICK-004 verification. |
+| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `IN PROGRESS` | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) | Phase 0–4 verified; Phase 5 (Durable Human-in-the-Loop Approval & Resumption) complete: 27/27 HITL tests passed, 70/70 backend MCP tests passed, 46/46 frontend Vitest tests passed. Ready for review. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
@@ -77,9 +77,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-004 implementation and verification complete. Status set to `READY FOR ACCEPTANCE`.
-2. **Next Authorized Action**: Await explicit Project Owner review and approval of [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) before advancing to BRICK-005.
-3. **Strict Stop Condition**: STOP condition enforced. Do not push to remote Git or begin BRICK-005 without authorization.
+1. **Current Action**: BRICK-005 Phase 5 & 5B (Final HITL Browser, Persistence & Security Verification) complete. Status set to `IN PROGRESS` (Phase 5: VERIFIED — READY FOR OWNER ACCEPTANCE).
+2. **Next Authorized Action**: Await explicit Project Owner review and approval of Phase 5/5B deliverables before proceeding to Phase 6 (Developer Mode MCP Console & Administration Interfaces).
+3. **Strict Stop Condition**: STOP condition enforced. Phase 5 VERIFIED — READY FOR OWNER ACCEPTANCE, BRICK-005 IN PROGRESS, Phase 6 NOT STARTED. Do not push to remote Git, modify master, or begin Phase 6 without authorization.
 
 ---
 
@@ -111,4 +111,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-25 | TASK-041 | Deep Agents Harness, Zero-Trust Tool Gating & SQLite Persistence | VERIFIED | 49/49 Pytest Passed |
 | 2026-10-25 | TASK-042 | React Agent Mode UI, Live Task Plan Panel & Dev Mode Telemetry | VERIFIED | 41/41 Vitest Passed |
 | 2026-10-25 | TASK-043 | Playwright Chrome E2E Suite (Scenarios A, B, C, D & Regressions) | VERIFIED | 19/19 Playwright Passed |
-| 2026-10-25 | TASK-044 | Deliver REPORT-004.md & Milestone Stop Condition | READY FOR ACCEPTANCE | REPORT-004.md Drafted |
+| 2026-10-25 | TASK-044 | Deliver REPORT-004.md & Milestone Stop Condition | VERIFIED | Owner Accepted (Commit 094e7e2) |
+| 2026-10-26 | TASK-050 | BRICK-005 Phase 0 Baseline Preflight & Phase 1 Dependency Audit | VERIFIED | Owner Accepted |
+| 2026-10-26 | TASK-050 | BRICK-005 Phase 2 Dynamic MCP Tool Registry & Security Gating | VERIFIED | Owner Accepted (12/12 Pytest Reconciled) |
+| 2026-10-26 | TASK-050 | BRICK-005 Phase 3 Official Time MCP Server Integration & Runtime | VERIFIED | Owner Accepted (11/11 Live Pytest Passed) |
+| 2026-10-26 | TASK-050 | BRICK-005 Phase 4 Secure Host MCP Tool Gateway & 3-Layer Auth | VERIFIED | Owner Accepted (20/20 Pytest Passed) |
+| 2026-10-26 | TASK-050 | BRICK-005 Phase 5 & 5B HITL Chrome E2E, Cross-Process & Security Gate | VERIFIED — READY FOR OWNER ACCEPTANCE | 2/2 Chrome E2E, 1/1 Cross-Process Pytest, 27/27 HITL Pytest, 46/46 Vitest Passed |

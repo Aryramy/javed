@@ -60,12 +60,28 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
     """Enforces a strict positive allowlist across model-visible exposure and execution.
 
     Layer 1: Filters tools during wrap_model_call / awrap_model_call so ONLY
-             tools in ALLOWED_TOOLS are presented in the model request.
+             tools in ALLOWED_TOOLS and gateway-authorized model-visible tools are presented.
     Layer 2: Intercepts tools during wrap_tool_call / awrap_tool_call before execution
-             and returns a Security Violation ToolMessage for any unauthorized tool name.
+             and returns a Security Violation ToolMessage for any unauthorized tool name or args.
     """
 
     name: str = "PositiveToolAllowlistMiddleware"
+
+    def __init__(self, gateway: Any | None = None) -> None:
+        super().__init__()
+        self.gateway = gateway
+
+    def _get_model_visible_tools(self) -> frozenset[str]:
+        if self.gateway is not None:
+            return ALLOWED_TOOLS | frozenset(
+                self.gateway.get_model_visible_tools(include_approval_required=True)
+            )
+        return ALLOWED_TOOLS
+
+    def _get_executable_tools(self) -> frozenset[str]:
+        if self.gateway is not None:
+            return ALLOWED_TOOLS | frozenset(self.gateway.get_executable_tools())
+        return ALLOWED_TOOLS
 
     def wrap_model_call(
         self,
@@ -73,7 +89,8 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
         handler: Callable[[ModelRequest[Any]], ModelResponse[Any]],
     ) -> ModelResponse[Any]:
         """Expose only allowlisted tools to the model."""
-        filtered_tools = [t for t in request.tools if _get_tool_name(t) in ALLOWED_TOOLS]
+        allowed = self._get_model_visible_tools()
+        filtered_tools = [t for t in request.tools if _get_tool_name(t) in allowed]
         return handler(request.override(tools=filtered_tools))
 
     async def awrap_model_call(
@@ -82,28 +99,51 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
         handler: Callable[[ModelRequest[Any]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any] | AIMessage:
         """Async variant: expose only allowlisted tools to the model."""
-        filtered_tools = [t for t in request.tools if _get_tool_name(t) in ALLOWED_TOOLS]
+        allowed = self._get_model_visible_tools()
+        filtered_tools = [t for t in request.tools if _get_tool_name(t) in allowed]
         return await handler(request.override(tools=filtered_tools))
 
     def _block_unauthorized_call(self, request: ToolCallRequest) -> ToolMessage | None:
         """Validate tool execution against positive allowlist before host execution."""
         tool_name = request.tool_call.get("name", "")
-        if tool_name not in ALLOWED_TOOLS:
+
+        # Internal agent tools (e.g. write_todos)
+        if tool_name in ALLOWED_TOOLS:
+            return None
+
+        # MCP Gateway execution validation (Layer 2)
+        if self.gateway is not None:
+            args = request.tool_call.get("args")
+            args_dict = args if isinstance(args, dict) else {}
+            is_eligible, err = self.gateway.verify_execution_eligibility(tool_name, args_dict)
+            if is_eligible:
+                return None
             logger.warning(
-                "SECURITY ALERT: Blocked unauthorized tool execution attempt for '%s'",
+                "SECURITY ALERT: Blocked unauthorized tool execution attempt for '%s': %s",
                 tool_name,
+                err,
             )
             return ToolMessage(
-                content=(
-                    f"Security Violation: Tool '{tool_name}' is unauthorized and prohibited by "
-                    "BRICK-004 policy. Only authorized tools are permitted: "
-                    f"{sorted(ALLOWED_TOOLS)}"
-                ),
+                content=f"Security Violation: Tool '{tool_name}' execution denied: {err}",
                 tool_call_id=request.tool_call.get("id") or "",
                 name=tool_name,
                 status="error",
             )
-        return None
+
+        logger.warning(
+            "SECURITY ALERT: Blocked unauthorized tool execution attempt for '%s'",
+            tool_name,
+        )
+        return ToolMessage(
+            content=(
+                f"Security Violation: Tool '{tool_name}' is unauthorized and prohibited by "
+                "BRICK-004/BRICK-005 policy. Only authorized tools are permitted: "
+                f"{sorted(ALLOWED_TOOLS)}"
+            ),
+            tool_call_id=request.tool_call.get("id") or "",
+            name=tool_name,
+            status="error",
+        )
 
     def wrap_tool_call(
         self,
@@ -157,21 +197,24 @@ def ensure_agent_security_profile() -> None:
     )
 
 
-def assert_safe_tools(tools_by_name: dict[str, Any]) -> None:
+def assert_safe_tools(tools_by_name: dict[str, Any], gateway: Any | None = None) -> None:
     """Verify that only authorized tools exist in the tool registry (Strict Positive Allowlist).
 
     Raises:
-        PermissionError: If any tool outside ALLOWED_TOOLS is detected in the registry.
+        PermissionError: If any tool outside authorized list is detected in the registry.
     """
-    unauthorized = set(tools_by_name.keys()) - ALLOWED_TOOLS
+    allowed = set(ALLOWED_TOOLS)
+    if gateway is not None:
+        allowed |= set(gateway.get_executable_tools())
+    unauthorized = set(tools_by_name.keys()) - allowed
     if unauthorized:
         raise PermissionError(
             f"Security Violation: Unauthorized tools in agent registry: {sorted(unauthorized)}. "
-            f"Only authorized tools are permitted: {sorted(ALLOWED_TOOLS)}"
+            f"Only authorized tools are permitted: {sorted(allowed)}"
         )
 
 
-def assert_safe_agent_runtime(agent: CompiledStateGraph) -> None:
+def assert_safe_agent_runtime(agent: CompiledStateGraph, gateway: Any | None = None) -> None:
     """Fail-closed runtime verification on compiled Deep Agent graph.
 
     Verifies that the compiled agent graph includes PositiveToolAllowlistMiddleware
@@ -186,5 +229,15 @@ def assert_safe_agent_runtime(agent: CompiledStateGraph) -> None:
     # Verify that the graph was compiled and has nodes
     if not hasattr(agent, "nodes") or not agent.nodes:
         raise PermissionError("Security Violation: Agent graph is empty or uncompiled.")
+
+    # Verify tools node and middleware interceptor are present
+    if "tools" in agent.nodes:
+        tools_node = agent.nodes["tools"]
+        bound = getattr(tools_node, "bound", None)
+        if bound and hasattr(bound, "_wrap_tool_call") and not bound._wrap_tool_call:
+            raise PermissionError("Security Violation: Tool node is missing execution interceptor.")
+
+    if gateway is not None:
+        gateway.assert_safe_inventory([t for t in gateway.build_langchain_tools()])
 
     logger.debug("assert_safe_agent_runtime: Passed fail-closed startup validation.")

@@ -5,12 +5,15 @@ positive tool allowlist enforcement, and per-thread concurrency serialization.
 """
 
 import asyncio
+import json
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
@@ -22,9 +25,11 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_openrouter import ChatOpenRouter
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 
 from javed.agent.checkpointer import AgentCheckpointerManager
 from javed.agent.security import (
@@ -35,6 +40,8 @@ from javed.agent.security import (
     ensure_agent_security_profile,
 )
 from javed.config import Settings, get_settings
+from javed.mcp.approval_store import ApprovalStore
+from javed.mcp.gateway import SecureMCPGateway, current_approval_context
 from javed.schemas.agent import (
     AgentRuntimeStatusResponse,
     AgentStreamEvent,
@@ -44,7 +51,9 @@ from javed.schemas.agent import (
     extract_message_text,
     validate_thread_id,
 )
+from javed.schemas.approval import ApprovalRecord, compute_argument_digest
 from javed.schemas.chat import ChatMessage, StreamUsage
+from javed.schemas.mcp import parse_namespaced_tool_id
 from javed.services.openrouter import (
     AUTO_ROUTER_MODEL_ID,
     SUPPORTED_COST_TIERS,
@@ -115,6 +124,91 @@ AGENT_SYSTEM_PROMPT: str = (
 )
 
 
+class DeterministicScriptedE2EModel(BaseChatModel):
+    """Deterministic scripted model used strictly for automated E2E browser verification."""
+
+    @property
+    def _llm_type(self) -> str:
+        return "deterministic-scripted-e2e-model"
+
+    def _generate(
+        self,
+        messages: Any,
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        tool_messages = [
+            m
+            for m in messages
+            if getattr(m, "type", None) == "tool" or type(m).__name__ == "ToolMessage"
+        ]
+        if tool_messages:
+            last_tool_msg = tool_messages[-1]
+            content_str = str(last_tool_msg.content)
+            if "cancelled" in content_str.lower() or "rejected" in content_str.lower():
+                resp_text = (
+                    "The time request was rejected by human operator. Execution safely cancelled."
+                )
+            else:
+                resp_text = f"The time operation was authorized and executed: {content_str}."
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=resp_text))])
+
+        call_id = f"call_e2e_{uuid.uuid4().hex[:8]}"
+        tool_call = {
+            "name": "time__get_current_time",
+            "args": {"timezone": "UTC"},
+            "id": call_id,
+            "type": "tool_call",
+        }
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content="", tool_calls=[tool_call]))]
+        )
+
+    async def _agenerate(
+        self,
+        messages: Any,
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        return self._generate(messages, stop, run_manager, **kwargs)
+
+    async def _astream(
+        self,
+        messages: Any,
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        res = self._generate(messages, stop, run_manager, **kwargs)
+        msg = res.generations[0].message
+        if msg.tool_calls:
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content="",
+                    tool_call_chunks=[
+                        {
+                            "name": tc["name"],
+                            "args": json.dumps(tc["args"]),
+                            "id": tc["id"],
+                            "index": 0,
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                )
+            )
+        else:
+            text = str(msg.content)
+            words = text.split(" ")
+            for i in range(0, len(words), 3):
+                chunk = " ".join(words[i : i + 3]) + " "
+                yield ChatGenerationChunk(message=AIMessageChunk(content=chunk))
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        return self
+
+
 class AgentRuntimeManager:
     """Manages Deep Agents execution lifecycle, SQLite checkpointing, and SSE event streaming."""
 
@@ -124,6 +218,8 @@ class AgentRuntimeManager:
         openrouter_service: OpenRouterService | None = None,
         checkpointer_manager: AgentCheckpointerManager | None = None,
         model_override: BaseChatModel | None = None,
+        mcp_gateway: SecureMCPGateway | None = None,
+        approval_store: ApprovalStore | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.openrouter_service = openrouter_service or OpenRouterService(self.settings)
@@ -131,25 +227,34 @@ class AgentRuntimeManager:
             self.settings.agent_checkpoint_db_path
         )
         self.model_override = model_override
+        self.approval_store = approval_store or ApprovalStore(self.settings.agent_approvals_db_path)
+        if mcp_gateway is not None and mcp_gateway.approval_store is None:
+            mcp_gateway.approval_store = self.approval_store
+        self.mcp_gateway = mcp_gateway
         self.thread_lock_manager = ThreadLockManager()
         self._is_initialized = False
 
     async def initialize(self) -> None:
-        """Initialize the agent checkpointer and enforce Zero-Trust security profile."""
+        """Initialize checkpointer, approval store, and enforce Zero-Trust security profile."""
         if self._is_initialized:
             return
 
         ensure_agent_security_profile()
         await self.checkpointer_manager.initialize_async()
+        await self.approval_store.initialize()
+        if self.mcp_gateway is not None and self.mcp_gateway.approval_store is None:
+            self.mcp_gateway.approval_store = self.approval_store
         self._is_initialized = True
         logger.info(
-            "AgentRuntimeManager initialized (checkpoints: %s)",
+            "AgentRuntimeManager initialized (checkpoints: %s, approvals: %s)",
             self.checkpointer_manager.db_path,
+            self.approval_store.db_path,
         )
 
     async def close(self) -> None:
-        """Close checkpointer connections cleanly."""
+        """Close checkpointer and approval store cleanly."""
         await self.checkpointer_manager.close()
+        await self.approval_store.close()
         self._is_initialized = False
         logger.info("AgentRuntimeManager closed")
 
@@ -157,6 +262,9 @@ class AgentRuntimeManager:
         """Construct the LLM model instance for the agent run."""
         if self.model_override is not None:
             return self.model_override
+
+        if os.getenv("JAVED_E2E_TEST_MODE") == "1":
+            return DeterministicScriptedE2EModel()
 
         api_key = self.settings.openrouter_api_key
         if not api_key:
@@ -194,15 +302,32 @@ class AgentRuntimeManager:
         model: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
     ) -> CompiledStateGraph:
-        """Construct compiled Deep Agent state graph with safe backend and positive allowlist."""
+        """Construct compiled Deep Agent state graph with safe backend,
+        positive allowlist, and HITL.
+        """
+        mcp_tools = self.mcp_gateway.build_langchain_tools() if self.mcp_gateway else []
+        middleware = [
+            TodoListMiddleware(),
+            PositiveToolAllowlistMiddleware(gateway=self.mcp_gateway),
+        ]
+
+        approval_tools = self.mcp_gateway.get_approval_required_tools() if self.mcp_gateway else []
+        interrupt_on = (
+            {tid: {"allowed_decisions": ["approve", "reject"]} for tid in approval_tools}
+            if approval_tools
+            else None
+        )
+
         agent = create_deep_agent(
             model=model,
+            tools=mcp_tools,
             system_prompt=AGENT_SYSTEM_PROMPT,
-            middleware=[TodoListMiddleware(), PositiveToolAllowlistMiddleware()],
+            middleware=middleware,
             backend=StateBackend(),
             checkpointer=checkpointer,
+            interrupt_on=interrupt_on,
         )
-        assert_safe_agent_runtime(agent)
+        assert_safe_agent_runtime(agent, gateway=self.mcp_gateway)
         return agent
 
     async def stream_agent(self, request: AgentStreamRequest) -> AsyncIterator[AgentStreamEvent]:
@@ -305,6 +430,31 @@ class AgentRuntimeManager:
                             },
                         )
 
+                    # Track external / MCP tool starts
+                    elif event_type == "on_tool_start":
+                        yield AgentStreamEvent(
+                            event="tool_started",
+                            data={
+                                "run_id": run_id,
+                                "thread_id": validated_thread_id,
+                                "tool": ev_name,
+                                "input": ev_data.get("input", {}),
+                            },
+                        )
+
+                    # Track external / MCP tool completions
+                    elif event_type == "on_tool_end":
+                        output_val = ev_data.get("output", "")
+                        yield AgentStreamEvent(
+                            event="tool_completed",
+                            data={
+                                "run_id": run_id,
+                                "thread_id": validated_thread_id,
+                                "tool": ev_name,
+                                "output": str(output_val)[:1000],
+                            },
+                        )
+
                     # Stream model tokens
                     elif event_type == "on_chat_model_stream":
                         chunk = ev_data.get("chunk")
@@ -350,6 +500,66 @@ class AgentRuntimeManager:
                             if isinstance(item, dict)
                         ]
 
+                # Check if execution paused on a Human-in-the-Loop interrupt
+                interrupted_approvals: list[ApprovalRecord] = []
+                if final_state and final_state.tasks:
+                    for task in final_state.tasks:
+                        if task.interrupts:
+                            for intr in task.interrupts:
+                                intr_val = intr.value
+                                intr_id = getattr(intr, "id", str(uuid.uuid4()))
+                                action_requests = (
+                                    intr_val.get("action_requests", [])
+                                    if isinstance(intr_val, dict)
+                                    else []
+                                )
+                                for act in action_requests:
+                                    tool_name = act.get("name", "")
+                                    tool_args = act.get("args", {})
+                                    tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
+                                    if final_state.values.get("messages"):
+                                        for m in reversed(final_state.values["messages"]):
+                                            if isinstance(m, AIMessage) and m.tool_calls:
+                                                for tc in m.tool_calls:
+                                                    if tc.get("name") == tool_name:
+                                                        tool_call_id = tc.get("id") or tool_call_id
+                                                        break
+                                                break
+
+                                    server_id = "unknown"
+                                    tool_fingerprint = ""
+                                    policy_ver = 0
+                                    if self.mcp_gateway:
+                                        try:
+                                            server_id, _ = parse_namespaced_tool_id(tool_name)
+                                        except Exception:
+                                            server_id = "unknown"
+                                        t_rec = self.mcp_gateway.registry.get_tool(tool_name)
+                                        if t_rec:
+                                            tool_fingerprint = t_rec.fingerprint
+                                        policy_ver = self.mcp_gateway.policy_version
+
+                                    arg_digest = compute_argument_digest(tool_args)
+                                    approval_id = f"appr_{uuid.uuid4().hex[:12]}"
+                                    rec = ApprovalRecord(
+                                        approval_id=approval_id,
+                                        interrupt_id=intr_id,
+                                        run_id=run_id,
+                                        thread_id=validated_thread_id,
+                                        server_id=server_id,
+                                        tool_id=tool_name,
+                                        tool_call_id=tool_call_id,
+                                        arguments=tool_args,
+                                        argument_digest=arg_digest,
+                                        tool_fingerprint=tool_fingerprint,
+                                        policy_version=policy_ver,
+                                        created_at=datetime.now(UTC),
+                                        status="pending",
+                                        dispatch_status="not_dispatched",
+                                    )
+                                    saved_rec = await self.approval_store.create_approval(rec)
+                                    interrupted_approvals.append(saved_rec)
+
                 # Emit checkpoint_saved
                 yield AgentStreamEvent(
                     event="checkpoint_saved",
@@ -359,6 +569,35 @@ class AgentRuntimeManager:
                         "checkpoint_id": str(checkpoint_id) if checkpoint_id else None,
                     },
                 )
+
+                # If paused for approval, emit approval_required and release the lock
+                # without emitting run_completed
+                if interrupted_approvals:
+                    logger.info(
+                        "Agent execution paused for human approval on thread %s (%d pending calls)",
+                        validated_thread_id,
+                        len(interrupted_approvals),
+                    )
+                    for appr in interrupted_approvals:
+                        yield AgentStreamEvent(
+                            event="approval_required",
+                            data={
+                                "approval_id": appr.approval_id,
+                                "interrupt_id": appr.interrupt_id,
+                                "run_id": run_id,
+                                "thread_id": validated_thread_id,
+                                "server_id": appr.server_id,
+                                "tool_id": appr.tool_id,
+                                "tool_call_id": appr.tool_call_id,
+                                "arguments": appr.arguments,
+                                "argument_digest": appr.argument_digest,
+                                "tool_fingerprint": appr.tool_fingerprint,
+                                "policy_version": appr.policy_version,
+                                "status": "pending",
+                                "created_at": appr.created_at.isoformat(),
+                            },
+                        )
+                    return
 
                 # Reconcile final content
                 final_content = "".join(accumulated_chunks)
@@ -462,6 +701,299 @@ class AgentRuntimeManager:
                     },
                 )
 
+    async def resume_agent(
+        self,
+        thread_id: str,
+        approval_id: str,
+        decision: Literal["approve", "reject"],
+        reason: str | None = None,
+        model_name_override: str | None = None,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Resume an interrupted agent run following human approval or rejection."""
+        validated_thread_id = validate_thread_id(thread_id)
+
+        if not self._is_initialized:
+            await self.initialize()
+
+        run_id = f"run_resume_{uuid.uuid4().hex[:8]}"
+
+        async with self.thread_lock_manager.lock_thread(validated_thread_id):
+            approval = await self.approval_store.get_approval(approval_id)
+            if not approval:
+                raise KeyError(f"Approval '{approval_id}' not found.")
+            if approval.thread_id != validated_thread_id:
+                raise PermissionError(
+                    f"Wrong thread ID. Approval belongs to thread '{approval.thread_id}', "
+                    f"not '{validated_thread_id}'."
+                )
+            if approval.status != "pending":
+                raise ValueError(
+                    f"Approval '{approval_id}' cannot be decided; "
+                    f"current status is '{approval.status}'."
+                )
+
+            # Atomically record decision in durable store
+            updated_approval = await self.approval_store.record_decision(
+                approval_id=approval_id,
+                decision=decision,
+                expected_thread_id=validated_thread_id,
+                decider="human_user",
+                reason=reason,
+            )
+
+            # Emit decision lifecycle event
+            if decision == "approve":
+                yield AgentStreamEvent(
+                    event="approval_approved",
+                    data={
+                        "approval_id": approval_id,
+                        "thread_id": validated_thread_id,
+                        "run_id": run_id,
+                    },
+                )
+            else:
+                yield AgentStreamEvent(
+                    event="approval_rejected",
+                    data={
+                        "approval_id": approval_id,
+                        "thread_id": validated_thread_id,
+                        "run_id": run_id,
+                        "reason": reason,
+                    },
+                )
+
+            # Emit agent_resumed lifecycle event
+            yield AgentStreamEvent(
+                event="agent_resumed",
+                data={
+                    "approval_id": approval_id,
+                    "thread_id": validated_thread_id,
+                    "run_id": run_id,
+                    "decision": decision,
+                },
+            )
+
+            start_time = time.time()
+            accumulated_chunks: list[str] = []
+            token_index = 0
+            todos: list[AgentTodoItem] = []
+            upstream_reported_usage: dict[str, Any] | None = None
+            selected_model: str | None = None
+            model_name = model_name_override or self.settings.openrouter_default_model
+            effective_cost_tier = self.settings.openrouter_auto_router_cost_tier or "low"
+
+            dec_item: dict[str, Any] = {"type": decision}
+            if reason and decision == "reject":
+                dec_item["message"] = reason
+            command = Command(resume={"decisions": [dec_item]})
+
+            try:
+                # Bind validated approval record to current execution context
+                token = current_approval_context.set(updated_approval)
+                try:
+                    checkpointer = await self.checkpointer_manager.get_async_checkpointer()
+                    model_req = AgentStreamRequest(
+                        thread_id=validated_thread_id,
+                        message="[resumed approval invocation]",
+                        model=model_name_override,
+                    )
+                    model = self.create_model(model_req)
+                    agent = self.create_agent(model=model, checkpointer=checkpointer)
+                    config = {"configurable": {"thread_id": validated_thread_id}}
+
+                    async for ev in agent.astream_events(command, config=config, version="v2"):
+                        event_type = ev.get("event")
+                        ev_name = ev.get("name")
+                        ev_data = ev.get("data", {})
+
+                        if event_type == "on_tool_start":
+                            if ev_name != "write_todos":
+                                yield AgentStreamEvent(
+                                    event="tool_started",
+                                    data={
+                                        "run_id": run_id,
+                                        "thread_id": validated_thread_id,
+                                        "tool": ev_name,
+                                        "input": ev_data.get("input", {}),
+                                    },
+                                )
+
+                        elif event_type == "on_tool_end":
+                            if ev_name != "write_todos":
+                                output_val = ev_data.get("output", "")
+                                yield AgentStreamEvent(
+                                    event="tool_completed",
+                                    data={
+                                        "run_id": run_id,
+                                        "thread_id": validated_thread_id,
+                                        "tool": ev_name,
+                                        "output": str(output_val)[:1000],
+                                    },
+                                )
+
+                        elif event_type == "on_chat_model_stream":
+                            chunk = ev_data.get("chunk")
+                            if isinstance(chunk, AIMessageChunk) and chunk.content:
+                                text = extract_message_text(chunk.content)
+                                if text:
+                                    accumulated_chunks.append(text)
+                                    yield AgentStreamEvent(
+                                        event="model_streaming",
+                                        data={
+                                            "run_id": run_id,
+                                            "thread_id": validated_thread_id,
+                                            "delta": text,
+                                            "index": token_index,
+                                        },
+                                    )
+                                    token_index += 1
+
+                        elif event_type == "on_chat_model_end":
+                            output = ev_data.get("output")
+                            if output and hasattr(output, "llm_output") and output.llm_output:
+                                llm_out = output.llm_output
+                                if "token_usage" in llm_out:
+                                    upstream_reported_usage = llm_out["token_usage"]
+                                if "model_name" in llm_out:
+                                    selected_model = llm_out["model_name"]
+
+                    final_state = await agent.aget_state(config)
+                    checkpoint_id = None
+                    if final_state and final_state.config:
+                        checkpoint_id = final_state.config.get("configurable", {}).get(
+                            "checkpoint_id"
+                        )
+                        if "todos" in final_state.values:
+                            raw_todos = final_state.values.get("todos", [])
+                            todos = [
+                                AgentTodoItem(
+                                    id=f"todo_{idx + 1}",
+                                    content=item.get("content", ""),
+                                    status=item.get("status", "pending"),
+                                )
+                                for idx, item in enumerate(raw_todos)
+                                if isinstance(item, dict)
+                            ]
+
+                    yield AgentStreamEvent(
+                        event="checkpoint_saved",
+                        data={
+                            "run_id": run_id,
+                            "thread_id": validated_thread_id,
+                            "checkpoint_id": str(checkpoint_id) if checkpoint_id else None,
+                        },
+                    )
+
+                    final_content = "".join(accumulated_chunks)
+                    if not final_content and final_state and final_state.values.get("messages"):
+                        messages = final_state.values["messages"]
+                        for msg in reversed(messages):
+                            if isinstance(msg, AIMessage):
+                                text = extract_message_text(msg.content)
+                                if text:
+                                    final_content = text
+                                    break
+
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    if upstream_reported_usage:
+                        prompt_tokens = upstream_reported_usage.get(
+                            "prompt_tokens", len(model_req.message) // 4
+                        )
+                        completion_tokens = upstream_reported_usage.get(
+                            "completion_tokens", len(final_content) // 4
+                        )
+                        total_tokens = int(
+                            upstream_reported_usage.get(
+                                "total_tokens", prompt_tokens + completion_tokens
+                            )
+                        )
+                        up_cost = upstream_reported_usage.get("cost")
+                        cost_usd = self.openrouter_service.calculate_cost(
+                            model_id=model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            upstream_cost=float(up_cost) if up_cost is not None else None,
+                            selected_model=selected_model,
+                        )
+                        usage = StreamUsage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            cost_usd=cost_usd,
+                            upstream_cost=float(up_cost) if up_cost is not None else None,
+                            is_estimated=False,
+                            cost_source="upstream" if up_cost is not None else "rate_card",
+                            selected_model=selected_model or model_name,
+                            requested_model=model_name,
+                            cost_tier=effective_cost_tier,
+                            session_id=None,
+                        )
+                    else:
+                        prompt_tokens = max(1, len(model_req.message) // 4)
+                        completion_tokens = max(1, len(final_content) // 4)
+                        cost_usd = self.openrouter_service.calculate_cost(
+                            model_id=model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            selected_model=selected_model,
+                        )
+                        usage = StreamUsage(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=prompt_tokens + completion_tokens,
+                            cost_usd=cost_usd,
+                            upstream_cost=None,
+                            is_estimated=True,
+                            cost_source="character_estimate",
+                            selected_model=selected_model or model_name,
+                            requested_model=model_name,
+                            cost_tier=effective_cost_tier,
+                            session_id=None,
+                        )
+
+                    yield AgentStreamEvent(
+                        event="run_completed",
+                        data={
+                            "run_id": run_id,
+                            "thread_id": validated_thread_id,
+                            "content": final_content,
+                            "todos": [t.model_dump() for t in todos],
+                            "usage": usage.model_dump(),
+                            "elapsed_ms": elapsed_ms,
+                            "checkpoint_id": str(checkpoint_id) if checkpoint_id else None,
+                        },
+                    )
+                finally:
+                    current_approval_context.reset(token)
+
+            except asyncio.CancelledError:
+                logger.info("Resumed agent run %s was cancelled by client", run_id)
+                yield AgentStreamEvent(
+                    event="run_cancelled",
+                    data={
+                        "run_id": run_id,
+                        "thread_id": validated_thread_id,
+                        "reason": "client_cancelled",
+                    },
+                )
+                raise
+
+            except Exception as e:
+                logger.error(
+                    "Resume run failed for thread %s: %s",
+                    validated_thread_id,
+                    e,
+                    exc_info=True,
+                )
+                yield AgentStreamEvent(
+                    event="run_failed",
+                    data={
+                        "run_id": run_id,
+                        "thread_id": validated_thread_id,
+                        "error": str(e),
+                    },
+                )
+
     async def get_thread_state(self, thread_id: str) -> AgentThreadStateResponse:
         """Retrieve persisted messages and todo plan items for a specific thread."""
         validated_thread_id = validate_thread_id(thread_id)
@@ -538,11 +1070,15 @@ class AgentRuntimeManager:
         if not self._is_initialized:
             await self.initialize()
 
+        allowed = sorted(list(ALLOWED_TOOLS))
+        if self.mcp_gateway is not None:
+            allowed = sorted(list(ALLOWED_TOOLS | set(self.mcp_gateway.get_executable_tools())))
+
         return AgentRuntimeStatusResponse(
             status="ready",
             checkpointer="sqlite",
             checkpoint_db_path=self.checkpointer_manager.db_path,
             security_profile="zero-trust-planning-only",
-            allowed_tools=sorted(list(ALLOWED_TOOLS)),
+            allowed_tools=allowed,
             excluded_tools=sorted(list(EXCLUDED_TOOLS)),
         )

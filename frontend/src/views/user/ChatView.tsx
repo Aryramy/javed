@@ -18,6 +18,7 @@ import { ModelSelector } from '../../components/chat/ModelSelector';
 import { TokenCostMeter } from '../../components/chat/TokenCostMeter';
 import { MarkdownContent } from '../../components/chat/MarkdownContent';
 import { TaskPlanPanel } from '../../components/chat/TaskPlanPanel';
+import { ApprovalCard } from '../../components/chat/ApprovalCard';
 import { chatService } from '../../services/chatService';
 import { agentService } from '../../services/agentService';
 import { useBackend, useMode } from '../../context';
@@ -31,7 +32,7 @@ import type {
   ModelInfo,
   StreamUsage,
 } from '../../types/chat';
-import type { AgentRunTelemetry, AgentTodoItem } from '../../types/agent';
+import type { AgentRunTelemetry, AgentTodoItem, ApprovalRecord } from '../../types/agent';
 
 const DEFAULT_MODELS: ModelInfo[] = [
   {
@@ -151,6 +152,8 @@ export const ChatView: React.FC = () => {
     'idle' | 'running' | 'planning' | 'streaming' | 'completed' | 'cancelled' | 'error'
   >('idle');
   const [checkpointId, setCheckpointId] = useState<string | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
+  const [isApprovalProcessing, setIsApprovalProcessing] = useState<boolean>(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelInfo[]>(DEFAULT_MODELS);
@@ -233,6 +236,16 @@ export const ChatView: React.FC = () => {
           setCheckpointId(state.checkpoint_id);
         }
       }
+
+      // Recover any pending approvals for this thread
+      try {
+        const approvals = await agentService.listPendingApprovals(targetThreadId);
+        if (approvals && approvals.length > 0) {
+          setPendingApprovals(approvals);
+        }
+      } catch (err) {
+        console.warn('Could not restore approvals for', targetThreadId, err);
+      }
     } catch (e) {
       console.warn('Could not restore thread state for', targetThreadId, e);
     }
@@ -266,6 +279,7 @@ export const ChatView: React.FC = () => {
     setThreadId(newId);
     setMessages([]);
     setAgentTodos([]);
+    setPendingApprovals([]);
     setActiveRunId(null);
     setCheckpointId(null);
     setAgentStatus('idle');
@@ -319,6 +333,7 @@ export const ChatView: React.FC = () => {
     }
     setMessages([]);
     setAgentTodos([]);
+    setPendingApprovals([]);
     setActiveRunId(null);
     setCheckpointId(null);
     setAgentStatus('idle');
@@ -414,6 +429,41 @@ export const ChatView: React.FC = () => {
             },
             onCheckpointSaved: (cpId) => {
               setCheckpointId(cpId);
+            },
+            onApprovalRequired: (approval) => {
+              setPendingApprovals((prev) => {
+                const idx = prev.findIndex((p) => p.approval_id === approval.approval_id);
+                if (idx >= 0) {
+                  return [...prev.slice(0, idx), approval, ...prev.slice(idx + 1)];
+                }
+                return [...prev, approval];
+              });
+              setAgentStatus('idle');
+              setIsStreaming(false);
+              abortControllerRef.current = null;
+            },
+            onApprovalApproved: (data) => {
+              setPendingApprovals((prev) =>
+                prev.map((p) => (p.approval_id === data.approval_id ? { ...p, status: 'approved' } : p))
+              );
+            },
+            onApprovalRejected: (data) => {
+              setPendingApprovals((prev) =>
+                prev.map((p) =>
+                  p.approval_id === data.approval_id
+                    ? { ...p, status: 'rejected', rejection_reason: data.reason }
+                    : p
+                )
+              );
+            },
+            onToolCompleted: (data) => {
+              setPendingApprovals((prev) =>
+                prev.map((p) =>
+                  p.tool_id === data.tool
+                    ? { ...p, dispatch_status: 'completed', result_summary: data.output }
+                    : p
+                )
+              );
             },
             onRunCompleted: (data) => {
               const duration = Math.round(performance.now() - startTime);
@@ -611,6 +661,292 @@ export const ChatView: React.FC = () => {
     },
     [input, isStreaming, messages, selectedModelId, costTier, sessionId, interactionMode, threadId, checkpointId]
   );
+
+  const handleApproveTool = async (approvalId: string) => {
+    setIsApprovalProcessing(true);
+    setIsStreaming(true);
+    setAgentStatus('streaming');
+
+    const assistantMessageId = generateMessageId('assistant');
+    const nowIso = new Date().toISOString();
+    const startTime = performance.now();
+    let targetMessageId = assistantMessageId;
+
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant') {
+        targetMessageId = last.id;
+        return prev.map((m, idx) =>
+          idx === prev.length - 1 ? { ...m, status: 'streaming' as const } : m
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          session_id: sessionId,
+          timestamp: nowIso,
+          status: 'streaming',
+        },
+      ];
+    });
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      await agentService.resumeApprovalStream({
+        approval_id: approvalId,
+        thread_id: threadId,
+        decision: 'approve',
+        signal: controller.signal,
+        onApprovalApproved: (data) => {
+          setPendingApprovals((prev) =>
+            prev.map((p) => (p.approval_id === data.approval_id ? { ...p, status: 'approved' } : p))
+          );
+        },
+        onToolCompleted: (data) => {
+          setPendingApprovals((prev) =>
+            prev.map((p) =>
+              p.tool_id === data.tool
+                ? { ...p, dispatch_status: 'completed', result_summary: data.output }
+                : p
+            )
+          );
+        },
+        onToken: (token) => {
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === targetMessageId);
+            if (index === -1) {
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+                const target = prev[lastIdx];
+                return [
+                  ...prev.slice(0, lastIdx),
+                  { ...target, content: target.content + token, status: 'streaming' as const },
+                ];
+              }
+              return prev;
+            }
+            const target = prev[index];
+            const updated = {
+              ...target,
+              content: target.content + token,
+            };
+            return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
+          });
+        },
+        onRunCompleted: (data) => {
+          const duration = Math.round(performance.now() - startTime);
+          setAgentStatus('completed');
+          if (data.todos && data.todos.length > 0) {
+            setAgentTodos(data.todos);
+          }
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === targetMessageId);
+            if (index === -1) {
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+                const target = prev[lastIdx];
+                return [
+                  ...prev.slice(0, lastIdx),
+                  {
+                    ...target,
+                    content: target.content || data.content,
+                    status: 'complete' as const,
+                    durationMs: duration,
+                  },
+                ];
+              }
+              return prev;
+            }
+            const updated = {
+              ...prev[index],
+              content: prev[index].content || data.content,
+              status: 'complete' as const,
+              durationMs: duration,
+            };
+            return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
+          });
+          setIsStreaming(false);
+          setIsApprovalProcessing(false);
+          abortControllerRef.current = null;
+        },
+        onRunFailed: (errText) => {
+          setAgentStatus('error');
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === targetMessageId);
+            if (index === -1) {
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+                return [
+                  ...prev.slice(0, lastIdx),
+                  {
+                    ...prev[lastIdx],
+                    status: 'error' as const,
+                    content: prev[lastIdx].content || `Resumed execution error: ${errText}`,
+                  },
+                ];
+              }
+              return prev;
+            }
+            return [
+              ...prev.slice(0, index),
+              {
+                ...prev[index],
+                status: 'error' as const,
+                content: prev[index].content || `Resumed execution error: ${errText}`,
+              },
+              ...prev.slice(index + 1),
+            ];
+          });
+          setIsStreaming(false);
+          setIsApprovalProcessing(false);
+          abortControllerRef.current = null;
+        },
+      });
+    } catch (err) {
+      setIsStreaming(false);
+      setIsApprovalProcessing(false);
+      abortControllerRef.current = null;
+      throw err;
+    }
+  };
+
+  const handleRejectTool = async (approvalId: string, reason?: string) => {
+    setIsApprovalProcessing(true);
+    setIsStreaming(true);
+    setAgentStatus('streaming');
+
+    const assistantMessageId = generateMessageId('assistant');
+    const nowIso = new Date().toISOString();
+    const startTime = performance.now();
+    let targetMessageId = assistantMessageId;
+
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant') {
+        targetMessageId = last.id;
+        return prev.map((m, idx) =>
+          idx === prev.length - 1 ? { ...m, status: 'streaming' as const } : m
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          session_id: sessionId,
+          timestamp: nowIso,
+          status: 'streaming',
+        },
+      ];
+    });
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      await agentService.resumeApprovalStream({
+        approval_id: approvalId,
+        thread_id: threadId,
+        decision: 'reject',
+        reason,
+        signal: controller.signal,
+        onApprovalRejected: (data) => {
+          setPendingApprovals((prev) =>
+            prev.map((p) =>
+              p.approval_id === data.approval_id
+                ? { ...p, status: 'rejected', rejection_reason: data.reason }
+                : p
+            )
+          );
+        },
+        onToken: (token) => {
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === targetMessageId);
+            if (index === -1) {
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+                const target = prev[lastIdx];
+                return [
+                  ...prev.slice(0, lastIdx),
+                  { ...target, content: target.content + token, status: 'streaming' as const },
+                ];
+              }
+              return prev;
+            }
+            const target = prev[index];
+            const updated = {
+              ...target,
+              content: target.content + token,
+            };
+            return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
+          });
+        },
+        onRunCompleted: (data) => {
+          const duration = Math.round(performance.now() - startTime);
+          setAgentStatus('completed');
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === targetMessageId);
+            if (index === -1) {
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+                const target = prev[lastIdx];
+                return [
+                  ...prev.slice(0, lastIdx),
+                  {
+                    ...target,
+                    content: target.content || data.content,
+                    status: 'complete' as const,
+                    durationMs: duration,
+                  },
+                ];
+              }
+              return prev;
+            }
+            const updated = {
+              ...prev[index],
+              content: prev[index].content || data.content,
+              status: 'complete' as const,
+              durationMs: duration,
+            };
+            return [...prev.slice(0, index), updated, ...prev.slice(index + 1)];
+          });
+          setIsStreaming(false);
+          setIsApprovalProcessing(false);
+          abortControllerRef.current = null;
+        },
+        onRunFailed: (errText) => {
+          setAgentStatus('error');
+          setMessages((prev) => {
+            const index = prev.findIndex((m) => m.id === assistantMessageId);
+            if (index === -1) return prev;
+            return [
+              ...prev.slice(0, index),
+              {
+                ...prev[index],
+                status: 'error' as const,
+                content: prev[index].content || `Resumed rejection error: ${errText}`,
+              },
+              ...prev.slice(index + 1),
+            ];
+          });
+          setIsStreaming(false);
+          setIsApprovalProcessing(false);
+          abortControllerRef.current = null;
+        },
+      });
+    } catch (err) {
+      setIsStreaming(false);
+      setIsApprovalProcessing(false);
+      abortControllerRef.current = null;
+      throw err;
+    }
+  };
 
   const runtime = useExternalStoreRuntime({
     messages,
@@ -815,6 +1151,21 @@ export const ChatView: React.FC = () => {
                 activeRunId={activeRunId ?? undefined}
                 isStreaming={isStreaming}
               />
+            )}
+
+            {/* Human In The Loop Tool Call Approvals */}
+            {interactionMode === 'agent' && pendingApprovals.length > 0 && (
+              <div id="approvals-section" data-testid="approvals-section" className="space-y-2">
+                {pendingApprovals.map((approval) => (
+                  <ApprovalCard
+                    key={approval.approval_id}
+                    approval={approval}
+                    onApprove={handleApproveTool}
+                    onReject={handleRejectTool}
+                    isProcessing={isApprovalProcessing}
+                  />
+                ))}
+              </div>
             )}
 
             {messages.length === 0 ? (

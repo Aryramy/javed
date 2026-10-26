@@ -1,6 +1,7 @@
 """FastAPI application factory and main entry point for Project Javed."""
 
 import logging
+import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -15,6 +16,9 @@ from starlette.responses import Response
 from javed.agent.runtime import AgentRuntimeManager
 from javed.api.v1.router import api_v1_router
 from javed.config import Settings, get_settings
+from javed.mcp.gateway import SecureMCPGateway
+from javed.mcp.registry import DynamicMCPRegistry
+from javed.mcp.servers import create_time_server_config
 from javed.services.openrouter import OpenRouterService
 from javed.transport.sse import SSEManager
 from javed.transport.websocket import WebSocketManager
@@ -70,11 +74,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Agent runtime initialization deferred or degraded: %s", e)
 
+    # If E2E test mode is active, auto-discover time tools and set approval_required policy
+    if os.getenv("JAVED_E2E_TEST_MODE") == "1":
+        try:
+            if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
+                await app.state.mcp_registry.discover_tools("time")
+                app.state.mcp_registry.set_tool_permission(
+                    "time__get_current_time", "approval_required"
+                )
+                logger.info("E2E Test Mode: time__get_current_time set to APPROVAL_REQUIRED")
+        except Exception as e:
+            logger.warning("Could not auto-configure time MCP tools for E2E: %s", e)
+
     # Yield control to run the application
     yield
 
-    # Graceful shutdown: close agent runtime checkpointer and active WebSocket connections
+    # Graceful shutdown: close MCP servers, checkpointer, and active WebSocket connections
     logger.info("Shutting down Javed Backend; closing active connections...")
+    if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
+        try:
+            await app.state.mcp_registry.disconnect_all()
+            logger.info("MCP registry servers disconnected cleanly")
+        except Exception as e:
+            logger.warning("Error disconnecting MCP servers: %s", e)
+
     if hasattr(app.state, "agent_runtime") and app.state.agent_runtime:
         try:
             await app.state.agent_runtime.close()
@@ -104,9 +127,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ws_manager = WebSocketManager(app_settings)
     app.state.sse_manager = SSEManager()
     app.state.openrouter_service = OpenRouterService(app_settings)
+    app.state.mcp_registry = DynamicMCPRegistry()
+    try:
+        app.state.mcp_registry.register_server(create_time_server_config())
+    except Exception as exc:
+        logger.warning("Could not register default Time MCP server: %s", exc)
+    app.state.mcp_gateway = SecureMCPGateway(app.state.mcp_registry)
+
     app.state.agent_runtime = AgentRuntimeManager(
         app_settings,
         openrouter_service=app.state.openrouter_service,
+        mcp_gateway=app.state.mcp_gateway,
     )
 
     # 1. Body Size Limiter Middleware

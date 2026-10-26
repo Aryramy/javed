@@ -96,6 +96,10 @@ class Settings(BaseModel):
         default="data/checkpoints.db",
         description="Path to SQLite database for LangGraph checkpoints",
     )
+    agent_approvals_db_path: str = Field(
+        default="data/approvals.db",
+        description="Path to SQLite database for durable pending approvals and execution ledger",
+    )
     agent_stream_timeout_seconds: float = Field(
         default=120.0,
         description="Timeout for agent stream runs in seconds",
@@ -129,6 +133,7 @@ def get_settings() -> Settings:
         "agent_checkpoint_db_path": os.getenv(
             "JAVED_AGENT_CHECKPOINT_DB_PATH", "data/checkpoints.db"
         ),
+        "agent_approvals_db_path": os.getenv("JAVED_AGENT_APPROVALS_DB_PATH", "data/approvals.db"),
         "agent_stream_timeout_seconds": float(
             os.getenv("JAVED_AGENT_STREAM_TIMEOUT_SECONDS", "120.0")
         ),
