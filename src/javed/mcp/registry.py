@@ -14,6 +14,7 @@ import jsonschema
 from fastmcp.client.transports import StdioTransport
 from langchain.mcp import MCPAdapter
 
+from javed.mcp.approval_store import ApprovalStore
 from javed.mcp.env import get_sanitized_subprocess_env
 from javed.schemas.mcp import (
     DiscoveredTool,
@@ -42,14 +43,47 @@ class DynamicMCPRegistry:
        by host policy, never by model completions, server annotations, or tool descriptions.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, approval_store: ApprovalStore | None = None) -> None:
+        self.approval_store: ApprovalStore | None = approval_store
         self._servers: dict[str, ServerConfig] = {}
         self._statuses: dict[str, ServerStatus] = {}
         self._adapters: dict[str, MCPAdapter] = {}
         self._tools: dict[str, DiscoveredTool] = {}
         self._policies: dict[str, ToolApprovalPolicy] = {}
+        self._persisted_policies: dict[str, dict[str, Any]] = {}
         self._policy_version: int = 0
         self._lock = asyncio.Lock()
+
+    async def load_persisted_policies(self) -> None:
+        """Load durable host policies and policy revision from the approval store."""
+        if not self.approval_store:
+            return
+        persisted = await self.approval_store.load_all_host_tool_policies()
+        persisted_version = await self.approval_store.get_persisted_policy_version()
+        self._policy_version = persisted_version
+        self._persisted_policies = {rec["tool_id"]: rec for rec in persisted}
+
+        # Reconcile any existing discovered tools
+        for tool_id, tool in self._tools.items():
+            if tool_id in self._persisted_policies:
+                p = self._persisted_policies[tool_id]
+                if p["approved_fingerprint"] == tool.fingerprint:
+                    tool.permission = p["permission"]
+                    tool.enabled = bool(p["enabled"])
+                    if (
+                        tool.permission in ("allowed_read_only", "approval_required")
+                        and tool.enabled
+                    ):
+                        self._policies[tool_id] = ToolApprovalPolicy(
+                            tool_id=tool_id,
+                            permission=tool.permission,
+                            approved_fingerprint=tool.fingerprint,
+                            approved_by=p.get("updated_by", "persisted_policy"),
+                        )
+                else:
+                    tool.permission = "denied"
+                    tool.enabled = False
+                    self._policies.pop(tool_id, None)
 
     def register_server(self, config: ServerConfig) -> None:
         """Register an approved host-side server configuration."""
@@ -260,7 +294,40 @@ class DynamicMCPRegistry:
             existing_tool = self._tools.get(tool_id)
 
             if existing_tool is None:
-                # Brand new tool: Default DENIED and disabled
+                # Check if a durable policy was previously persisted for this tool
+                initial_permission = "denied"
+                initial_enabled = False
+                last_err = None
+                if tool_id in self._persisted_policies:
+                    p = self._persisted_policies[tool_id]
+                    if p["approved_fingerprint"] == new_fingerprint:
+                        initial_permission = p["permission"]
+                        initial_enabled = bool(p["enabled"])
+                        if (
+                            initial_permission in ("allowed_read_only", "approval_required")
+                            and initial_enabled
+                        ):
+                            self._policies[tool_id] = ToolApprovalPolicy(
+                                tool_id=tool_id,
+                                permission=initial_permission,
+                                approved_fingerprint=new_fingerprint,
+                                approved_by=p.get("updated_by", "persisted_policy"),
+                            )
+                        logger.info(
+                            "Restored persisted host policy for '%s' -> tier %s, enabled=%s",
+                            tool_id,
+                            initial_permission,
+                            initial_enabled,
+                        )
+                    else:
+                        logger.warning(
+                            "SECURITY ALERT: Persisted fingerprint drift on discovery for '%s'! "
+                            "Approval invalidated; resetting to DENIED.",
+                            tool_id,
+                        )
+                        last_err = "Schema drifted from persisted fingerprint. Reset to DENIED."
+                        self._policies.pop(tool_id, None)
+
                 tool_record = DiscoveredTool(
                     tool_id=tool_id,
                     server_id=valid_sid,
@@ -269,15 +336,17 @@ class DynamicMCPRegistry:
                     input_schema=input_schema,
                     output_schema=output_schema,
                     fingerprint=new_fingerprint,
-                    permission="denied",
-                    enabled=False,
+                    permission=initial_permission,
+                    enabled=initial_enabled,
                     discovered_at=datetime.now(UTC),
+                    last_error=last_err,
                 )
-                logger.info(
-                    "Discovered new MCP tool: '%s' (server: %s) -> Default permission DENIED",
-                    tool_id,
-                    valid_sid,
-                )
+                if tool_id not in self._persisted_policies:
+                    logger.info(
+                        "Discovered new MCP tool: '%s' (server: %s) -> Default permission DENIED",
+                        tool_id,
+                        valid_sid,
+                    )
             else:
                 # Re-discovered tool: Check for fingerprint drift
                 if existing_tool.fingerprint != new_fingerprint:
@@ -341,19 +410,41 @@ class DynamicMCPRegistry:
         permission: ToolPermission,
         enabled: bool | None = None,
         approved_by: str = "host_admin",
+        expected_policy_version: int | None = None,
+        expected_fingerprint: str | None = None,
     ) -> DiscoveredTool:
         """Update host-side execution policy for a discovered tool.
 
         Rules:
         - Only registered tools can be modified.
+        - Internal tools (write_todos) are immutable through MCP admin APIs.
+        - Concurrency guard: expected_policy_version must match if provided.
+        - Integrity guard: expected_fingerprint must match if provided.
         - If authorized ('allowed_read_only' or 'approval_required'), records the exact
           approved fingerprint in the host policy.
         - If 'denied', removes the approval record.
         - The LLM cannot invoke this method.
         """
+        if tool_id == "write_todos":
+            raise ValueError(
+                "Internal tool 'write_todos' is immutable and cannot be managed via MCP admin."
+            )
+
         tool = self._tools.get(tool_id)
         if not tool:
             raise KeyError(f"Tool '{tool_id}' not found in registry.")
+
+        if expected_policy_version is not None and expected_policy_version != self._policy_version:
+            raise ValueError(
+                f"Policy version conflict: expected {expected_policy_version}, "
+                f"current {self._policy_version}."
+            )
+
+        if expected_fingerprint is not None and expected_fingerprint != tool.fingerprint:
+            raise ValueError(
+                f"Tool fingerprint mismatch: expected '{expected_fingerprint}', "
+                f"current '{tool.fingerprint}'."
+            )
 
         tool.permission = permission
         if enabled is not None:
@@ -377,6 +468,52 @@ class DynamicMCPRegistry:
 
         self._policy_version += 1
         return tool
+
+    async def update_tool_permission_durable(
+        self,
+        tool_id: str,
+        permission: ToolPermission,
+        enabled: bool | None = None,
+        approved_by: str = "host_admin",
+        expected_policy_version: int | None = None,
+        expected_fingerprint: str | None = None,
+    ) -> DiscoveredTool:
+        """Atomically update host tool policy and persist durably in SQLite."""
+        async with self._lock:
+            tool = self.set_tool_policy(
+                tool_id=tool_id,
+                permission=permission,
+                enabled=enabled,
+                approved_by=approved_by,
+                expected_policy_version=expected_policy_version,
+                expected_fingerprint=expected_fingerprint,
+            )
+            if self.approval_store:
+                await self.approval_store.save_host_tool_policy(
+                    tool_id=tool.tool_id,
+                    server_id=tool.server_id,
+                    permission=tool.permission,
+                    enabled=tool.enabled,
+                    approved_fingerprint=tool.fingerprint,
+                    policy_version=self._policy_version,
+                    updated_by=approved_by,
+                )
+                self._persisted_policies[tool.tool_id] = {
+                    "tool_id": tool.tool_id,
+                    "server_id": tool.server_id,
+                    "permission": tool.permission,
+                    "enabled": tool.enabled,
+                    "approved_fingerprint": tool.fingerprint,
+                    "policy_version": self._policy_version,
+                    "updated_by": approved_by,
+                }
+                # If newly denied or disabled, cancel any pending approvals for this tool
+                if tool.permission == "denied" or not tool.enabled:
+                    await self.approval_store.cancel_pending_approvals_for_tool(
+                        tool.tool_id,
+                        reason=f"Host policy set to {tool.permission.upper()}",
+                    )
+            return tool
 
     # Alias for policy updates
     update_tool_policy = set_tool_policy
@@ -410,6 +547,8 @@ class DynamicMCPRegistry:
     def get_policy(self, tool_id: str) -> ToolApprovalPolicy | None:
         """Retrieve the host approval policy record for a tool."""
         return self._policies.get(tool_id)
+
+    get_tool_policy = get_policy
 
     def get_tool(self, tool_id: str) -> DiscoveredTool | None:
         """Retrieve a discovered tool by namespaced ID."""

@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -104,6 +104,47 @@ class Settings(BaseModel):
         default=120.0,
         description="Timeout for agent stream runs in seconds",
     )
+    owner_token: str | None = Field(
+        default=None,
+        description="Local owner token for privileged administration. None if unset.",
+    )
+
+    @model_validator(mode="after")
+    def validate_owner_token_security(self) -> "Settings":
+        """Reject empty, blank or known weak placeholder owner tokens; enforce in production."""
+        if self.owner_token is not None:
+            stripped = self.owner_token.strip()
+            if not stripped:
+                raise ValueError("owner_token cannot be empty or whitespace.")
+            if stripped.lower() in FORBIDDEN_OWNER_TOKENS:
+                raise ValueError(
+                    f"owner_token cannot be a known weak placeholder ('{stripped}'). "
+                    "Configure a unique secure secret via JAVED_OWNER_TOKEN."
+                )
+            if len(stripped) < 8:
+                raise ValueError("owner_token must be at least 8 characters long.")
+        if self.env == "production" and not self.owner_token:
+            raise ValueError(
+                "Production environment requires JAVED_OWNER_TOKEN to be explicitly configured."
+            )
+        return self
+
+
+# Known weak or placeholder credentials that must never be accepted as owner credentials
+FORBIDDEN_OWNER_TOKENS = {
+    "javed-local-owner-token",
+    "admin",
+    "password",
+    "token",
+    "secret",
+    "owner",
+    "12345678",
+    "changeme",
+    "owner-token",
+    "local-owner-token",
+    "placeholder",
+    "test",
+}
 
 
 def get_settings() -> Settings:
@@ -118,8 +159,25 @@ def get_settings() -> Settings:
     daily_budget_env = os.getenv("OPENROUTER_DAILY_BUDGET_USD")
     daily_budget = float(daily_budget_env) if daily_budget_env else None
 
+    raw_owner_token = os.getenv("JAVED_OWNER_TOKEN")
+    owner_token: str | None = None
+    if raw_owner_token is not None:
+        stripped_token = raw_owner_token.strip()
+        if not stripped_token:
+            raise ValueError("JAVED_OWNER_TOKEN environment variable cannot be empty.")
+        if stripped_token.lower() in FORBIDDEN_OWNER_TOKENS:
+            raise ValueError(
+                f"JAVED_OWNER_TOKEN cannot be a known weak placeholder ('{stripped_token}'). "
+                "Configure a unique secure secret via JAVED_OWNER_TOKEN."
+            )
+        if len(stripped_token) < 8:
+            raise ValueError("JAVED_OWNER_TOKEN must be at least 8 characters long.")
+        owner_token = stripped_token
+
+    env = os.getenv("JAVED_ENV", "development").strip().lower()
+
     kwargs = {
-        "env": os.getenv("JAVED_ENV", "development"),
+        "env": env,
         "host": os.getenv("JAVED_HOST", "127.0.0.1"),
         "port": int(os.getenv("JAVED_PORT", "8000")),
         "log_level": os.getenv("JAVED_LOG_LEVEL", "INFO"),
@@ -137,6 +195,7 @@ def get_settings() -> Settings:
         "agent_stream_timeout_seconds": float(
             os.getenv("JAVED_AGENT_STREAM_TIMEOUT_SECONDS", "120.0")
         ),
+        "owner_token": owner_token,
     }
     if allowed_origins:
         kwargs["allowed_origins"] = allowed_origins

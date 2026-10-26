@@ -75,11 +75,54 @@
     - Full SSE HITL event taxonomy (`approval_required`, `approval_approved`, `approval_rejected`, `approval_cancelled`, `agent_resumed`, `tool_started`, `tool_completed`).
     - User Mode minimal vertical slice in React (`ApprovalCard.tsx`, `ChatView.tsx`).
     - 27/27 HITL tests passed (`tests/test_mcp_hitl.py`), 70/70 backend MCP tests passed, 46/46 frontend Vitest tests passed.
-  - Phase 5B Final HITL Browser, Persistence & Security Verification Gate:
-    - Real Chrome Playwright E2E verification (`frontend/e2e/brick005.spec.ts`): Approve and Reject browser scenarios passed against live React, live FastAPI, compiled LangGraph runtime, SQLite approvals/checkpoints, and live Time MCP STDIO server.
-    - Genuine Cross-Process Isolation (`tests/test_mcp_cross_process.py`): Process A (PID 21876) paused and exited; Process B (PID 23876) recovered state, validated identities, approved, resumed execution, executed Time MCP server exactly once, and verified duplicate approval prevention.
-    - Identity & Security Binding Check: Verified bindings for approval ID, thread ID, run ID, interrupt ID, tool-call ID, server ID, tool ID, argument digest, fingerprint, and policy version. Enforced positive origin allowlist and `Sec-Fetch-Site` validation.
-- **Stop Condition**: Halt execution after Phase 5B verification. Mandatory Stop: Phase 5 VERIFIED — READY FOR OWNER ACCEPTANCE, BRICK-005 IN PROGRESS, Phase 6 NOT STARTED. Await project owner review and explicit authorization before beginning Phase 6.
-
-
-
+  - Phase 6 Secure MCP Administration APIs, Host Policy Management & Minimal Live UI Verification (ACCEPTED):
+    - FastAPI versioned administration endpoints under `/api/v1/mcp`:
+      - `GET /servers`: Approved server list and connection states.
+      - `GET /servers/{server_id}`: Single server connection and capability inspection.
+      - `POST /servers/{server_id}/refresh`: Safe tool discovery refresh with schema drift detection.
+      - `GET /tools`: Dynamic catalog with effective permission levels and host policy version.
+      - `GET /tools/{tool_id}`: Full tool details, schemas, fingerprint, and active policy.
+      - `POST /tools/{tool_id}/permission`: Privileged host mutation (`denied`, `allowed_read_only`, `approval_required`) guarded by optimistic concurrency (`expected_policy_version`), integrity verification (`expected_fingerprint`), and owner token authorization (`X-Javed-Owner-Token`).
+      - `GET /ledger`: Bounded recent execution ledger records with argument digests and terminal states.
+      - `GET /approvals/summary`: Aggregated counts across pending, approved, rejected, expired, and cancelled approvals.
+      - `POST /auth/session`: Authenticates owner credential (`{"owner_token": "..."}`) and issues short-lived volatile session token (`jvd_sess_...`, 1 hour expiry); master token is NEVER leaked.
+      - `GET /auth/session`: Reports session status (`authenticated`, `expires_in_seconds`) without leaking credentials.
+      - `POST /auth/logout`: Revokes active session token immediately.
+    - Local Owner Authorization, Anti-CSRF & Anti-DNS-Rebinding:
+      - Validates loopback / trusted origins (`127.0.0.1`, `localhost`).
+      - Validates HTTP `Host` header against loopback; rejects external DNS-rebinding hosts with 403 Forbidden.
+      - Explicitly rejects `Origin: null` and `Sec-Fetch-Site: cross-site`.
+      - Requires `X-Javed-Owner-Token` matching master secret OR valid unexpired session token matching client IP.
+      - In production, rejects default owner tokens and fails closed on startup.
+      - Master token never persisted in localStorage or bundled into client code.
+    - Durable Policy Storage & Invalidation:
+      - Persisted `host_tool_policies` and `policy_metadata` tables in `data/approvals.db`.
+      - Restart safety: Restores permissions only if redisovered tool fingerprint matches persisted fingerprint; schema drift resets to `denied`.
+      - Cross-process verification across 3 independent OS processes (`tests/test_mcp_policy_cross_process.py`).
+      - Revocation invalidation: Transition to `denied` immediately cancels outstanding pending approvals for the tool.
+    - Minimal Developer Mode UI:
+      - `frontend/src/components/dev/MCPAdminPanel.tsx` integrated into `ConnectivityView.tsx`.
+      - Includes local Owner Authentication card with password input, unlock, and lock/logout buttons.
+      - Displays Time MCP server status, discovered tools, fingerprint/version metadata, and live permission mutation controls (disabled until unlocked).
+    - Phase 6C Owner Credential Hardening & Test Evidence Reconciliation (ACCEPTED):
+      - Predictable owner credentials completely eliminated:
+        - `Settings.owner_token` defaults to `None`.
+        - Strict validator rejects empty strings, whitespace, and known weak placeholders (`javed-local-owner-token`, `admin`, `password`, `secret`, `changeme`, etc.) with minimum length >= 8 characters.
+        - Fail-closed behavior: If `JAVED_OWNER_TOKEN` is unset/missing, `POST /auth/session`, `GET /auth/session`, and permission mutations immediately fail closed with HTTP 401 Unauthorized.
+        - Zero master secret exposure in React bundles, HTTP responses, or subprocess environments.
+        - Test fixtures use explicit nonproduction credentials (`test-owner-token-123456789`) in isolated fixtures; never runtime defaults.
+        - Laptop secret configuration documented in `.env.example` and `docs/ENVIRONMENT.md` without modifying `.env`.
+      - Backend Test Inventory Reconciled:
+        - Pytest `--collect-only -q` verified: exactly **149 collected backend tests** across 18 test files.
+        - Reconciled discrepancy where previous report stated 145 collected but summed to 150.
+        - Precise execution classification: **94 BRICK-005 milestone tests executed and verified** in this gate; **55 historical baseline tests collected** from BRICK-001–004.
+    - Verification:
+      - 22/22 targeted API security and admin tests passed (`tests/test_mcp_admin_api.py`).
+      - 1/1 cross-process policy persistence test passed across 3 independent OS subprocesses (`tests/test_mcp_policy_cross_process.py`).
+      - 71/71 other MCP regression tests passed (`tests/test_mcp_cross_process.py`, `tests/test_mcp_gateway.py`, `tests/test_mcp_registry.py`, `tests/test_mcp_time_integration.py`, `tests/test_mcp_hitl.py`).
+      - 50/50 frontend Vitest tests passed (including `frontend/src/test/mcpAdmin.test.tsx`).
+      - 1/1 Playwright Phase 6B live Chrome acceptance test passed (`frontend/e2e/brick005_admin.spec.ts`).
+      - 2/2 Playwright Phase 5B HITL approve/reject tests passed (`frontend/e2e/brick005.spec.ts`).
+      - Ruff lint and formatting passed (0 errors, 56 files formatted).
+      - Frontend TypeScript/Vite build passed (`tsc -b && vite build` in 2.15s) with zero leaked secrets.
+- **Stop Condition**: Intermediate checkpoint through Phase 6C staged and pushed to origin/feat/brick-005-mcp-gateway. Mandatory Stop: Phase 6/6C: ACCEPTED, BRICK-005: IN PROGRESS, Phase 7: NOT STARTED. Await project owner explicit authorization before beginning Phase 7.

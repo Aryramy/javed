@@ -1,5 +1,6 @@
 """System status and latency measurement endpoints."""
 
+import os
 import time
 from datetime import UTC, datetime
 
@@ -32,6 +33,7 @@ async def get_system_status(request: Request) -> SystemStatusResponse:
         server_time=datetime.now(UTC),
         uptime_seconds=round(uptime, 2),
         active_ws_connections=active_connections,
+        e2e_test_mode=os.getenv("JAVED_E2E_TEST_MODE") == "1",
         capabilities={
             "rest_api": True,
             "websocket": True,

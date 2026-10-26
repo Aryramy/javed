@@ -149,6 +149,123 @@ class ToolApprovalPolicy(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Host MCP Administration Request & Response Schemas (BRICK-005 Phase 6)
+# ---------------------------------------------------------------------------
+
+
+class ToolPermissionUpdateRequest(BaseModel):
+    """Privileged request schema for host-owned MCP tool permission mutation."""
+
+    permission: ToolPermission = Field(
+        ...,
+        description="Target tier: 'denied', 'allowed_read_only', 'approval_required'.",
+    )
+    enabled: bool | None = Field(
+        default=None,
+        description="Optional enabled toggle. Defaults to (permission != 'denied').",
+    )
+    expected_policy_version: int = Field(
+        ...,
+        ge=0,
+        description="Optimistic concurrency guard: must match the current host policy revision.",
+    )
+    expected_fingerprint: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="Integrity guard: must match the current SHA-256 fingerprint of the tool.",
+    )
+
+
+class ToolDetailResponse(BaseModel):
+    """Detailed metadata and security posture for a single MCP tool."""
+
+    tool: DiscoveredTool
+    policy_version: int
+    policy: ToolApprovalPolicy | None = None
+
+
+class ToolListResponse(BaseModel):
+    """Dynamic catalog response listing discovered MCP tools with host permissions."""
+
+    tools: list[DiscoveredTool]
+    server_count: int
+    policy_version: int
+    total: int
+
+
+class ServerListResponse(BaseModel):
+    """Summary list of approved MCP servers and connection states."""
+
+    servers: list[ServerStatus]
+    total: int
+
+
+class ServerRefreshResponse(BaseModel):
+    """Result of an explicit tool discovery refresh on an approved MCP server."""
+
+    server_id: str
+    discovered_tools: list[DiscoveredTool]
+    tool_count: int
+    policy_version: int
+    message: str
+
+
+class ExecutionLedgerEntry(BaseModel):
+    """Sanitized durable execution ledger entry for human audit."""
+
+    dispatch_id: str
+    approval_id: str
+    tool_id: str
+    argument_digest: str
+    state: str
+    dispatched_at: datetime
+    completed_at: datetime | None = None
+    result_summary: str | None = None
+    error_message: str | None = None
+
+
+class ExecutionLedgerResponse(BaseModel):
+    """Bounded query response for recent tool execution ledger records."""
+
+    entries: list[ExecutionLedgerEntry]
+    total: int
+
+
+class ApprovalsSummaryResponse(BaseModel):
+    """Aggregated metrics of pending and historical human approvals."""
+
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    expired_count: int
+    cancelled_count: int
+    total_count: int
+
+
+class OwnerSessionLoginRequest(BaseModel):
+    """Request payload to establish an authenticated local owner session."""
+
+    owner_token: str = Field(..., min_length=1, description="Master local owner token")
+
+
+class OwnerSessionResponse(BaseModel):
+    """Session credentials issued to authenticated local owner."""
+
+    session_token: str = Field(..., description="Short-lived, non-master session token")
+    expires_in: int = Field(..., description="Session lifetime in seconds")
+    client_scope: str = Field(default="localhost", description="Authorized client scope")
+
+
+class OwnerSessionStatusResponse(BaseModel):
+    """Current authentication status for local client."""
+
+    authenticated: bool
+    client_scope: str = "localhost"
+    expires_in: int | None = None
+
+
+# ---------------------------------------------------------------------------
 # Host Security Gateway Exception Hierarchy
 # ---------------------------------------------------------------------------
 

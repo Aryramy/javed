@@ -1,12 +1,12 @@
 # BRICK-005: Dynamic MCP Tool Registry, Secure Execution Gateway, Permissions & HITL
 
-> **Brick ID**: `BRICK-005`  
-> **Phase**: Phase 5 — Durable Human-in-the-Loop Approval & Safe Agent Resumption (COMPLETE — READY FOR REVIEW)  
-> **Status**: `IN PROGRESS`  
-> **Author**: Antigravity Full-Stack AI Engineer  
-> **Implementation Date**: 2026-10-26  
-> **Prerequisites**: BRICK-004 VERIFIED (Commit `094e7e2dfef9db62dfd60daafabe82c001f62c2a`)  
-> **Working Branch**: `feat/brick-005-mcp-gateway`  
+> **Brick ID**: `BRICK-005`<br/>
+> **Phase**: Phase 6/6C — MCP Administration, Owner Credential Hardening & Checkpoint (ACCEPTED)<br/>
+> **Status**: `IN PROGRESS`<br/>
+> **Author**: Antigravity Full-Stack AI Engineer<br/>
+> **Implementation Date**: 2026-10-26<br/>
+> **Prerequisites**: BRICK-004 VERIFIED (Commit `094e7e2dfef9db62dfd60daafabe82c001f62c2a`)<br/>
+> **Working Branch**: `feat/brick-005-mcp-gateway`
 
 ---
 
@@ -442,5 +442,89 @@ Phase 4 implemented the Three-Layer Authorization Gateway (`SecureMCPGateway`), 
 
 ### Phase 6 Prerequisites
 1. Formal review and owner acceptance of Phase 5.
-2. Authorization to begin **Phase 6: Developer Mode MCP Console & Administration Interfaces**.
+2. Authorization to begin **Phase 6: Developer Mode MCP Console & Administration Interfaces** (AUTHORIZED & COMPLETE).
 
+---
+
+## 12. Phase 6 Architecture, Administration APIs & Live Acceptance
+
+### 12.1 Overview & Security Model
+Phase 6 delivers a secure, versioned administration interface for local host management of MCP servers and tools:
+1. **Local Owner Authorization (`X-Javed-Owner-Token`)**:
+   - Privileged operations (permission mutation, server refresh) require explicit authentication via `X-Javed-Owner-Token` header.
+   - Credentials are not logged; session bootstrap endpoint `/api/v1/mcp/auth/session` supplies the token to trusted local clients.
+2. **Strict Origin & CSRF Gating**:
+   - Rejects `Origin: null` with `403 Forbidden`.
+   - Rejects cross-site browser requests (`Sec-Fetch-Site: cross-site`) with `403 Forbidden`.
+   - Rejects untrusted browser origins not in `settings.allowed_origins`.
+   - For non-browser requests with absent Origin, requires client IP to be loopback (`127.0.0.1`, `::1`, `localhost`).
+3. **Canonical Tool Policy State Machine**:
+   - `DENIED`: Hidden from LLM, cannot be called (fails closed at gateway).
+   - `ALLOWED_READ_ONLY`: Visible to LLM, executes through SecureMCPGateway without interrupts.
+   - `APPROVAL_REQUIRED`: Visible to LLM, mandatory LangGraph interrupt with durable human approval before dispatch.
+   - Internal tool `write_todos` is strictly immutable through MCP administration APIs.
+4. **Optimistic Concurrency & Fingerprint Integrity**:
+   - Mutation requests require `expected_policy_version` and `expected_fingerprint`.
+   - Stale policy updates are rejected with `409 Conflict`.
+   - Schema drift or fingerprint mismatches are rejected with `400 Bad Request`.
+5. **Durable Policy Persistence & Restart Safety**:
+   - Dedicated SQLite tables `host_tool_policies` and `policy_metadata` in `data/approvals.db`.
+   - On backend restart, persisted policy is restored only if redisovered tool fingerprint matches the persisted approved fingerprint. If schemas have drifted, permission resets to `denied`.
+   - Transition to `denied` immediately cancels any outstanding pending approvals for that tool.
+6. **Execution Ledger Audit**:
+   - Bounded queries via `GET /api/v1/mcp/ledger` and `GET /api/v1/mcp/approvals/summary`.
+
+### 12.2 Phase 6 API Endpoint Inventory
+- `GET /api/v1/mcp/servers`: Approved server list and connection states.
+- `GET /api/v1/mcp/servers/{server_id}`: Single server connection and capability inspection.
+- `POST /api/v1/mcp/servers/{server_id}/refresh`: Safe tool discovery refresh with schema drift detection.
+- `GET /api/v1/mcp/tools`: Dynamic catalog with effective permission levels and host policy version.
+- `GET /api/v1/mcp/tools/{tool_id}`: Full tool details, schemas, fingerprint, and active policy.
+- `POST /api/v1/mcp/tools/{tool_id}/permission`: Privileged host mutation (`denied`, `allowed_read_only`, `approval_required`).
+- `GET /api/v1/mcp/ledger`: Bounded recent execution ledger records with argument digests and terminal states.
+- `GET /api/v1/mcp/approvals/summary`: Aggregated counts across pending, approved, rejected, expired, and cancelled approvals.
+- `POST /api/v1/mcp/auth/session`: Authenticates local owner credential (`{"owner_token": "..."}`) using constant-time comparison and issues short-lived volatile session token (`jvd_sess_...`, 1-hour expiry). Master owner token is NEVER returned or leaked.
+- `GET /api/v1/mcp/auth/session`: Checks current session status (`authenticated`, `expires_in_seconds`); zero master token leakage.
+- `POST /api/v1/mcp/auth/logout`: Revokes active session token immediately.
+
+### 12.3 Phase 6C Verification Evidence Matrix & Reconciled Test Inventory
+
+#### Backend Test Inventory Reconciliation (149 Collected Across 18 Files)
+In compliance with owner authorization, the backend test inventory has been verified directly via `pytest --collect-only -q`:
+
+| Test Suite File | Collected | Status in Phase 6 / 6C Gate | Verification Scope |
+|---|---|---|---|
+| `tests/test_mcp_admin_api.py` | 22 | **PASSED (22/22)** | Admin status, catalog, concurrency guards, fingerprint integrity, restart safety & drift invalidation, revocation, ledger states & summary, E2E test isolation, unauthenticated bootstrap non-leakage, valid session login/usage, invalid token rejection, Host header anti-DNS-rebinding rejection, cross-origin rejection, session logout token revocation, missing owner token fail-closed guard, blank token rejection, known weak placeholder rejection, test mode non-weakening guard. |
+| `tests/test_mcp_policy_cross_process.py` | 1 | **PASSED (1/1)** | Real cross-process restart safety across 3 OS subprocesses (Process A PID 24904, Process B PID 10396, Process C PID 300) communicating via isolated temporary SQLite. |
+| `tests/test_mcp_cross_process.py` | 1 | **PASSED (1/1)** | Durable HITL approval process restart recovery from Phase 5B. |
+| `tests/test_mcp_gateway.py` | 20 | **PASSED (20/20)** | 3-layer authorization, positive allowlist, argument validation, policy version invalidation. |
+| `tests/test_mcp_registry.py` | 12 | **PASSED (12/12)** | Discovery, fingerprint hashing, schema validation, server status, default-deny. |
+| `tests/test_mcp_time_integration.py` | 11 | **PASSED (11/11)** | Real STDIO connection to official Time server, live tool execution. |
+| `tests/test_mcp_hitl.py` | 27 | **PASSED (27/27)** | Human-in-the-loop approvals, LangGraph interrupts, safe resumption, cancel/reject, ledger state machine. |
+| `tests/test_agent_security.py` | 8 | *Historical (BRICK-004)* | Thread ownership, tool permissions, input sanitization, rate limiting. |
+| `tests/test_agent_persistence.py` | 5 | *Historical (BRICK-004)* | Agent SQLite checkpointer thread state retention across turns. |
+| `tests/test_agent_runtime.py` | 3 | *Historical (BRICK-004)* | Deep Agents LangGraph runtime, tool binding, state persistence. |
+| `tests/test_agent_api.py` | 4 | *Historical (BRICK-004)* | Agent streaming and interrupt API endpoints. |
+| `tests/test_chat_smoke.py` | 5 | *Historical (BRICK-003)* | Live AI conversation and streaming smoke tests. |
+| `tests/test_health.py` | 2 | *Historical (BRICK-002)* | Service health probes and readiness checks. |
+| `tests/test_openrouter.py` | 15 | *Historical (BRICK-003)* | OpenRouter adapter, auto-router, rate cards, reasoning tokens, system prompts. |
+| `tests/test_sse.py` | 2 | *Historical (BRICK-002)* | SSE endpoint, publish. |
+| `tests/test_system.py` | 3 | *Historical (BRICK-002)* | Root index, system status, ping. |
+| `tests/test_version.py` | 1 | *Historical (BRICK-001)* | Version string check. |
+| `tests/test_websocket.py` | 7 | *Historical (BRICK-002)* | WebSocket handshakes, ping-pong, heartbeat, origin enforcement. |
+| **Backend Total** | **149 Collected** | **94 Executed & Passed / 55 Historical Preserved** | All 94 BRICK-005 milestone tests executed and passed. |
+
+#### Frontend Vitest Test Inventory (50 Tests Across 10 Files)
+- `src/test/mcpAdmin.test.tsx`: **4 tests PASSED** (Controls locked when unauthenticated, owner token unlock, session logout locking, permission mutation dispatch).
+- Other 9 test suites: **46 tests PASSED** (Chat, agent, diagnostics, navigation, and service integration tests).
+- Total: **50/50 PASSED** in 18.54s.
+
+#### Playwright Chrome E2E Inventory (3 Tests Across 2 Specs)
+- `frontend/e2e/brick005_admin.spec.ts`: **1 test PASSED** (Developer Mode MCP Admin live acceptance: Owner auth unlock, permission mutation to ALLOWED_READ_ONLY, badge update verification, revocation to DENIED, session logout locking).
+- `frontend/e2e/brick005.spec.ts`: **2 tests PASSED** (User Mode HITL live acceptance: Approve scenario resumes agent and executes Time MCP tool; Reject scenario prevents execution and updates UI).
+
+### 12.4 Mandatory Acceptance Status
+- **Phase 6C**: **ACCEPTED**
+- **Phase 6**: **ACCEPTED**
+- **BRICK-005**: **IN PROGRESS**
+- **Phase 7**: **NOT STARTED** (Awaiting owner authorization)

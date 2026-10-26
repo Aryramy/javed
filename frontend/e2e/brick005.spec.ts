@@ -1,9 +1,46 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('BRICK-005 Phase 5B: Real Chrome HITL End-to-End Test', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
+
+    // Ensure time tool is in APPROVAL_REQUIRED state for Phase 5B HITL testing
+    try {
+      const sessRes = await request.post('http://127.0.0.1:8000/api/v1/mcp/auth/session', {
+        headers: {
+          'Origin': 'http://127.0.0.1:5173',
+          'Host': '127.0.0.1:8000',
+        },
+        data: {
+          owner_token: process.env.JAVED_OWNER_TOKEN || 'test-e2e-owner-token-987654321',
+        },
+      });
+      if (sessRes.ok()) {
+        const { session_token } = await sessRes.json();
+        const toolRes = await request.get('http://127.0.0.1:8000/api/v1/mcp/tools/time__get_current_time');
+        if (toolRes.ok()) {
+          const toolData = await toolRes.json();
+          if (toolData.tool.permission !== 'approval_required') {
+            await request.post('http://127.0.0.1:8000/api/v1/mcp/tools/time__get_current_time/permission', {
+              headers: {
+                'X-Javed-Owner-Token': session_token,
+                'Origin': 'http://127.0.0.1:5173',
+                'Host': '127.0.0.1:8000',
+              },
+              data: {
+                permission: 'approval_required',
+                enabled: true,
+                expected_policy_version: toolData.policy_version,
+                expected_fingerprint: toolData.tool.fingerprint,
+              },
+            });
+          }
+        }
+      }
+    } catch {
+      // Ignore if server endpoint is unavailable during setup
+    }
   });
 
   test('01. Approve Scenario — Real approval card appears, approve click resumes LangGraph and executes Time MCP tool', async ({ page }) => {

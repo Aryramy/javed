@@ -19,6 +19,10 @@ class SystemStatusResponse(BaseModel):
         default=0,
         description="Count of currently active WebSocket clients",
     )
+    e2e_test_mode: bool = Field(
+        default=False,
+        description="Whether isolated E2E scripted test mode is enabled",
+    )
     capabilities: dict[str, bool] = Field(description="Explicit map of implemented capabilities")
 
 

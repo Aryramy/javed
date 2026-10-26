@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Activity, AlertCircle, CheckCircle2, Clock, Cpu, Radio, RefreshCw, Server, Wifi, WifiOff } from 'lucide-react'
 import { useBackend } from '@/context'
 import { cn } from '@/lib/utils'
+import { MCPAdminPanel } from '@/components/dev/MCPAdminPanel'
 
 export const ConnectivityView: React.FC = () => {
   const {
@@ -320,6 +321,9 @@ export const ConnectivityView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Phase 6: Minimal MCP Host Administration */}
+      <MCPAdminPanel />
     </div>
   )
 }

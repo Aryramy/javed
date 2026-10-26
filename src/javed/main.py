@@ -71,14 +71,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if hasattr(app.state, "agent_runtime") and app.state.agent_runtime:
         try:
             await app.state.agent_runtime.initialize()
+            if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
+                app.state.mcp_registry.approval_store = app.state.agent_runtime.approval_store
+                await app.state.mcp_registry.load_persisted_policies()
+                # Attempt safe discovery for approved servers on startup
+                for server in app.state.mcp_registry.list_servers():
+                    if server.server_id == "time":
+                        try:
+                            await app.state.mcp_registry.discover_tools("time")
+                        except Exception as disc_err:
+                            logger.info(
+                                "Deferred startup tool discovery for '%s': %s",
+                                server.server_id,
+                                disc_err,
+                            )
         except Exception as e:
             logger.warning("Agent runtime initialization deferred or degraded: %s", e)
 
-    # If E2E test mode is active, auto-discover time tools and set approval_required policy
+    # If E2E test mode is active, ensure time tool has approval_required policy
     if os.getenv("JAVED_E2E_TEST_MODE") == "1":
         try:
             if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
-                await app.state.mcp_registry.discover_tools("time")
+                if not app.state.mcp_registry.get_tool("time__get_current_time"):
+                    await app.state.mcp_registry.discover_tools("time")
                 app.state.mcp_registry.set_tool_permission(
                     "time__get_current_time", "approval_required"
                 )
@@ -149,7 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=app_settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-Correlation-ID"],
+        allow_headers=["Content-Type", "Authorization", "X-Correlation-ID", "X-Javed-Owner-Token"],
     )
 
     # 3. Global Exception Handler to prevent raw traceback leakage

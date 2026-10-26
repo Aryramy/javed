@@ -70,6 +70,26 @@ CREATE TABLE IF NOT EXISTS execution_ledger (
 );
 """
 
+CREATE_HOST_TOOL_POLICIES_TABLE = """
+CREATE TABLE IF NOT EXISTS host_tool_policies (
+    tool_id TEXT PRIMARY KEY,
+    server_id TEXT NOT NULL,
+    permission TEXT NOT NULL,
+    enabled INTEGER NOT NULL,
+    approved_fingerprint TEXT NOT NULL,
+    policy_version INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL
+);
+"""
+
+CREATE_POLICY_METADATA_TABLE = """
+CREATE TABLE IF NOT EXISTS policy_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"""
+
 
 def _parse_row(row: aiosqlite.Row) -> ApprovalRecord:
     """Convert an aiosqlite Row to an ApprovalRecord."""
@@ -135,6 +155,8 @@ class ApprovalStore:
             await db.execute(CREATE_PENDING_APPROVALS_TABLE)
             await db.executescript(CREATE_PENDING_APPROVALS_INDICES)
             await db.execute(CREATE_EXECUTION_LEDGER_TABLE)
+            await db.execute(CREATE_HOST_TOOL_POLICIES_TABLE)
+            await db.execute(CREATE_POLICY_METADATA_TABLE)
             await db.commit()
 
         self._is_initialized = True
@@ -555,6 +577,196 @@ class ApprovalStore:
                     row = await cur.fetchone()
                     return dict(row) if row else None
             return None
+
+    # -----------------------------------------------------------------------
+    # Durable Host Tool Policy Persistence (BRICK-005 Phase 6)
+    # -----------------------------------------------------------------------
+
+    async def save_host_tool_policy(
+        self,
+        tool_id: str,
+        server_id: str,
+        permission: str,
+        enabled: bool,
+        approved_fingerprint: str,
+        policy_version: int,
+        updated_by: str = "host_owner",
+    ) -> None:
+        """Persist or update host tool authorization policy durably."""
+        await self.initialize()
+        now_str = datetime.now(UTC).isoformat()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO host_tool_policies (
+                    tool_id, server_id, permission, enabled, approved_fingerprint,
+                    policy_version, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(tool_id) DO UPDATE SET
+                    server_id = excluded.server_id,
+                    permission = excluded.permission,
+                    enabled = excluded.enabled,
+                    approved_fingerprint = excluded.approved_fingerprint,
+                    policy_version = excluded.policy_version,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by
+                """,
+                (
+                    tool_id,
+                    server_id,
+                    permission,
+                    1 if enabled else 0,
+                    approved_fingerprint,
+                    policy_version,
+                    now_str,
+                    updated_by,
+                ),
+            )
+            await db.execute(
+                """
+                INSERT INTO policy_metadata (key, value) VALUES ('policy_version', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (str(policy_version),),
+            )
+            await db.commit()
+
+        logger.info(
+            "Persisted host tool policy for '%s': tier=%s, enabled=%s, ver=%d",
+            tool_id,
+            permission,
+            enabled,
+            policy_version,
+        )
+
+    async def get_host_tool_policy(self, tool_id: str) -> dict[str, Any] | None:
+        """Fetch persisted host policy for a single tool."""
+        await self.initialize()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM host_tool_policies WHERE tool_id = ?",
+                (tool_id,),
+            ) as cur:
+                row = await cur.fetchone()
+                if not row:
+                    return None
+                rec = dict(row)
+                rec["enabled"] = bool(rec["enabled"])
+                return rec
+
+    async def load_all_host_tool_policies(self) -> list[dict[str, Any]]:
+        """Retrieve all persisted host tool policy records."""
+        await self.initialize()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM host_tool_policies") as cur:
+                rows = await cur.fetchall()
+                results = []
+                for r in rows:
+                    rec = dict(r)
+                    rec["enabled"] = bool(rec["enabled"])
+                    results.append(rec)
+                return results
+
+    async def get_persisted_policy_version(self) -> int:
+        """Retrieve current persisted host policy version revision counter."""
+        await self.initialize()
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT value FROM policy_metadata WHERE key = 'policy_version'"
+            ) as cur:
+                row = await cur.fetchone()
+                if row and row[0]:
+                    try:
+                        return int(row[0])
+                    except ValueError:
+                        return 0
+                return 0
+
+    async def set_persisted_policy_version(self, version: int) -> None:
+        """Set the persisted policy version counter."""
+        await self.initialize()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO policy_metadata (key, value) VALUES ('policy_version', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (str(version),),
+            )
+            await db.commit()
+
+    async def cancel_pending_approvals_for_tool(
+        self,
+        tool_id: str,
+        reason: str = "Host revoked tool permission to DENIED",
+    ) -> int:
+        """Invalidate and cancel all currently pending approvals for a specific tool.
+
+        Prevents previously requested and interrupted tool calls from executing if host
+        policy has been revoked.
+        """
+        await self.initialize()
+        now_str = datetime.now(UTC).isoformat()
+        async with aiosqlite.connect(self.db_path) as db:
+            cur = await db.execute(
+                """
+                UPDATE pending_approvals
+                SET status = 'cancelled', decision_at = ?, decision_by = 'host_policy_revocation',
+                    rejection_reason = ?
+                WHERE tool_id = ? AND status = 'pending'
+                """,
+                (now_str, reason, tool_id),
+            )
+            await db.commit()
+            cancelled_count = cur.rowcount
+            if cancelled_count > 0:
+                logger.info(
+                    "Cancelled %d pending approvals for tool '%s' due to revocation.",
+                    cancelled_count,
+                    tool_id,
+                )
+            return cancelled_count
+
+    async def get_recent_ledger_entries(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recent sanitized execution ledger records ordered by dispatch time."""
+        await self.initialize()
+        bounded_limit = max(1, min(limit, 100))
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM execution_ledger ORDER BY dispatched_at DESC LIMIT ?",
+                (bounded_limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
+    async def get_approvals_summary(self) -> dict[str, int]:
+        """Aggregate counts of human approvals across all states."""
+        await self.initialize()
+        counts: dict[str, int] = {
+            "pending_count": 0,
+            "approved_count": 0,
+            "rejected_count": 0,
+            "expired_count": 0,
+            "cancelled_count": 0,
+            "total_count": 0,
+        }
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT status, COUNT(*) FROM pending_approvals GROUP BY status"
+            ) as cur:
+                rows = await cur.fetchall()
+                total = 0
+                for status_name, cnt in rows:
+                    total += cnt
+                    key = f"{status_name}_count"
+                    if key in counts:
+                        counts[key] = cnt
+                counts["total_count"] = total
+        return counts
 
     async def close(self) -> None:
         """No persistent background connection pool needed for direct aiosqlite calls."""

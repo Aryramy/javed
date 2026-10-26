@@ -99,6 +99,13 @@ BROWSER_ACTION_TIMEOUT_MS=15000
 # Security & Sandboxing
 WORKSPACE_ROOT=C:\Users\arehman\Desktop\AI Projects\Javed
 ENABLE_HUMAN_APPROVAL_MODAL=true
+
+# Local Host Administration & MCP Security (BRICK-005 Phase 6C)
+# Required to unlock MCP admin mutations in Developer Mode.
+# Must be explicitly configured per laptop (not committed to git). Known weak placeholders are rejected.
+# Generate locally via: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# If unset, administration fails closed.
+JAVED_OWNER_TOKEN=                      # Random 32+ character secret
 ```
 
 ---
