@@ -45,7 +45,7 @@ def test_settings(tmp_path: Any) -> Settings:
 
 
 @pytest.fixture
-async def user_mode_runtime(tmp_path: Any, test_settings: Settings) -> AgentRuntimeManager:
+async def user_mode_runtime(tmp_path: Any, test_settings: Settings):
     checkpointer_mgr = AgentCheckpointerManager(db_path=str(tmp_path / "checkpoints.db"))
     approval_store = ApprovalStore(db_path=str(tmp_path / "approvals.db"))
     await approval_store.initialize()
@@ -60,7 +60,10 @@ async def user_mode_runtime(tmp_path: Any, test_settings: Settings) -> AgentRunt
         mcp_gateway=gateway,
     )
     await runtime.initialize()
-    return runtime
+    try:
+        yield runtime
+    finally:
+        await runtime.close()
 
 
 @pytest.mark.asyncio
@@ -306,58 +309,60 @@ async def test_list_thread_approvals_api_endpoint(tmp_path: Any) -> None:
     )
     app = create_app(settings)
     await app.state.agent_runtime.initialize()
+    try:
+        thread_id = f"thread_api_{uuid.uuid4().hex[:8]}"
+        approval_store: ApprovalStore = app.state.agent_runtime.approval_store
 
-    thread_id = f"thread_api_{uuid.uuid4().hex[:8]}"
-    approval_store: ApprovalStore = app.state.agent_runtime.approval_store
+        appr_id_1 = f"appr_th_1_{uuid.uuid4().hex[:6]}"
+        appr_id_2 = f"appr_th_2_{uuid.uuid4().hex[:6]}"
 
-    appr_id_1 = f"appr_th_1_{uuid.uuid4().hex[:6]}"
-    appr_id_2 = f"appr_th_2_{uuid.uuid4().hex[:6]}"
-
-    rec1 = ApprovalRecord(
-        approval_id=appr_id_1,
-        interrupt_id="intr_1",
-        run_id="run_1",
-        thread_id=thread_id,
-        server_id="time",
-        tool_id="time__get_current_time",
-        tool_call_id="tc_1",
-        arguments={"timezone": "UTC"},
-        argument_digest=compute_argument_digest({"timezone": "UTC"}),
-        tool_fingerprint="fp1",
-        policy_version=1,
-        status="approved",
-        dispatch_status="completed",
-        result_summary='{"time": "12:00"}',
-    )
-    rec2 = ApprovalRecord(
-        approval_id=appr_id_2,
-        interrupt_id="intr_2",
-        run_id="run_2",
-        thread_id=thread_id,
-        server_id="time",
-        tool_id="time__convert_time",
-        tool_call_id="tc_2",
-        arguments={"time": "12:00"},
-        argument_digest=compute_argument_digest({"time": "12:00"}),
-        tool_fingerprint="fp2",
-        policy_version=1,
-        status="pending",
-    )
-    await approval_store.create_approval(rec1)
-    await approval_store.create_approval(rec2)
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
-        res = await client.get(
-            f"/api/v1/agent/approvals/thread/{thread_id}",
-            headers={"Origin": "http://127.0.0.1:5173"},
+        rec1 = ApprovalRecord(
+            approval_id=appr_id_1,
+            interrupt_id="intr_1",
+            run_id="run_1",
+            thread_id=thread_id,
+            server_id="time",
+            tool_id="time__get_current_time",
+            tool_call_id="tc_1",
+            arguments={"timezone": "UTC"},
+            argument_digest=compute_argument_digest({"timezone": "UTC"}),
+            tool_fingerprint="fp1",
+            policy_version=1,
+            status="approved",
+            dispatch_status="completed",
+            result_summary='{"time": "12:00"}',
         )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["total"] == 2
-        ids = [a["approval_id"] for a in data["approvals"]]
-        assert appr_id_1 in ids
-        assert appr_id_2 in ids
+        rec2 = ApprovalRecord(
+            approval_id=appr_id_2,
+            interrupt_id="intr_2",
+            run_id="run_2",
+            thread_id=thread_id,
+            server_id="time",
+            tool_id="time__convert_time",
+            tool_call_id="tc_2",
+            arguments={"time": "12:00"},
+            argument_digest=compute_argument_digest({"time": "12:00"}),
+            tool_fingerprint="fp2",
+            policy_version=1,
+            status="pending",
+        )
+        await approval_store.create_approval(rec1)
+        await approval_store.create_approval(rec2)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+            res = await client.get(
+                f"/api/v1/agent/approvals/thread/{thread_id}",
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            assert res.status_code == 200
+            data = res.json()
+            assert data["total"] == 2
+            ids = [a["approval_id"] for a in data["approvals"]]
+            assert appr_id_1 in ids
+            assert appr_id_2 in ids
+    finally:
+        await app.state.agent_runtime.close()
 
 
 @pytest.mark.asyncio
@@ -470,3 +475,63 @@ async def test_concurrent_same_tool_event_correlation(
     # Verify second completed event belongs to call 1 with exact tc_concurrent_1
     assert completed_events[1].data["tool_call_id"] == "tc_concurrent_1"
     assert "12:00:00Z" in completed_events[1].data["output"]
+
+
+@pytest.mark.asyncio
+async def test_resume_api_contract_validation(
+    user_mode_runtime: AgentRuntimeManager,
+) -> None:
+    """Verify that resume APIs strictly reject ambiguous, swapped, or conflicting parameters."""
+    # 1. Invalid decision string
+    with pytest.raises(ValueError, match="Decision must be strictly 'approve' or 'reject'"):
+        _gen = user_mode_runtime.resume_agent(
+            thread_id="thread_test_123",
+            approval_id="appr_test_123",
+            decision="allow",  # type: ignore
+        )
+        await _gen.__anext__()
+
+    # 2. Swapped arguments: thread_id is 'approve'
+    with pytest.raises(ValueError, match="Invalid thread_id"):
+        _gen = user_mode_runtime.resume_agent(
+            thread_id="approve",
+            approval_id="appr_test_123",
+            decision="approve",
+        )
+        await _gen.__anext__()
+
+    # 3. Swapped arguments: approval_id is 'approve'
+    with pytest.raises(ValueError, match="Invalid approval_id"):
+        _gen = user_mode_runtime.resume_agent(
+            thread_id="thread_test_123",
+            approval_id="approve",
+            decision="approve",
+        )
+        await _gen.__anext__()
+
+    # 4. Conflicting thread_id and validated_thread_id in resume_agent_execution
+    with pytest.raises(ValueError, match="Conflicting thread identifiers"):
+        _gen = user_mode_runtime.resume_agent_execution(
+            approval_id="appr_test_123",
+            decision="approve",
+            thread_id="thread_a",
+            validated_thread_id="thread_b",
+        )
+        await _gen.__anext__()
+
+    # 5. Missing thread_id in resume_agent_execution
+    with pytest.raises(ValueError, match="thread_id or validated_thread_id must be provided"):
+        _gen = user_mode_runtime.resume_agent_execution(
+            approval_id="appr_test_123",
+            decision="approve",
+        )
+        await _gen.__anext__()
+
+    # 6. Swapped approval_id and decision in resume_agent_execution
+    with pytest.raises(ValueError, match="cannot be 'approve' or 'reject'"):
+        _gen = user_mode_runtime.resume_agent_execution(
+            approval_id="approve",
+            decision="reject",
+            thread_id="thread_test_123",
+        )
+        await _gen.__anext__()

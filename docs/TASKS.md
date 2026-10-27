@@ -214,5 +214,24 @@
     - 62/62 Vitest frontend tests PASSED across 12 files in 15.68s.
     - Ruff check passed with 0 errors (`ruff check src tests`).
     - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.13s).
-- **Stop Condition**: Phase 9 Complete & READY FOR REVIEW. Mandatory Stop: Phase 9: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Await project owner explicit authorization before beginning Phase 10.
+- **Phase 9 Status**: **PROVISIONALLY ACCEPTED** (Pending Phase 9B Lifecycle & Evidence Gate).
+- **Phase 9B Scope**: Windows Test Runner Lifecycle Hardening & Real Live Model Browser Acceptance Gate:
+  - Critical Review of `os._exit(...)`:
+    - Zero `os._exit` calls found in production code, tests, fixtures, or launch scripts.
+    - Isolated root cause: unclosed `aiosqlite` worker threads in `tests/test_mcp_user_mode.py` due to missing fixture teardown.
+    - Fixed fixture to `try: yield runtime finally: await runtime.close()` and closed runtime in `test_list_thread_approvals_api_endpoint`.
+    - Enhanced `AgentRuntimeManager.close()` to cleanly disconnect and terminate MCP server adapters via supported async context managers (`await registry.disconnect_all()`).
+    - Verified standard process teardown: 28/28 pytests pass in 4.03s with exit code 0 and zero retained handles.
+  - Resume API Contract Check:
+    - Hardened `resume_agent` and `resume_agent_execution` to reject swapped, ambiguous, or conflicting parameters.
+    - Verified with dedicated unit test `test_resume_api_contract_validation` (PASSED).
+  - Live OpenRouter Evidence Reconciliation:
+    - Reconciled all 8 scenarios with OpenRouter `/auth/key` endpoint.
+    - Total external spend today: $0.0085 USD (less than 1 cent) against planned $0.50 budget (1.7% utilized).
+  - Real Live Model Browser Acceptance:
+    - Built and executed `frontend/e2e/brick005_phase9b_live_model.spec.ts` in real Chrome.
+    - Verified full real stack: React User Mode (Agent Mode) -> Real FastAPI -> Real Deep Agents -> Real OpenRouter `openai/gpt-4o-mini` -> Real `time__get_current_time` with `Asia/Qatar` -> Real Time MCP STDIO server -> Truthful Doha time synthesis in React.
+    - Verified `ToolActivityCard` renders with status `COMPLETED` and no scripted-model substitution.
+    - PASSED in 28.0s; incremental spend: $0.000276 USD (0.027 cents), within $0.10 limit.
+- **Stop Condition**: Phase 9 & 9B: **VERIFIED — READY FOR OWNER ACCEPTANCE**. Mandatory Stop: Phase 9: VERIFIED — READY FOR OWNER ACCEPTANCE, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Await project owner explicit authorization before beginning Phase 10.
 

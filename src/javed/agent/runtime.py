@@ -275,9 +275,19 @@ class AgentRuntimeManager:
         )
 
     async def close(self) -> None:
-        """Close checkpointer and approval store cleanly."""
-        await self.checkpointer_manager.close()
-        await self.approval_store.close()
+        """Close checkpointer, approval store, and active MCP transports cleanly."""
+        if (
+            self.mcp_gateway is not None
+            and getattr(self.mcp_gateway, "registry", None) is not None
+        ):
+            try:
+                await self.mcp_gateway.registry.disconnect_all()
+            except Exception as e:
+                logger.warning("Error disconnecting MCP servers on runtime close: %s", e)
+        if hasattr(self.checkpointer_manager, "close"):
+            await self.checkpointer_manager.close()
+        if hasattr(self.approval_store, "close"):
+            await self.approval_store.close()
         self._is_initialized = False
         logger.info("AgentRuntimeManager closed")
 
@@ -973,7 +983,25 @@ class AgentRuntimeManager:
         reason: str | None = None,
         model_name_override: str | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
-        """Resume an interrupted agent run following human approval or rejection."""
+        """Resume an interrupted agent run following human approval or rejection.
+
+        Canonical API method. Requires explicit, unambiguously ordered parameters:
+        thread_id, approval_id, decision ('approve' | 'reject').
+        """
+        if str(decision).lower() not in ("approve", "reject"):
+            raise ValueError(
+                f"Invalid decision '{decision}'. Decision must be strictly 'approve' or 'reject'."
+            )
+        if str(thread_id).lower() in ("approve", "reject"):
+            raise ValueError(
+                f"Invalid thread_id '{thread_id}': cannot be 'approve' or 'reject'. "
+                "Positional parameters appear swapped: expected (thread_id, approval_id, decision)."
+            )
+        if str(approval_id).lower() in ("approve", "reject"):
+            raise ValueError(
+                f"Invalid approval_id '{approval_id}': cannot be 'approve' or 'reject'. "
+                "Positional parameters appear swapped: expected (thread_id, approval_id, decision)."
+            )
         validated_thread_id = validate_thread_id(thread_id)
 
         if not self._is_initialized:
@@ -1422,6 +1450,7 @@ class AgentRuntimeManager:
         self,
         approval_id: str,
         decision: Literal["approve", "reject"],
+        *,
         validated_thread_id: str | None = None,
         thread_id: str | None = None,
         reason: str | None = None,
@@ -1429,8 +1458,25 @@ class AgentRuntimeManager:
     ) -> AsyncIterator[AgentStreamEvent]:
         """Resume an interrupted agent run following human approval or rejection.
 
-        Convenience alias with flexible parameter ordering.
+        Keyword-guarded convenience alias for canonical `resume_agent`.
+        Ensures thread_id and validated_thread_id do not conflict.
         """
+        if str(decision).lower() not in ("approve", "reject"):
+            raise ValueError(
+                f"Invalid decision '{decision}'. Decision must be strictly 'approve' or 'reject'."
+            )
+        if str(approval_id).lower() in ("approve", "reject"):
+            raise ValueError(
+                f"Invalid approval_id '{approval_id}': cannot be 'approve' or 'reject'. "
+                "Did you pass decision before approval_id?"
+            )
+        if thread_id is not None and validated_thread_id is not None:
+            if thread_id != validated_thread_id:
+                raise ValueError(
+                    f"Conflicting thread identifiers provided: thread_id='{thread_id}' != "
+                    f"validated_thread_id='{validated_thread_id}'."
+                )
+
         effective_thread_id = validated_thread_id or thread_id
         if not effective_thread_id:
             raise ValueError(
