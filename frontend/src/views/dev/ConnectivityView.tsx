@@ -299,25 +299,27 @@ export const ConnectivityView: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Future AI Subsystems (Honest Stage Boundaries) */}
-        <div className="bg-card border border-border rounded-xl p-4 shadow-sm opacity-60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* 4. OpenRouter Gateway Subsystem */}
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-muted-foreground" />
+              <Server className="w-4 h-4 text-primary" />
               <span className="text-sm font-semibold text-foreground">OpenRouter Model Gateway</span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-secondary text-muted-foreground border border-border">
-                Scheduled: BRICK-003
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">
+                BRICK-003 Verified Active
               </span>
             </div>
-            <div className="text-xs text-muted-foreground font-mono">HTTPS Proxy (https://openrouter.ai/api/v1)</div>
-            <p className="text-xs text-muted-foreground">
-              Client-side code strictly avoids direct LLM API access to protect credentials in server .env.
+            <div className="text-xs text-muted-foreground font-mono">Backend Proxy (https://openrouter.ai/api/v1)</div>
+            <p className="text-xs text-muted-foreground/80 max-w-lg">
+              Server-side mediated proxy with multi-model support, budget tracking, and secret isolation.
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 sm:self-center">
-            <span className="w-2 h-2 rounded-full bg-muted-foreground/50" />
-            <span className="text-xs font-mono font-bold text-muted-foreground">NOT STARTED</span>
+            <span className={cn('w-2 h-2 rounded-full', systemStatus ? 'bg-emerald-500' : 'bg-muted-foreground')} />
+            <span className={cn('text-xs font-mono font-bold', systemStatus ? 'text-emerald-500' : 'text-muted-foreground')}>
+              {systemStatus ? 'ACTIVE' : 'OFFLINE'}
+            </span>
           </div>
         </div>
       </div>

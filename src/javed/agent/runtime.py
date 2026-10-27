@@ -286,7 +286,7 @@ class AgentRuntimeManager:
         if self.model_override is not None:
             return self.model_override
 
-        if os.getenv("JAVED_E2E_TEST_MODE") == "1":
+        if os.getenv("JAVED_E2E_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
             return DeterministicScriptedE2EModel()
 
         api_key = self.settings.openrouter_api_key
@@ -389,6 +389,7 @@ class AgentRuntimeManager:
             upstream_reported_usage: dict[str, Any] | None = None
             selected_model: str | None = None
             pending_tool_call_ids: dict[str, list[str]] = defaultdict(list)
+            run_to_tool_call_id: dict[str, str] = {}
 
             try:
                 model = self.create_model(request)
@@ -468,13 +469,14 @@ class AgentRuntimeManager:
                                 if t_rec:
                                     tool_desc = t_rec.description
 
-                            tc_id = None
-                            if pending_tool_call_ids.get(ev_name):
-                                tc_id = pending_tool_call_ids[ev_name][0]
+                            tc_id = ev.get("metadata", {}).get("tool_call_id")
+                            if not tc_id and pending_tool_call_ids.get(ev_name):
+                                tc_id = pending_tool_call_ids[ev_name].pop(0)
                             if not tc_id:
-                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
-                                    "run_id"
-                                )
+                                tc_id = ev.get("run_id")
+
+                            if ev.get("run_id") and tc_id:
+                                run_to_tool_call_id[ev["run_id"]] = tc_id
 
                             yield AgentStreamEvent(
                                 event="tool_started",
@@ -516,15 +518,16 @@ class AgentRuntimeManager:
                                 is_error = True
                                 err_msg = str(output_val)
 
-                            tc_id = None
-                            if hasattr(output_val, "tool_call_id") and output_val.tool_call_id:
-                                tc_id = output_val.tool_call_id
-                            elif pending_tool_call_ids.get(ev_name):
+                            tc_id = getattr(output_val, "tool_call_id", None)
+                            ev_r_id = ev.get("run_id")
+                            if not tc_id and ev_r_id and ev_r_id in run_to_tool_call_id:
+                                tc_id = run_to_tool_call_id[ev_r_id]
+                            if not tc_id:
+                                tc_id = ev.get("metadata", {}).get("tool_call_id")
+                            if not tc_id and pending_tool_call_ids.get(ev_name):
                                 tc_id = pending_tool_call_ids[ev_name].pop(0)
                             if not tc_id:
-                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
-                                    "run_id"
-                                )
+                                tc_id = ev.get("run_id")
 
                             if is_error:
                                 yield AgentStreamEvent(
@@ -563,12 +566,14 @@ class AgentRuntimeManager:
                                     server_id = "unknown"
 
                             tc_id = None
-                            if pending_tool_call_ids.get(ev_name):
+                            if ev.get("run_id") and ev["run_id"] in run_to_tool_call_id:
+                                tc_id = run_to_tool_call_id[ev["run_id"]]
+                            if not tc_id:
+                                tc_id = ev.get("metadata", {}).get("tool_call_id")
+                            if not tc_id and pending_tool_call_ids.get(ev_name):
                                 tc_id = pending_tool_call_ids[ev_name].pop(0)
                             if not tc_id:
-                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
-                                    "run_id"
-                                )
+                                tc_id = ev.get("run_id")
 
                             yield AgentStreamEvent(
                                 event="tool_failed",

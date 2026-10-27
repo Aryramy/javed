@@ -754,16 +754,33 @@ class ApprovalStore:
                 )
             return cancelled_count
 
-    async def get_recent_ledger_entries(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def get_recent_ledger_entries(
+        self,
+        limit: int = 50,
+        tool_id: str | None = None,
+        state: str | None = None,
+        server_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Return recent sanitized execution ledger records ordered by dispatch time."""
         await self.initialize()
         bounded_limit = max(1, min(limit, 100))
+        query = "SELECT * FROM execution_ledger WHERE 1=1"
+        params: list[Any] = []
+        if tool_id:
+            query += " AND tool_id = ?"
+            params.append(tool_id)
+        if state:
+            query += " AND state = ?"
+            params.append(state)
+        if server_id:
+            query += " AND tool_id LIKE ?"
+            params.append(f"{server_id}__%")
+        query += " ORDER BY dispatched_at DESC LIMIT ?"
+        params.append(bounded_limit)
+
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM execution_ledger ORDER BY dispatched_at DESC LIMIT ?",
-                (bounded_limit,),
-            ) as cur:
+            async with db.execute(query, tuple(params)) as cur:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
 

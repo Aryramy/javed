@@ -223,6 +223,8 @@ class ExecutionLedgerEntry(BaseModel):
     completed_at: datetime | None = None
     result_summary: str | None = None
     error_message: str | None = None
+    server_id: str | None = None
+    duration_ms: float | None = None
 
 
 class ExecutionLedgerResponse(BaseModel):

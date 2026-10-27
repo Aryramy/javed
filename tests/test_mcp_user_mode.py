@@ -358,3 +358,115 @@ async def test_list_thread_approvals_api_endpoint(tmp_path: Any) -> None:
         ids = [a["approval_id"] for a in data["approvals"]]
         assert appr_id_1 in ids
         assert appr_id_2 in ids
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_tool_event_correlation(
+    user_mode_runtime: AgentRuntimeManager,
+) -> None:
+    """Verify that multiple concurrent calls to the same tool correctly associate tool_call_id."""
+    thread_id = f"thread_concurrent_{uuid.uuid4().hex[:8]}"
+
+    user_mode_runtime.mcp_gateway.registry.register_server(create_time_server_config())
+    schema = {"type": "object", "properties": {"timezone": {"type": "string"}}}
+    tool1 = DiscoveredTool(
+        tool_id="time__get_current_time",
+        server_id="time",
+        original_name="get_current_time",
+        description="Get current time in timezone",
+        input_schema=schema,
+        fingerprint=compute_tool_fingerprint(
+            "get_current_time", "Get current time in timezone", schema
+        ),
+        permission="allowed_read_only",
+        enabled=True,
+    )
+    user_mode_runtime.mcp_gateway.registry._tools[tool1.tool_id] = tool1
+
+    # Simulate model generating two concurrent calls to the same tool
+    async def mock_concurrent_astream_events(*args: Any, **kwargs: Any):
+        yield {
+            "event": "on_chat_model_end",
+            "name": "ChatOpenRouter",
+            "data": {
+                "output": ChatResult(
+                    generations=[
+                        ChatGeneration(
+                            message=AIMessage(
+                                content="",
+                                tool_calls=[
+                                    {
+                                        "id": "tc_concurrent_1",
+                                        "name": "time__get_current_time",
+                                        "args": {"timezone": "UTC"},
+                                    },
+                                    {
+                                        "id": "tc_concurrent_2",
+                                        "name": "time__get_current_time",
+                                        "args": {"timezone": "America/New_York"},
+                                    },
+                                ],
+                            )
+                        )
+                    ]
+                )
+            },
+        }
+        # Call 1 starts first
+        yield {
+            "event": "on_tool_start",
+            "name": "time__get_current_time",
+            "run_id": "tool_run_call_1",
+            "data": {"input": {"timezone": "UTC"}},
+            "metadata": {"tool_call_id": "tc_concurrent_1"},
+        }
+        # Call 2 starts second
+        yield {
+            "event": "on_tool_start",
+            "name": "time__get_current_time",
+            "run_id": "tool_run_call_2",
+            "data": {"input": {"timezone": "America/New_York"}},
+            "metadata": {"tool_call_id": "tc_concurrent_2"},
+        }
+        # Call 2 finishes FIRST (out of order completion)
+        yield {
+            "event": "on_tool_end",
+            "name": "time__get_current_time",
+            "run_id": "tool_run_call_2",
+            "data": {"output": '{"datetime": "2026-10-27T08:00:00-04:00"}'},
+        }
+        # Call 1 finishes SECOND
+        yield {
+            "event": "on_tool_end",
+            "name": "time__get_current_time",
+            "run_id": "tool_run_call_1",
+            "data": {"output": '{"datetime": "2026-10-27T12:00:00Z"}'},
+        }
+
+    mock_agent = AsyncMock()
+    mock_agent.astream_events = mock_concurrent_astream_events
+    mock_agent.aget_state.return_value = MagicMock(config=None, values={"messages": []})
+
+    req = AgentStreamRequest(thread_id=thread_id, message="Times please")
+
+    with patch.object(user_mode_runtime, "create_agent", return_value=mock_agent):
+        with patch.object(
+            user_mode_runtime.checkpointer_manager,
+            "get_async_checkpointer",
+            return_value=AsyncMock(),
+        ):
+            events = []
+            async for ev in user_mode_runtime.stream_agent(req):
+                events.append(ev)
+
+    # Collect completion events
+    completed_events = [e for e in events if e.event == "tool_completed"]
+    assert len(completed_events) == 2
+
+    # Verify first completed event belongs to call 2 with exact tc_concurrent_2
+    assert completed_events[0].data["tool_call_id"] == "tc_concurrent_2"
+    assert "08:00:00-04:00" in completed_events[0].data["output"]
+
+    # Verify second completed event belongs to call 1 with exact tc_concurrent_1
+    assert completed_events[1].data["tool_call_id"] == "tc_concurrent_1"
+    assert "12:00:00Z" in completed_events[1].data["output"]

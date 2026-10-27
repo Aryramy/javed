@@ -13,6 +13,7 @@ import logging
 import secrets
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
@@ -417,14 +418,45 @@ async def update_tool_permission(
 async def get_execution_ledger(
     request: Request,
     limit: int = Query(default=50, ge=1, le=100, description="Max entries to return"),
+    tool_id: str | None = Query(default=None, description="Optional tool ID filter"),
+    state: str | None = Query(default=None, description="Optional execution state filter"),
+    server_id: str | None = Query(default=None, description="Optional server ID filter"),
 ) -> ExecutionLedgerResponse:
     """Retrieve bounded list of recent execution ledger records for human audit."""
     store = _get_approval_store(request)
-    raw_entries = await store.get_recent_ledger_entries(limit=limit)
+    raw_entries = await store.get_recent_ledger_entries(
+        limit=limit,
+        tool_id=tool_id,
+        state=state,
+        server_id=server_id,
+    )
 
     entries = []
     for r in raw_entries:
         try:
+            dispatched_raw = r["dispatched_at"]
+            completed_raw = r.get("completed_at")
+            duration_ms: float | None = None
+            if dispatched_raw and completed_raw:
+                try:
+                    dt_start = (
+                        datetime.fromisoformat(dispatched_raw)
+                        if isinstance(dispatched_raw, str)
+                        else dispatched_raw
+                    )
+                    dt_end = (
+                        datetime.fromisoformat(completed_raw)
+                        if isinstance(completed_raw, str)
+                        else completed_raw
+                    )
+                    duration_ms = max(0.0, round((dt_end - dt_start).total_seconds() * 1000, 1))
+                except Exception:
+                    duration_ms = None
+
+            parsed_server = "unknown"
+            if "__" in r["tool_id"]:
+                parsed_server = r["tool_id"].split("__")[0]
+
             entry = ExecutionLedgerEntry(
                 dispatch_id=r["dispatch_id"],
                 approval_id=r["approval_id"],
@@ -435,6 +467,8 @@ async def get_execution_ledger(
                 completed_at=r.get("completed_at"),
                 result_summary=r.get("result_summary"),
                 error_message=r.get("error_message"),
+                server_id=parsed_server,
+                duration_ms=duration_ms,
             )
             entries.append(entry)
         except Exception as exc:

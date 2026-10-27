@@ -56,7 +56,44 @@ export interface ToolDetailResponse {
   } | null
 }
 
+export type ExecutionState = 'not_dispatched' | 'in_flight' | 'completed' | 'failed' | 'uncertain'
+
+export interface ExecutionLedgerEntry {
+  dispatch_id: string
+  approval_id: string
+  tool_id: string
+  argument_digest: string
+  state: ExecutionState | string
+  dispatched_at: string
+  completed_at?: string | null
+  result_summary?: string | null
+  error_message?: string | null
+  server_id?: string | null
+  duration_ms?: number | null
+}
+
+export interface ExecutionLedgerResponse {
+  entries: ExecutionLedgerEntry[]
+  total: number
+}
+
+export interface ApprovalsSummaryResponse {
+  pending_count: number
+  approved_count: number
+  rejected_count: number
+  expired_count: number
+  cancelled_count: number
+  total_count: number
+}
+
 let activeSessionToken: string | null = null
+
+const getBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null') {
+    return window.location.origin
+  }
+  return 'http://localhost:5173'
+}
 
 export const mcpService = {
   /**
@@ -81,7 +118,7 @@ export const mcpService = {
     if (activeSessionToken) {
       headers['X-Javed-Owner-Token'] = activeSessionToken
     }
-    const res = await fetch('/api/v1/mcp/auth/session', { headers })
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/auth/session`, { headers })
     if (!res.ok) {
       return { authenticated: false }
     }
@@ -92,7 +129,7 @@ export const mcpService = {
    * Authenticate with master owner token to obtain a short-lived session token.
    */
   async loginOwner(ownerToken: string): Promise<{ session_token: string; expires_in: number }> {
-    const res = await fetch('/api/v1/mcp/auth/session', {
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/auth/session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,7 +150,7 @@ export const mcpService = {
    */
   async logoutOwner(): Promise<void> {
     if (activeSessionToken) {
-      await fetch('/api/v1/mcp/auth/logout', {
+      await fetch(`${getBaseUrl()}/api/v1/mcp/auth/logout`, {
         method: 'POST',
         headers: {
           'X-Javed-Owner-Token': activeSessionToken,
@@ -127,7 +164,7 @@ export const mcpService = {
    * Fetch approved MCP servers and status.
    */
   async getServers(): Promise<ServerListResponse> {
-    const res = await fetch('/api/v1/mcp/servers')
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/servers`)
     if (!res.ok) {
       throw new Error(`Failed to load MCP servers (HTTP ${res.status})`)
     }
@@ -138,7 +175,7 @@ export const mcpService = {
    * Fetch dynamic MCP tool catalog and effective permissions.
    */
   async getTools(): Promise<ToolListResponse> {
-    const res = await fetch('/api/v1/mcp/tools')
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/tools`)
     if (!res.ok) {
       throw new Error(`Failed to load MCP tools (HTTP ${res.status})`)
     }
@@ -149,7 +186,7 @@ export const mcpService = {
    * Fetch details, schema, and policy for a single MCP tool.
    */
   async getTool(toolId: string): Promise<ToolDetailResponse> {
-    const res = await fetch(`/api/v1/mcp/tools/${encodeURIComponent(toolId)}`)
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/tools/${encodeURIComponent(toolId)}`)
     if (!res.ok) {
       throw new Error(`Failed to load tool '${toolId}' (HTTP ${res.status})`)
     }
@@ -163,7 +200,7 @@ export const mcpService = {
     if (!activeSessionToken) {
       throw new Error('Owner authentication required. Please unlock with your owner token.')
     }
-    const res = await fetch(`/api/v1/mcp/servers/${encodeURIComponent(serverId)}/refresh`, {
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/servers/${encodeURIComponent(serverId)}/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -190,7 +227,7 @@ export const mcpService = {
     if (!activeSessionToken) {
       throw new Error('Owner authentication required. Please unlock with your owner token.')
     }
-    const res = await fetch(`/api/v1/mcp/tools/${encodeURIComponent(toolId)}/permission`, {
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/tools/${encodeURIComponent(toolId)}/permission`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -207,6 +244,41 @@ export const mcpService = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || `Failed to update permission for '${toolId}' (HTTP ${res.status})`)
+    }
+    return res.json()
+  },
+
+  /**
+   * Fetch recent execution ledger entries with bounded limit and optional filters.
+   */
+  async getLedger(params?: {
+    limit?: number
+    tool_id?: string
+    state?: string
+    server_id?: string
+  }): Promise<ExecutionLedgerResponse> {
+    const searchParams = new URLSearchParams()
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.tool_id) searchParams.set('tool_id', params.tool_id)
+    if (params?.state) searchParams.set('state', params.state)
+    if (params?.server_id) searchParams.set('server_id', params.server_id)
+
+    const qs = searchParams.toString()
+    const url = `${getBaseUrl()}/api/v1/mcp/ledger${qs ? `?${qs}` : ''}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error(`Failed to load execution ledger (HTTP ${res.status})`)
+    }
+    return res.json()
+  },
+
+  /**
+   * Fetch aggregated summary of human approvals.
+   */
+  async getApprovalsSummary(): Promise<ApprovalsSummaryResponse> {
+    const res = await fetch(`${getBaseUrl()}/api/v1/mcp/approvals/summary`)
+    if (!res.ok) {
+      throw new Error(`Failed to load approvals summary (HTTP ${res.status})`)
     }
     return res.json()
   },

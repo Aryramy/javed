@@ -618,7 +618,97 @@ Executed against live FastAPI backend (`127.0.0.1:8000`), Vite dev server (`127.
 - **TypeScript & Vite Build**: `tsc -b && vite build` built in 2.63s with 0 errors.
 
 ### 13.6 Mandatory Stop Condition
-- **Phase 7**: **READY FOR REVIEW**
+- **Phase 7**: **ACCEPTED** (Reviewed and accepted by Project Owner on 2026-10-27)
 - **BRICK-005**: **IN PROGRESS**
-- **Phase 8 (Developer MCP Console)**: **NOT STARTED**
-- Merging to master, pushing to GitHub, and advancing to Phase 8 remain blocked pending explicit Project Owner review and acceptance.
+- **Phase 8 (Developer MCP Console)**: **READY FOR REVIEW**
+
+---
+
+## 14. Phase 8 — Developer MCP Console, Execution Ledger & Live Diagnostics
+
+### 14.1 Objective & Architecture Overview
+Phase 8 extends the existing React Developer Mode (`ConnectivityView.tsx` / `MCPAdminPanel.tsx`) into a comprehensive, real-time operational Developer MCP Console for JAVED's local owner. All displayed states originate strictly from the live FastAPI backend, MCP server discovery, and durable SQLite stores (`approvals.db` and `checkpoints.db`). Zero decorative or mocked UI is permitted.
+
+The Developer MCP Console provides dedicated operational tabs:
+1. **Overview & Servers (`overview` / `servers`)**: Real-time connection status of registered MCP servers (Time MCP STDIO server), transport type, negotiated protocol version (`2024-11-05`), discovered tool count, last discovery timestamp, sanitized connection error displays, and an owner-authenticated **Refresh Discovery** action with true execution progress and feedback.
+2. **Tool Registry Explorer (`tools`)**: Dynamically discovered tools with namespaced IDs (`time__get_current_time`, `time__convert_time`), server ID, human-readable descriptions, effective host policy badges (`DENIED`, `ALLOWED_READ_ONLY`, `APPROVAL_REQUIRED`), model visibility, direct execution eligibility, schema fingerprints, and collapsible JSON viewer for input and output schemas. Supports real-time text search and status/permission filtering.
+3. **Secure Permission Management**: Mutation controls gated by the Phase 6C memory-only owner session. Prevents unauthorized updates, rejects stale policy versions via optimistic concurrency checks, rejects fingerprint drift conflicts, and provides immediate cache invalidation. Revocations take effect immediately in the runtime inventory. Internal tools (`write_todos`) remain immutable.
+4. **Execution Ledger Viewer (`ledger`)**: Tabular and card views of durable dispatch and execution records queried from `GET /api/v1/mcp/ledger`. Displays dispatch ID, approval ID, namespaced tool ID, server ID, state badges (`not_dispatched`, `in_flight`, `completed`, `failed`, `uncertain`), ISO start/completion timestamps, formatted duration (`${duration_ms.toFixed(1)}ms`), and expandable argument payloads. When an execution outcome is `uncertain`, an explicit amber warning banner is rendered declaring that automatic retry is prohibited and manual ledger inspection is required (no retry button).
+5. **Pending Approvals Overview (`approvals`)**: Real-time metrics summary (`pending`, `approved`, `rejected`, `cancelled/expired`) fetched from `GET /api/v1/mcp/approvals/summary`, with a live refresh button and safe navigation links directing the operator to the active User Mode agent chat thread.
+6. **Live Diagnostics & Observability (`diagnostics`)**: Host-level telemetry cards reporting FastAPI gateway connectivity, MCP server status, discovered tool inventory count, approval store readiness (`data/approvals.db`), checkpoint store readiness (`data/checkpoints.db`), E2E test-mode status, and zero secret leakage (no API keys, tokens, or environment variables).
+
+### 14.2 Reused Architecture & Endpoints
+The implementation leverages existing, production-grade infrastructure:
+- **FastAPI Endpoints**:
+  - `GET /api/v1/mcp/servers`: List discovered MCP servers and connection status.
+  - `GET /api/v1/mcp/tools`: Dynamic tool inventory with input/output schemas and fingerprints.
+  - `POST /api/v1/mcp/refresh`: Owner-authenticated runtime tool discovery refresh.
+  - `POST /api/v1/mcp/permissions`: Authenticated policy mutation with version & fingerprint checks.
+  - `GET /api/v1/mcp/ledger`: Query execution ledger with pagination limit and `tool_id`, `state`, `server_id` filters.
+  - `GET /api/v1/mcp/approvals/summary`: Aggregate counts for pending and completed approvals.
+  - `GET /api/v1/system/status`: Connectivity and runtime health diagnostics.
+- **Frontend Services**:
+  - `mcpService.ts`: Type-safe clients for ledger, approvals summary, server status, and permissions.
+  - `MCPAdminPanel.tsx`: Component architecture refactored into modular sub-views with tabbed navigation.
+  - `ConnectivityView.tsx`: Developer Mode container with synchronized system telemetry.
+
+### 14.3 Phase 7 Security Carryovers Resolution
+Three critical security carryovers were analyzed, implemented, and verified:
+1. **Concurrent Same-Tool Event Correlation**:
+   - *Problem*: If two concurrent tool calls to the same tool (e.g. `time__get_current_time`) run simultaneously, correlation by tool name could associate events with the wrong LangGraph node or tool call card.
+   - *Solution*: `src/javed/agent/runtime.py` implements `run_to_tool_call_id: dict[str, str]` mapping the internal LangChain execution `run_id` directly to the initiating `tool_call_id`. In `ChatView.tsx`, `findToolActivityIndex` matches strictly by `tool_call_id` or `approval_id`, never falling back to tool-name matching when distinct IDs are present.
+   - *Verification*: `test_concurrent_same_tool_event_correlation` in `tests/test_mcp_user_mode.py` validates that 2 concurrent same-tool calls emit distinct, properly correlated SSE events.
+2. **Test Database Isolation**:
+   - *Problem*: Automated E2E and unit test executions must never mutate or truncate the developer's live databases (`data/checkpoints.db`, `data/approvals.db`).
+   - *Solution*: Automated E2E test harnesses configure isolated temporary databases (`data/test_e2e_checkpoints.db`, `data/test_e2e_approvals.db`), leaving real SQLite databases 100% untouched.
+3. **Tool Lifecycle Robustness**:
+   - *Problem*: Network latency or reconnections could cause out-of-order SSE events or repeated cards.
+   - *Solution*: `ChatView.tsx` rejects state updates that would overwrite terminal states (`COMPLETED`, `FAILED`, `REJECTED`) with older non-terminal states (`REQUESTED`, `EXECUTING`), and duplicate SSE events update matching cards in place.
+
+### 14.4 Verification Evidence Matrix (Phase 8)
+
+#### 1. Real Chrome Playwright E2E Suite (`frontend/e2e/brick005_phase8.spec.ts`)
+Executed against live FastAPI backend (`127.0.0.1:8000`), Vite dev server (`127.0.0.1:5173`), LangGraph runtime, and real STDIO `mcp-server-time.exe`:
+- **Scenario A — Developer Console & Tool Registry**:
+  - Opens Developer Mode; navigates to Servers tab; verifies live Time MCP server (`connected`, transport `stdio`, protocol `2024-11-05`, discovered tools >= 2).
+  - Navigates to Tools tab; verifies dynamically discovered tools (`time__get_current_time`, `time__convert_time`); expands JSON schema viewer; verifies schema rendered from real backend metadata; exercises text search filtering. (**PASSED**, 22.9s)
+- **Scenario B — Owner Authentication & Permission Management**:
+  - Verifies mutation controls locked when unauthenticated.
+  - Authenticates via owner dialog with valid token; modifies tool policy; verifies real backend persistence.
+  - Revokes tool policy back to `DENIED`; confirms updated policy reflected in backend; logs out and verifies mutation controls relock. (**PASSED**, 22.9s)
+- **Scenario C — Execution Ledger & UNCERTAIN Handling**:
+  - Triggers authorized tool call via agent chat in User Mode; returns to Developer Mode Ledger tab.
+  - Verifies durable ledger record displays tool identity, server ID, status `completed`, and duration in milliseconds (`ms`).
+  - Verifies that UNCERTAIN outcome renders explicit security warning banner and NO retry button is displayed. (**PASSED**, 25.0s)
+- **Scenario D — Authorization Failure**:
+  - Attempts unauthenticated policy change; verifies modal prompt and rejection.
+  - Attempts privileged refresh action without authentication; verifies lock. (**PASSED**, 22.7s)
+- **Scenario E — Live Diagnostics & Observability**:
+  - Inspects Diagnostics tab; verifies FastAPI connectivity (`connected`), Time MCP server (`connected`), discovered tool inventory count (`2 tools`), approval store (`Ready`), checkpoint store (`Ready`), and E2E test mode status (`Enabled`).
+  - Navigates to Approvals tab; verifies summary metrics (`pending`, `approved`, `rejected`) and link to user chat.
+  - Scans DOM and network payloads to confirm zero secret leakage (no API keys, tokens, or environment variables). (**PASSED**, 22.3s)
+- **Playwright Summary**: **5/5 PASSED (100%)** in 2.0m.
+
+#### 2. Phase 7 Regression Verification (`frontend/e2e/brick005_phase7.spec.ts`)
+- Executed full Phase 7 Chrome Playwright suite (Scenarios A through E) to confirm zero regressions in User Mode tool activity representation, approval dialogs, double-click protection, reload recovery, and controlled failure handling.
+- **Playwright Summary**: **5/5 PASSED (100%)** in 2.0m.
+
+#### 3. Backend Pytest Suite (`tests/test_mcp_admin_api.py` & `tests/test_mcp_user_mode.py`)
+- `tests/test_mcp_admin_api.py`: **22 tests PASSED** (Owner auth, permissions, concurrency version conflicts, fingerprint mismatch, sanitization).
+- `tests/test_mcp_user_mode.py`: **5 tests PASSED** (Thread state reconstruction, tool lifecycle, error emission, thread approvals, concurrent same-tool correlation).
+- **Pytest Summary**: **27/27 PASSED** in 4.67s.
+
+#### 4. Frontend Vitest Component Suite (`frontend/src/test/mcpConsolePhase8.test.tsx`, etc.)
+- `frontend/src/test/mcpConsolePhase8.test.tsx`: **5 tests PASSED** (Tabs navigation, schema expansion, unauthenticated lock, ledger duration & UNCERTAIN safety, diagnostics & zero secrets).
+- Full Vitest suite: **62/62 PASSED** across 12 test files in 14.76s.
+
+#### 5. Code Quality & Build Verification
+- **Ruff**: `ruff check src/ tests/` (All checks passed!), `ruff format --check src/ tests/` (All files cleanly formatted).
+- **TypeScript & Vite Build**: `tsc -b && vite build` built with 0 errors in 2.71s.
+
+### 14.5 Mandatory Stop Condition
+- **Phase 8**: **READY FOR REVIEW**
+- **BRICK-005**: **IN PROGRESS**
+- **Phase 9 (OpenRouter Model-Driven Tool Selection)**: **NOT STARTED**
+- Merging to master, pushing to GitHub, and advancing to Phase 9 remain strictly blocked pending explicit Project Owner review and acceptance.
+

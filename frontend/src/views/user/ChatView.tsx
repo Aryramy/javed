@@ -141,12 +141,10 @@ function findToolActivityIndex(
   }
 ): number {
   if (target.tool_call_id) {
-    const idx = activities.findIndex((t) => t.tool_call_id === target.tool_call_id);
-    if (idx >= 0) return idx;
+    return activities.findIndex((t) => t.tool_call_id === target.tool_call_id);
   }
   if (target.approval_id) {
-    const idx = activities.findIndex((t) => t.approval_id === target.approval_id);
-    if (idx >= 0) return idx;
+    return activities.findIndex((t) => t.approval_id === target.approval_id);
   }
   if (target.tool) {
     const activeIdx = activities.findLastIndex(
@@ -156,10 +154,9 @@ function findToolActivityIndex(
     );
     if (activeIdx >= 0) return activeIdx;
 
-    const lastMatchingIdx = activities.findLastIndex(
+    return activities.findLastIndex(
       (t) => t.tool_id === target.tool || t.tool_name === target.tool
     );
-    if (lastMatchingIdx >= 0) return lastMatchingIdx;
   }
   return -1;
 }
@@ -575,7 +572,13 @@ export const ChatView: React.FC = () => {
                 };
                 if (existingIndex >= 0) {
                   const copy = [...prev];
-                  copy[existingIndex] = { ...copy[existingIndex], ...record };
+                  const existingStatus = copy[existingIndex].status;
+                  const isTerminal = ['COMPLETED', 'FAILED', 'REJECTED', 'CANCELLED'].includes(existingStatus);
+                  copy[existingIndex] = {
+                    ...copy[existingIndex],
+                    ...record,
+                    status: isTerminal ? existingStatus : record.status,
+                  };
                   return copy;
                 }
                 return [...prev, record];
@@ -590,9 +593,11 @@ export const ChatView: React.FC = () => {
                 const now = new Date().toISOString();
                 if (existingIndex >= 0) {
                   const copy = [...prev];
+                  const existingStatus = copy[existingIndex].status;
+                  const isTerminal = ['COMPLETED', 'FAILED', 'REJECTED', 'CANCELLED'].includes(existingStatus);
                   copy[existingIndex] = {
                     ...copy[existingIndex],
-                    status: 'EXECUTING',
+                    status: isTerminal ? existingStatus : 'EXECUTING',
                     started_at: copy[existingIndex].started_at || now,
                     server_id: data.server_id || copy[existingIndex].server_id,
                     description: data.description || copy[existingIndex].description,

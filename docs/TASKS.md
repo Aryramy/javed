@@ -154,4 +154,39 @@
       - 57/57 Vitest frontend tests PASSED across 11 files (`frontend/src/test/toolActivity.test.tsx`, `frontend/src/test/approval.test.tsx`, etc.).
       - Ruff check and format passed (0 errors, 57 files formatted).
       - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.63s).
-- **Stop Condition**: Phase 7 Complete & READY FOR REVIEW. Mandatory Stop: Phase 7: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 8: NOT STARTED. Await project owner explicit authorization before beginning Phase 8.
+- **Phase 7 Status**: **ACCEPTED** (Explicitly reviewed and approved by Project Owner on 2026-10-27).
+- **Phase 8 Scope**: Complete Developer MCP Console, Execution Ledger & Live Diagnostics:
+  - Developer MCP Console Architecture (`frontend/src/components/dev/MCPAdminPanel.tsx`):
+    - Dedicated operational tabs: Overview, Servers, Tools, Ledger, Approvals, Diagnostics.
+    - Servers overview: Displays connection status, transport (`stdio`), negotiated protocol version (`2024-11-05`), discovered tools count, last discovery timestamp, and sanitized error messages.
+    - Authenticated Refresh Discovery action: Requires memory-only owner session, provides truthful execution progress and error reporting.
+  - Tool Registry Explorer:
+    - Lists discovered tools with namespaced IDs (`time__get_current_time`, `time__convert_time`), server ID, human descriptions, effective host policies, schema fingerprints, and collapsible JSON schemas.
+    - Live search and permission/status filters.
+  - Secure Permission Management:
+    - Gated by Phase 6C memory-only owner authentication (`DENIED`, `ALLOWED_READ_ONLY`, `APPROVAL_REQUIRED`).
+    - Optimistic concurrency version checks and schema fingerprint drift validation.
+    - Immediate runtime cache invalidation; internal tools (`write_todos`) remain immutable.
+  - Durable Execution Ledger Viewer:
+    - Queries `GET /api/v1/mcp/ledger` with limit pagination and tool/state/server filters.
+    - Displays dispatch ID, approval ID, tool ID, server ID, state badges, ISO timestamps, and duration (`${duration_ms.toFixed(1)}ms`).
+    - Explicit UNCERTAIN handling: Displays amber warning banner noting that automatic retry is prohibited and manual inspection is required (NO retry button).
+  - Approvals Overview:
+    - Queries `GET /api/v1/mcp/approvals/summary` for aggregate pending, approved, rejected, cancelled counts.
+    - Live refresh button and safe navigation link to active User Mode chat thread.
+  - Live Diagnostics & Observability:
+    - Real-time telemetry cards: FastAPI gateway, MCP server status, discovered tools count, approval store readiness, checkpoint store readiness, test mode status.
+    - Zero secret leakage: Strict redaction ensures no API keys, tokens, or environment secrets appear in DOM or browser payloads.
+  - Security Carryovers Addressed:
+    - Concurrent same-tool event correlation: `src/javed/agent/runtime.py` tracks `run_to_tool_call_id` mapping LangChain `run_id` to initiating `tool_call_id`; `ChatView.tsx` enforces strict ID matching.
+    - Test database isolation: Automated tests run against isolated temporary databases (`data/test_e2e_checkpoints.db`, `data/test_e2e_approvals.db`), preserving real SQLite databases.
+    - Tool lifecycle robustness: Prevents terminal state overwrites from delayed SSE events and eliminates duplicate cards.
+  - Verification Matrix:
+    - 5/5 real Chrome Playwright tests PASSED (`frontend/e2e/brick005_phase8.spec.ts`) across Scenarios A through E in 2.0m.
+    - 5/5 real Chrome Playwright Phase 7 regression tests PASSED (`frontend/e2e/brick005_phase7.spec.ts`) in 2.0m.
+    - 27/27 backend pytests PASSED (`tests/test_mcp_admin_api.py` and `tests/test_mcp_user_mode.py`) in 4.67s.
+    - 62/62 Vitest frontend tests PASSED across 12 files (`frontend/src/test/mcpConsolePhase8.test.tsx`, etc.) in 14.76s.
+    - Ruff check & format passed (0 errors, clean format).
+    - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.71s).
+- **Stop Condition**: Phase 8 Complete & READY FOR REVIEW. Mandatory Stop: Phase 8: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 9: NOT STARTED. Await project owner explicit authorization before beginning Phase 9.
+
