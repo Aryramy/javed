@@ -7,10 +7,12 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from javed.agent.runtime import AgentRuntimeManager
+from javed.mcp.approval_store import redact_sensitive_value
 from javed.schemas.agent import AgentStreamEvent, validate_thread_id
 from javed.schemas.approval import (
     ApprovalDecisionRequest,
     ApprovalListResponse,
+    ApprovalRecord,
     ApprovalResponse,
 )
 
@@ -53,6 +55,11 @@ def _verify_origin(request: Request, origin: str | None = Header(None)) -> None:
             )
 
 
+def _sanitize_record(record: ApprovalRecord) -> ApprovalRecord:
+    """Return a copy of the approval record with sensitive argument values redacted."""
+    return record.model_copy(update={"arguments": redact_sensitive_value(record.arguments)})
+
+
 @router.get(
     "/pending",
     response_model=ApprovalListResponse,
@@ -74,7 +81,8 @@ async def list_pending_approvals(
             ) from ve
 
     records = await runtime.approval_store.get_pending_approvals(thread_id=thread_id)
-    return ApprovalListResponse(approvals=records, total=len(records))
+    sanitized = [_sanitize_record(r) for r in records]
+    return ApprovalListResponse(approvals=sanitized, total=len(sanitized))
 
 
 @router.get(
@@ -97,7 +105,8 @@ async def list_thread_approvals(
 
     runtime = _get_agent_runtime(request)
     records = await runtime.approval_store.get_thread_approvals(validated_id)
-    return ApprovalListResponse(approvals=records, total=len(records))
+    sanitized = [_sanitize_record(r) for r in records]
+    return ApprovalListResponse(approvals=sanitized, total=len(sanitized))
 
 
 @router.get(
@@ -117,7 +126,7 @@ async def get_approval(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Approval record '{approval_id}' not found.",
         )
-    return ApprovalResponse(approval=rec, message="Approval record retrieved.")
+    return ApprovalResponse(approval=_sanitize_record(rec), message="Approval record retrieved.")
 
 
 @router.post(
@@ -152,7 +161,7 @@ async def submit_decision(
             reason=payload.reason,
         )
         return ApprovalResponse(
-            approval=updated,
+            approval=_sanitize_record(updated),
             message=f"Approval successfully transitioned to '{updated.status}'.",
         )
     except KeyError as ke:

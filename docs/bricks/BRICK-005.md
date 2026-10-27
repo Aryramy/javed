@@ -706,9 +706,85 @@ Executed against live FastAPI backend (`127.0.0.1:8000`), Vite dev server (`127.
 - **Ruff**: `ruff check src/ tests/` (All checks passed!), `ruff format --check src/ tests/` (All files cleanly formatted).
 - **TypeScript & Vite Build**: `tsc -b && vite build` built with 0 errors in 2.71s.
 
-### 14.5 Mandatory Stop Condition
-- **Phase 8**: **READY FOR REVIEW**
+- **Phase 8 (Developer MCP Console)**: **ACCEPTED** (Reviewed and accepted by Project Owner on 2026-10-27)
+- **Phase 9 (Live OpenRouter Model-Driven Tool Selection)**: **READY FOR REVIEW**
 - **BRICK-005**: **IN PROGRESS**
-- **Phase 9 (OpenRouter Model-Driven Tool Selection)**: **NOT STARTED**
-- Merging to master, pushing to GitHub, and advancing to Phase 9 remain strictly blocked pending explicit Project Owner review and acceptance.
+- **Phase 10**: **NOT STARTED**
+
+---
+
+## 15. Phase 9 — Live OpenRouter Model-Driven MCP Tool Selection, Intent Routing & Security Acceptance
+
+### 15.1 Objective & Scope
+Phase 9 delivers genuine OpenRouter model-driven MCP tool selection, multi-tier intent routing, and host-level security verification under real external LLM inference. All interactions are grounded in live OpenRouter streaming, the host-mediated `SecureMCPGateway`, and the STDIO `mcp-server-time` reference server. Mocked or simulated model responses are strictly prohibited.
+
+The phase rigorously verifies 8 core operational and security scenarios:
+- **Scenario A (Conversational Intent — No Tool Required)**: Plain conversational questions ("Hello! What is your purpose?") are recognized by the model without dispatching unneeded MCP tools.
+- **Scenario B (Read-Only Time Lookup)**: Prompts requesting current time select `time__get_current_time`, execute over STDIO transport, and truthfully synthesize the real MCP response into the final answer.
+- **Scenario C (Timezone Conversion with Structured Arguments)**: Prompts requesting timezone conversion select `time__convert_time` with structured parameters (`source_timezone`, `target_timezone`, `time`).
+- **Scenario D (Human Approval Flow)**: Tools assigned `APPROVAL_REQUIRED` halt on LangGraph interrupt, persist an approval record to `data/approvals.db`, and upon human approval resume execution to `COMPLETED`.
+- **Scenario E (Human Rejection Flow)**: Tools assigned `APPROVAL_REQUIRED` halted on interrupt are rejected by the human operator; execution is safely bypassed, zero MCP dispatch occurs, and the model truthfully acknowledges the refusal.
+- **Scenario F (Denied Tool & Prompt Injection Resistance)**: Tools assigned `DENIED` policy are strictly blocked host-side, even when the user submits an adversarial prompt claiming administrative override codes.
+- **Scenario G (Multi-Turn Thread Context)**: Sequential conversational turns retain thread state, checkpoint history, and contextual references across multiple tool invocations.
+- **Scenario H (Incompatible Model Fallback)**: Requests specifying models lacking structured tool calling support automatically fall back to the cheapest verified tool-capable model (`google/gemini-2.5-flash`), logging a transparent security audit event.
+
+### 15.2 Carryover A — MCP Protocol Version Reconciliation
+- **Investigation**: Live JSON-RPC handshakes between FastMCP (`fastmcp` v4.1.3), the official Python MCP SDK (`mcp` v2.3.0), and `mcp-server-time` negotiate protocol version **`2026-07-28`** (defined by `mcp.types.LATEST_PROTOCOL_VERSION`).
+- **Resolution**: Stale documentation references mentioning `2024-11-05` were reconciled across both backend runtime status reporting and the Developer MCP Console (`MCPAdminPanel.tsx`). Real Chrome Playwright tests confirm that `2026-07-28` is rendered truthfully directly from backend telemetry.
+
+### 15.3 Carryover B — Ledger Confidentiality & Sensitive Argument Redaction
+- **Cryptographic Digest Integrity**: Raw tool arguments are preserved in SQLite `pending_approvals` table strictly to maintain cryptographic integrity checks (`compute_argument_digest(arguments) == approval.argument_digest`).
+- **Host-Side Redaction**: Before arguments are serialized for external consumption (via `GET /api/v1/mcp/ledger`, `GET /api/v1/agent/approvals/*`, and SSE streams `tool_requested`, `tool_started`, `approval_required`), all keys and values matching sensitive patterns (`api_key`, `token`, `secret`, `password`, `bearer`, `auth`, `authorization`, `private_key`) are recursively masked as `"[REDACTED]"`.
+- **Viewer Component**: `MCPAdminPanel.tsx` features an expandable, syntax-highlighted arguments viewer (`[data-testid="ledger-arguments-view"]`) allowing operators to inspect operational parameters without risk of secret exfiltration.
+
+### 15.4 Telemetry & Upstream Cost Accumulation
+In complex tool-use loops, the agent runtime emits multiple LLM calls per turn (tool call selection followed by final synthesis). The runtime now accumulates tokens and upstream costs across multiple `on_chat_model_end` events, extracting from `msg.usage_metadata` and `msg.response_metadata["cost"]` / `["cost_details"]["upstream_inference_cost"]`. This ensures reported `StreamUsage` accurately reflects total tokens and exact OpenRouter upstream cost without falling back to character estimation.
+
+### 15.5 Verification Evidence Matrix (Phase 9)
+
+#### 1. Live OpenRouter Acceptance Suite (`tests/test_live_openrouter_mcp.py`)
+Executed against live OpenRouter API (`openai/gpt-4o-mini`, `google/gemini-2.5-flash`), live FastAPI gateway, and real STDIO `mcp-server-time.exe`:
+- **Scenario A**: Conversational intent; no tool call dispatched. (**PASSED**)
+- **Scenario B**: Read-only time lookup; genuine `time__get_current_time` executed. (**PASSED**)
+- **Scenario C**: Timezone conversion; `time__convert_time` with structured arguments. (**PASSED**)
+- **Scenario D**: Human approval flow; LangGraph interrupt, durable record, resume to completed. (**PASSED**)
+- **Scenario E**: Human rejection flow; interrupt halt, rejection recorded, zero MCP dispatch. (**PASSED**)
+- **Scenario F**: Denied tool / prompt injection; host-side gate blocks execution. (**PASSED**)
+- **Scenario G**: Multi-turn thread context; state retained across tool turns. (**PASSED**)
+- **Scenario H**: Incompatible model fallback; safely routed to tool-capable model. (**PASSED**)
+- **Suite Summary**: **8/8 PASSED (100%)**
+
+#### 2. Confidentiality & Model Routing Unit/Integration Suites
+- `tests/test_mcp_confidentiality.py`: **4 tests PASSED** (Sensitive key redaction, pattern-based value redaction, ledger backend redaction, approvals API sanitization).
+- `tests/test_mcp_model_routing.py`: **5 tests PASSED** (Catalog tool support discovery, unsupported model detection, cost-tier selection, runtime fallback routing, Section 7 server plugin prohibition).
+- **Subtotal**: **9/9 PASSED** in 2.90s.
+
+#### 3. Backend Admin & User Mode Suites
+- `tests/test_mcp_admin_api.py` & `tests/test_mcp_user_mode.py`: **27/27 PASSED** in 4.35s.
+
+#### 4. Real Chrome Playwright E2E Suite (`frontend/e2e/brick005_phase9.spec.ts`)
+Executed in headless Chrome against live FastAPI (`127.0.0.1:8000`) and Vite dev server (`127.0.0.1:5173`):
+- **Scenario A**: Protocol version `2026-07-28` verified on Time MCP Server card; Subsystem Diagnostics section active. (**PASSED**, 22.4s)
+- **Scenario B**: Authenticated owner session; Execution Ledger displays records with expandable redacted arguments viewer. (**PASSED**, 22.2s)
+- **Scenario C**: Model selector dropdown renders tool-capable models with responsive interaction. (**PASSED**, 22.4s)
+- **Scenario D**: Pure conversational message renders without triggering unnecessary tool cards. (**PASSED**, 24.3s)
+- **Playwright Summary**: **4/4 PASSED (100%)** in 1.6m.
+
+#### 5. Phase 8 Playwright E2E Regression Suite (`frontend/e2e/brick005_phase8.spec.ts`)
+- Executed full Phase 8 Chrome Playwright suite (Scenarios A through E) to confirm zero regressions in Developer Console tabs, owner authentication, permission mutation, execution ledger duration, and diagnostics telemetry.
+- **Playwright Summary**: **5/5 PASSED (100%)** in 1.9m.
+
+#### 6. Frontend Vitest Component Suite
+- **62/62 PASSED** across 12 test files in 15.68s.
+
+#### 7. Code Quality & Build Verification
+- **Ruff**: `ruff check src tests` (All checks passed! 0 errors).
+- **TypeScript & Vite Build**: `tsc -b && vite build` built in 2.13s with 0 errors.
+
+### 15.6 Mandatory Stop Condition
+- **Phase 9**: **READY FOR REVIEW**
+- **BRICK-005**: **IN PROGRESS**
+- **Phase 10 (Final Polish & BRICK-005 Completion)**: **NOT STARTED**
+- Work halts immediately. Awaiting Project Owner review and explicit authorization before advancing to Phase 10.
+
 

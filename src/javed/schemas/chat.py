@@ -192,6 +192,14 @@ class ModelInfo(BaseModel):
         description="Whether this entry is an Auto Router meta-model",
     )
     cost_tier: str | None = Field(default=None, description="Active or recommended cost tier")
+    supports_tools: bool = Field(
+        default=False,
+        description="Whether this model supports structured tool / function calling",
+    )
+    supported_parameters: list[str] = Field(
+        default_factory=list,
+        description="List of parameters supported by OpenRouter for this model",
+    )
 
 
 class ModelCatalogResponse(BaseModel):

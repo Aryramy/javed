@@ -70,6 +70,7 @@ export interface ExecutionLedgerEntry {
   error_message?: string | null
   server_id?: string | null
   duration_ms?: number | null
+  arguments?: Record<string, unknown> | null
 }
 
 export interface ExecutionLedgerResponse {

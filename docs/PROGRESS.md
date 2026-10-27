@@ -14,11 +14,11 @@
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 2 / BRICK-005 — Dynamic MCP Tool Registry & Security Gateway** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-005: Dynamic MCP Tool Registry, Validation, Permissions (HITL)** | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) |
-| **Brick Status** | **`IN PROGRESS` (Phase 8: READY FOR REVIEW; Phase 9: NOT STARTED)** | Phase 8 Developer MCP Console, Execution Ledger & Live Diagnostics Complete |
+| **Brick Status** | **`IN PROGRESS` (Phase 9: READY FOR REVIEW; Phase 10: NOT STARTED)** | Phase 9 Live OpenRouter Model-Driven Tool Selection & Acceptance Complete |
 | **Last Verified Milestone** | **BRICK-004: Deep Agents & LangGraph Runtime (Security Hardened)** | Owner Approval 2026-10-25 |
-| **Application Code** | **BRICK-005 Phase 8 Complete & Ready for Review** (React Developer Mode MCP Console with Overview, Servers, Tools, Ledger, Approvals, and Diagnostics tabs, expandable dynamic JSON schemas, memory-only owner authentication with version & fingerprint drift protection, durable execution ledger with duration ms and UNCERTAIN safety banner, live approvals summary with user chat link, real-time system diagnostics with zero secret leakage, concurrent same-tool correlation hardening via `run_to_tool_call_id`, test database isolation, 5/5 real Chrome Playwright Phase 8 E2E passed, 5/5 Chrome Phase 7 regression passed, 27/27 backend pytests passed, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build) | Strict execution boundary |
+| **Application Code** | **BRICK-005 Phase 9 Complete & Ready for Review** (8/8 live OpenRouter acceptance scenarios passed under real inference, protocol reconciliation to `2026-07-28`, execution ledger confidentiality with backend redaction & expandable viewer, 4/4 real Chrome Playwright Phase 9 E2E passed, 5/5 Chrome Phase 8 regression passed, 9/9 confidentiality & model routing pytests passed, 27/27 backend admin/user mode pytests passed, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-005 IN PROGRESS — Phase 8: READY FOR REVIEW; Phase 9: NOT STARTED** | Authoritative Status |
+| **Overall Status** | **BRICK-005 IN PROGRESS — Phase 9: READY FOR REVIEW; Phase 10: NOT STARTED** | Authoritative Status |
 
 
 ---
@@ -50,7 +50,7 @@ stateDiagram-v2
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
-| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `IN PROGRESS` | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) | Phase 0–7 verified and accepted; Phase 8 (Developer MCP Console, Execution Ledger & Live Diagnostics) Complete & Ready for Review: 5/5 Playwright Chrome Phase 8 E2E passed across Scenarios A through E, 5/5 Chrome Phase 7 regression passed, 27/27 backend pytests passed, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build. Phase 8: READY FOR REVIEW; Phase 9: NOT STARTED. |
+| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `IN PROGRESS` | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) | Phase 0–8 verified and accepted; Phase 9 (Live OpenRouter Model-Driven Tool Selection, Intent Routing & Security Acceptance) Complete & Ready for Review: 8/8 live OpenRouter pytests passed across all acceptance scenarios, protocol reconciliation to 2026-07-28 verified, confidential execution ledger with backend redaction & viewer, 4/4 real Chrome Playwright Phase 9 E2E passed, 5/5 Chrome Phase 8 regression passed, 9/9 confidentiality & routing pytests passed, 27/27 admin & user mode pytests passed, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build. Phase 9: READY FOR REVIEW; Phase 10: NOT STARTED. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
@@ -78,9 +78,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-005 Phase 8 complete and verified across real Chrome Playwright E2E, Vitest, and pytest. Status set to `IN PROGRESS` (Phase 8: READY FOR REVIEW; Phase 9: NOT STARTED).
-2. **Next Authorized Action**: Await explicit Project Owner review and authorization before proceeding to Phase 9 (OpenRouter Model-Driven Tool Selection).
-3. **Strict Stop Condition**: STOP condition enforced. Phase 8: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 9: NOT STARTED. Do not push to master, merge, or begin Phase 9 without explicit authorization.
+1. **Current Action**: BRICK-005 Phase 9 complete and verified across live OpenRouter inference, real Chrome Playwright E2E, Vitest, and pytest. Status set to `IN PROGRESS` (Phase 9: READY FOR REVIEW; Phase 10: NOT STARTED).
+2. **Next Authorized Action**: Await explicit Project Owner review and authorization before proceeding to Phase 10 (Final Polish & BRICK-005 Completion).
+3. **Strict Stop Condition**: STOP condition enforced. Phase 9: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Do not push to master, merge, or begin Phase 10 without explicit authorization.
 
 ---
 
@@ -121,4 +121,5 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-26 | TASK-050 | BRICK-005 Phase 6 & 6B Secure MCP Admin APIs, Host Policy Management & UI | VERIFIED | 18/18 Admin Pytest, 1/1 Cross-Process Pytest, 50/50 Vitest, 1/1 Chrome E2E Passed |
 | 2026-10-26 | TASK-050 | BRICK-005 Phase 6C Owner Credential Hardening & Test Inventory Reconciliation | ACCEPTED | 22/22 Admin Pytest Passed, 149 Reconciled Backend Tests, 0 Predictable Tokens |
 | 2026-10-27 | TASK-050 | BRICK-005 Phase 7 User Mode MCP Tool Interaction & Live Agent Experience | ACCEPTED | 5/5 Chrome Playwright Passed, 26/26 Pytest Passed, 57/57 Vitest Passed, Owner Accepted |
-| 2026-10-27 | TASK-050 | BRICK-005 Phase 8 Developer MCP Console, Execution Ledger & Live Diagnostics | READY FOR REVIEW | 5/5 Chrome Playwright Passed, 5/5 Chrome Regression Passed, 27/27 Pytest Passed, 62/62 Vitest Passed, 0 Ruff Errors |
+| 2026-10-27 | TASK-050 | BRICK-005 Phase 8 Developer MCP Console, Execution Ledger & Live Diagnostics | ACCEPTED | 5/5 Chrome Playwright Passed, 5/5 Chrome Regression Passed, 27/27 Pytest Passed, 62/62 Vitest Passed, Owner Accepted |
+| 2026-10-27 | TASK-050 | BRICK-005 Phase 9 Live OpenRouter Tool Selection & Acceptance | READY FOR REVIEW | 8/8 Live Pytest Passed, 4/4 Chrome E2E Passed, 5/5 Chrome Regression Passed, 36 Backend Pytest Passed, 62 Vitest Passed |

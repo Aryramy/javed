@@ -469,6 +469,7 @@ async def get_execution_ledger(
                 error_message=r.get("error_message"),
                 server_id=parsed_server,
                 duration_ms=duration_ms,
+                arguments=r.get("arguments"),
             )
             entries.append(entry)
         except Exception as exc:

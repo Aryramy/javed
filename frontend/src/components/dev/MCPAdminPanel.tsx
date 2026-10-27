@@ -939,6 +939,17 @@ export const MCPAdminPanel: React.FC = () => {
                           <span className="text-muted-foreground">Argument Digest:</span>{' '}
                           <code className="text-foreground">{e.argument_digest}</code>
                         </div>
+                        {e.arguments && Object.keys(e.arguments).length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground block mb-0.5">Arguments:</span>
+                            <pre
+                              data-testid="ledger-arguments-view"
+                              className="p-1.5 rounded bg-background border border-border/70 overflow-x-auto text-[10px]"
+                            >
+                              {JSON.stringify(e.arguments, null, 2)}
+                            </pre>
+                          </div>
+                        )}
                         {e.completed_at && (
                           <div>
                             <span className="text-muted-foreground">Completed At:</span>{' '}
@@ -1088,7 +1099,7 @@ export const MCPAdminPanel: React.FC = () => {
       {/* SECTION F: Live Diagnostics & Observability */}
       {activeTab === 'diagnostics' && (
         <div className="space-y-4" data-testid="mcp-diagnostics-card">
-          <div>
+          <div data-testid="mcp-diagnostics-section">
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               MCP Subsystem Diagnostics & Security Verification
             </div>

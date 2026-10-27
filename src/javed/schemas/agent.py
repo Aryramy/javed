@@ -124,6 +124,12 @@ class AgentStreamRequest(BaseModel):
         default=None,
         description="Optional OpenRouter session ID for prompt caching and stickiness",
     )
+    plugins: list[dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Optional provider plugins (strictly validated host-side; server tools prohibited)"
+        ),
+    )
 
     @field_validator("thread_id")
     @classmethod

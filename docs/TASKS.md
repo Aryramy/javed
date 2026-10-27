@@ -188,5 +188,31 @@
     - 62/62 Vitest frontend tests PASSED across 12 files (`frontend/src/test/mcpConsolePhase8.test.tsx`, etc.) in 14.76s.
     - Ruff check & format passed (0 errors, clean format).
     - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.71s).
-- **Stop Condition**: Phase 8 Complete & READY FOR REVIEW. Mandatory Stop: Phase 8: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 9: NOT STARTED. Await project owner explicit authorization before beginning Phase 9.
+- **Phase 8 Status**: **ACCEPTED** (Explicitly reviewed and approved by Project Owner on 2026-10-27).
+- **Phase 9 Scope**: Live OpenRouter Model-Driven MCP Tool Selection, Intent Routing & Security Acceptance:
+  - Model Catalog & Intent Routing:
+    - Extended `ModelInfo` with `supports_tools: bool` and `supported_parameters: list[str]`.
+    - Added catalog helpers `supports_tools(model_id)`, `get_model_info(model_id)`, and `get_best_tool_capable_model()`.
+    - Incompatible model fallback: In `create_model()`, if requested model lacks structured tool calling support, safely routes to verified cheapest tool-capable model (`google/gemini-2.5-flash`).
+    - Section 7 security guard: Strict host validation prohibiting server-hosted plugins (web, search, code); only local user MCP tools permitted.
+  - Confidentiality & Argument Redaction:
+    - Backend recursive redaction function `redact_sensitive_value` in `approval_store.py` masks secrets matching sensitive key and value patterns.
+    - Preserves raw arguments in SQLite `pending_approvals` table for cryptographic digest integrity.
+    - Redacts arguments before serialization in `GET /api/v1/mcp/ledger`, `GET /api/v1/agent/approvals/*`, and SSE events (`tool_requested`, `tool_started`, `approval_required`).
+    - Added expandable arguments viewer in `MCPAdminPanel.tsx` (`data-testid="ledger-arguments-view"`).
+  - Telemetry & Cost Accumulation:
+    - Multiple `on_chat_model_end` events within a tool loop accumulate token counts and upstream inference costs from `usage_metadata` and `response_metadata`.
+  - Protocol Version Reconciliation:
+    - Live FastMCP / python-mcp / time-server handshake confirmed negotiating protocol version `2026-07-28`.
+    - Corrected stale references across documentation, backend diagnostics, and Developer Console.
+  - Verification Matrix:
+    - 8/8 live OpenRouter pytests PASSED (`tests/test_live_openrouter_mcp.py`) covering Scenarios A through H.
+    - 9/9 confidentiality & model routing pytests PASSED (`tests/test_mcp_confidentiality.py` and `tests/test_mcp_model_routing.py`) in 2.90s.
+    - 27/27 backend pytests PASSED (`tests/test_mcp_admin_api.py` and `tests/test_mcp_user_mode.py`) in 4.35s.
+    - 4/4 real Chrome Playwright tests PASSED (`frontend/e2e/brick005_phase9.spec.ts`) across Scenarios A through D in 1.6m.
+    - 5/5 real Chrome Playwright Phase 8 regression tests PASSED (`frontend/e2e/brick005_phase8.spec.ts`) in 1.9m.
+    - 62/62 Vitest frontend tests PASSED across 12 files in 15.68s.
+    - Ruff check passed with 0 errors (`ruff check src tests`).
+    - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.13s).
+- **Stop Condition**: Phase 9 Complete & READY FOR REVIEW. Mandatory Stop: Phase 9: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Await project owner explicit authorization before beginning Phase 10.
 

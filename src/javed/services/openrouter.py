@@ -64,6 +64,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": True,
         "is_favorite": True,
         "is_router": True,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
     {
         "id": "openai/gpt-4o-mini",
@@ -76,6 +78,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": False,
         "is_favorite": True,
         "is_router": False,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
     {
         "id": "openai/gpt-4o",
@@ -88,6 +92,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": False,
         "is_favorite": True,
         "is_router": False,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
     {
         "id": "anthropic/claude-sonnet-4.5",
@@ -100,6 +106,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": False,
         "is_favorite": True,
         "is_router": False,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
     {
         "id": "google/gemini-2.5-flash",
@@ -112,6 +120,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": False,
         "is_favorite": True,
         "is_router": False,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
     {
         "id": "deepseek/deepseek-chat",
@@ -124,6 +134,8 @@ CURATED_MODELS: list[dict[str, Any]] = [
         "is_default": False,
         "is_favorite": True,
         "is_router": False,
+        "supports_tools": True,
+        "supported_parameters": ["tools", "tool_choice", "temperature", "max_tokens"],
     },
 ]
 
@@ -258,6 +270,12 @@ class OpenRouterService:
                             is_fav = mid in self.favorite_model_ids
                             is_def = mid == self.default_model
                             is_router = mid == AUTO_ROUTER_MODEL_ID
+                            supported_params = m.get("supported_parameters") or []
+                            if not isinstance(supported_params, list):
+                                supported_params = []
+                            supports_tools = (
+                                "tools" in supported_params or "tool_choice" in supported_params
+                            )
 
                             parsed_models.append(
                                 ModelInfo(
@@ -276,6 +294,8 @@ class OpenRouterService:
                                         if is_router
                                         else None
                                     ),
+                                    supports_tools=supports_tools,
+                                    supported_parameters=supported_params,
                                 )
                             )
 
@@ -300,6 +320,13 @@ class OpenRouterService:
                                         is_favorite=True,
                                         is_router=True,
                                         cost_tier=tier_def,
+                                        supports_tools=True,
+                                        supported_parameters=[
+                                            "tools",
+                                            "tool_choice",
+                                            "temperature",
+                                            "max_tokens",
+                                        ],
                                     )
                                 )
                             else:
@@ -308,6 +335,13 @@ class OpenRouterService:
                                         m.is_router = True
                                         m.is_favorite = True
                                         m.cost_tier = tier_def
+                                        m.supports_tools = True
+                                        m.supported_parameters = [
+                                            "tools",
+                                            "tool_choice",
+                                            "temperature",
+                                            "max_tokens",
+                                        ]
 
                             # Sort: Auto Router first, favorites next, then by name
                             parsed_models.sort(
@@ -352,6 +386,11 @@ class OpenRouterService:
                         self.settings.openrouter_auto_router_cost_tier or "low"
                         if m.get("is_router")
                         else None
+                    ),
+                    supports_tools=m.get("supports_tools", True),
+                    supported_parameters=m.get(
+                        "supported_parameters",
+                        ["tools", "tool_choice", "temperature", "max_tokens"],
                     ),
                 )
                 for m in CURATED_MODELS
@@ -409,6 +448,53 @@ class OpenRouterService:
             total_models=total_count,
             is_dynamic=is_dynamic,
         )
+
+    def get_model_info(self, model_id: str) -> ModelInfo | None:
+        """Retrieve model metadata by model ID from cached or curated catalog."""
+        if self._cached_models:
+            for m in self._cached_models:
+                if m.id == model_id:
+                    return m
+        for c in CURATED_MODELS:
+            if c["id"] == model_id:
+                return ModelInfo(
+                    id=c["id"],
+                    name=c["name"],
+                    provider=c["provider"],
+                    context_length=c["context_length"],
+                    pricing_prompt=c["pricing_prompt"],
+                    pricing_completion=c["pricing_completion"],
+                    description=c["description"],
+                    is_default=(c["id"] == self.default_model),
+                    is_favorite=(c["id"] in self.favorite_model_ids),
+                    is_router=c.get("is_router", False),
+                    cost_tier=self.settings.openrouter_auto_router_cost_tier or "low",
+                    supports_tools=c.get("supports_tools", True),
+                    supported_parameters=c.get(
+                        "supported_parameters",
+                        ["tools", "tool_choice", "temperature", "max_tokens"],
+                    ),
+                )
+        return None
+
+    def supports_tools(self, model_id: str) -> bool:
+        """Check whether a specific model supports structured tool / function calling."""
+        if model_id == AUTO_ROUTER_MODEL_ID:
+            return True
+        info = self.get_model_info(model_id)
+        if info is not None:
+            return info.supports_tools
+        return False
+
+    def get_best_tool_capable_model(self, cost_tier: str | None = None) -> str:
+        """Dynamically discover lowest-cost verified tool-capable model from catalog."""
+        candidates = [
+            m for m in (self._cached_models or []) if m.supports_tools and not m.is_router
+        ]
+        if candidates:
+            candidates.sort(key=lambda m: m.pricing_prompt + m.pricing_completion)
+            return candidates[0].id
+        return "openai/gpt-4o-mini"
 
     async def get_account_status(self) -> dict[str, Any] | None:
         """Query OpenRouter key status for balance and quota telemetry.

@@ -33,6 +33,8 @@ export interface ModelInfo {
   is_favorite?: boolean;
   is_router?: boolean;
   cost_tier?: CostTier;
+  supports_tools?: boolean;
+  supported_parameters?: string[];
 }
 
 export interface ModelCatalogResponse {

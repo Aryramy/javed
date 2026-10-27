@@ -225,6 +225,10 @@ class ExecutionLedgerEntry(BaseModel):
     error_message: str | None = None
     server_id: str | None = None
     duration_ms: float | None = None
+    arguments: dict[str, Any] | None = Field(
+        default=None,
+        description="Sanitized and redacted tool arguments for human audit",
+    )
 
 
 class ExecutionLedgerResponse(BaseModel):

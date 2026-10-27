@@ -23,6 +23,47 @@ from javed.schemas.approval import (
 
 logger = logging.getLogger("javed.mcp.approval_store")
 
+SENSITIVE_KEY_PATTERNS: tuple[str, ...] = (
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "key",
+    "auth",
+    "credential",
+    "private_key",
+    "access_token",
+    "refresh_token",
+    "bearer",
+)
+
+
+def redact_sensitive_value(value: Any) -> Any:
+    """Recursively redact sensitive field values from dictionaries and lists for audit/logging."""
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for k, v in value.items():
+            k_lower = str(k).lower()
+            if any(p in k_lower for p in SENSITIVE_KEY_PATTERNS):
+                redacted[k] = "[REDACTED]"
+            else:
+                redacted[k] = redact_sensitive_value(v)
+        return redacted
+    elif isinstance(value, list):
+        return [redact_sensitive_value(item) for item in value]
+    elif isinstance(value, str):
+        val_lower = value.lower()
+        if (
+            value.startswith("sk-or-")
+            or value.startswith("jvd_sess_")
+            or "bearer " in val_lower
+            or "basic " in val_lower
+        ):
+            return "[REDACTED]"
+        return value
+    return value
+
 CREATE_PENDING_APPROVALS_TABLE = """
 CREATE TABLE IF NOT EXISTS pending_approvals (
     approval_id TEXT PRIMARY KEY,
@@ -764,25 +805,42 @@ class ApprovalStore:
         """Return recent sanitized execution ledger records ordered by dispatch time."""
         await self.initialize()
         bounded_limit = max(1, min(limit, 100))
-        query = "SELECT * FROM execution_ledger WHERE 1=1"
+        query = """
+            SELECT l.*, a.arguments_json
+            FROM execution_ledger l
+            LEFT JOIN pending_approvals a ON l.approval_id = a.approval_id
+            WHERE 1=1
+        """
         params: list[Any] = []
         if tool_id:
-            query += " AND tool_id = ?"
+            query += " AND l.tool_id = ?"
             params.append(tool_id)
         if state:
-            query += " AND state = ?"
+            query += " AND l.state = ?"
             params.append(state)
         if server_id:
-            query += " AND tool_id LIKE ?"
+            query += " AND l.tool_id LIKE ?"
             params.append(f"{server_id}__%")
-        query += " ORDER BY dispatched_at DESC LIMIT ?"
+        query += " ORDER BY l.dispatched_at DESC LIMIT ?"
         params.append(bounded_limit)
 
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, tuple(params)) as cur:
                 rows = await cur.fetchall()
-                return [dict(r) for r in rows]
+                results = []
+                for r in rows:
+                    row_dict = dict(r)
+                    raw_args_json = row_dict.pop("arguments_json", None)
+                    parsed_args: dict[str, Any] = {}
+                    if raw_args_json:
+                        try:
+                            parsed_args = json.loads(raw_args_json)
+                        except Exception:
+                            parsed_args = {}
+                    row_dict["arguments"] = redact_sensitive_value(parsed_args)
+                    results.append(row_dict)
+                return results
 
     async def get_approvals_summary(self) -> dict[str, int]:
         """Aggregate counts of human approvals across all states."""

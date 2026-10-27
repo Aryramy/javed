@@ -42,7 +42,7 @@ from javed.agent.security import (
     ensure_agent_security_profile,
 )
 from javed.config import Settings, get_settings
-from javed.mcp.approval_store import ApprovalStore
+from javed.mcp.approval_store import ApprovalStore, redact_sensitive_value
 from javed.mcp.gateway import SecureMCPGateway, current_approval_context
 from javed.schemas.agent import (
     AgentRuntimeStatusResponse,
@@ -296,6 +296,26 @@ class AgentRuntimeManager:
             )
 
         model_name = request.model or self.settings.openrouter_default_model
+        fallback_reason: str | None = None
+
+        # Check tool compatibility if tools are executable or visible
+        has_executable_tools = bool(self.mcp_gateway and self.mcp_gateway.get_executable_tools())
+        if has_executable_tools and model_name != AUTO_ROUTER_MODEL_ID:
+            if not self.openrouter_service.supports_tools(model_name):
+                cheapest = self.openrouter_service.get_best_tool_capable_model()
+                logger.warning(
+                    "Requested model '%s' lacks structured tool calling support. "
+                    "Safely falling back to verified tool-capable model '%s'.",
+                    model_name,
+                    cheapest,
+                )
+                fallback_reason = (
+                    f"Requested model '{model_name}' does not support tool calling. "
+                    f"Safely fell back to '{cheapest}'."
+                )
+                model_name = cheapest
+
+        requested_plugins = list(request.plugins) if request.plugins else []
         plugins: list[dict[str, Any]] | None = None
         if model_name == AUTO_ROUTER_MODEL_ID:
             effective_cost_tier = (
@@ -304,10 +324,22 @@ class AgentRuntimeManager:
             if effective_cost_tier not in SUPPORTED_COST_TIERS:
                 effective_cost_tier = "low"
             plugins = [{"id": "auto-router", "cost": effective_cost_tier}]
+        elif requested_plugins:
+            plugins = requested_plugins
+
+        # Section 7 security guard: ensure NO provider-hosted server tools permitted
+        all_plugins_to_check = (plugins or []) + requested_plugins
+        for p in all_plugins_to_check:
+            p_id = str(p.get("id", "")).lower()
+            if p_id != "auto-router":
+                raise PermissionError(
+                    f"Security Violation: OpenRouter plugin '{p_id}' prohibited in BRICK-005. "
+                    "Only user-defined local MCP gateway tools are authorized."
+                )
 
         session_id = request.session_id or request.thread_id
 
-        return ChatOpenRouter(
+        chat_model = ChatOpenRouter(
             model_name=model_name,
             openrouter_api_key=api_key,
             openrouter_api_base=self.settings.openrouter_base_url,
@@ -319,6 +351,9 @@ class AgentRuntimeManager:
             streaming=True,
             temperature=0.2,
         )
+        chat_model._effective_model_name = model_name
+        chat_model._fallback_reason = fallback_reason
+        return chat_model
 
     def create_agent(
         self,
@@ -388,6 +423,10 @@ class AgentRuntimeManager:
             todos: list[AgentTodoItem] = []
             upstream_reported_usage: dict[str, Any] | None = None
             selected_model: str | None = None
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
+            total_upstream_cost = 0.0
+            has_upstream_usage = False
             pending_tool_call_ids: dict[str, list[str]] = defaultdict(list)
             run_to_tool_call_id: dict[str, str] = {}
 
@@ -486,7 +525,7 @@ class AgentRuntimeManager:
                                     "tool": ev_name,
                                     "server_id": server_id,
                                     "description": tool_desc,
-                                    "input": ev_data.get("input", {}),
+                                    "input": redact_sensitive_value(ev_data.get("input", {})),
                                     "tool_call_id": tc_id,
                                 },
                             )
@@ -608,12 +647,65 @@ class AgentRuntimeManager:
                     # Track model completion metadata & tool requests
                     elif event_type == "on_chat_model_end":
                         output = ev_data.get("output")
+                        # 1. Check llm_output
                         if output and hasattr(output, "llm_output") and output.llm_output:
                             llm_out = output.llm_output
-                            if "token_usage" in llm_out:
+                            if "token_usage" in llm_out and isinstance(
+                                llm_out["token_usage"], dict
+                            ):
                                 upstream_reported_usage = llm_out["token_usage"]
-                            if "model_name" in llm_out:
-                                selected_model = llm_out["model_name"]
+                                p = int(upstream_reported_usage.get("prompt_tokens", 0))
+                                c = int(upstream_reported_usage.get("completion_tokens", 0))
+                                if p or c:
+                                    total_prompt_tokens += p
+                                    total_completion_tokens += c
+                                    has_upstream_usage = True
+                                cost_val = upstream_reported_usage.get("cost")
+                                if cost_val is not None:
+                                    try:
+                                        total_upstream_cost += float(cost_val)
+                                    except (ValueError, TypeError):
+                                        pass
+                            if "model_name" in llm_out and not selected_model:
+                                selected_model = str(llm_out["model_name"])
+
+                        # 2. Extract from AIMessage (usage_metadata and response_metadata)
+                        msg_obj = output if isinstance(output, AIMessage) else None
+                        if not msg_obj and hasattr(output, "generations") and output.generations:
+                            for gen_list in output.generations:
+                                items = gen_list if isinstance(gen_list, list) else [gen_list]
+                                for g in items:
+                                    if hasattr(g, "message") and isinstance(g.message, AIMessage):
+                                        msg_obj = g.message
+                                        break
+                                if msg_obj:
+                                    break
+
+                        if msg_obj:
+                            if hasattr(msg_obj, "usage_metadata") and msg_obj.usage_metadata:
+                                um = msg_obj.usage_metadata
+                                p = int(um.get("input_tokens", 0))
+                                c = int(um.get("output_tokens", 0))
+                                if p or c:
+                                    total_prompt_tokens += p
+                                    total_completion_tokens += c
+                                    has_upstream_usage = True
+                            if hasattr(msg_obj, "response_metadata") and msg_obj.response_metadata:
+                                rm = msg_obj.response_metadata
+                                if "model_name" in rm and not selected_model:
+                                    selected_model = str(rm["model_name"])
+                                cost_val = rm.get("cost")
+                                if (
+                                    cost_val is None
+                                    and "cost_details" in rm
+                                    and isinstance(rm["cost_details"], dict)
+                                ):
+                                    cost_val = rm["cost_details"].get("upstream_inference_cost")
+                                if cost_val is not None:
+                                    try:
+                                        total_upstream_cost += float(cost_val)
+                                    except (ValueError, TypeError):
+                                        pass
 
                         # Check if model requested tool calls
                         requested_calls: list[dict[str, Any]] = []
@@ -652,7 +744,7 @@ class AgentRuntimeManager:
                                         "server_id": server_id,
                                         "description": tool_desc,
                                         "tool_call_id": tc.get("id"),
-                                        "input": tc.get("args") or {},
+                                        "input": redact_sensitive_value(tc.get("args") or {}),
                                     },
                                 )
 
@@ -762,7 +854,7 @@ class AgentRuntimeManager:
                                 "server_id": appr.server_id,
                                 "tool_id": appr.tool_id,
                                 "tool_call_id": appr.tool_call_id,
-                                "arguments": appr.arguments,
+                                "arguments": redact_sensitive_value(appr.arguments),
                                 "argument_digest": appr.argument_digest,
                                 "tool_fingerprint": appr.tool_fingerprint,
                                 "policy_version": appr.policy_version,
@@ -785,31 +877,30 @@ class AgentRuntimeManager:
 
                 # Calculate usage and cost
                 elapsed_ms = int((time.time() - start_time) * 1000)
-                if upstream_reported_usage:
-                    prompt_tokens = int(upstream_reported_usage.get("prompt_tokens", 0))
-                    completion_tokens = int(upstream_reported_usage.get("completion_tokens", 0))
-                    total_tokens = int(
-                        upstream_reported_usage.get(
-                            "total_tokens", prompt_tokens + completion_tokens
-                        )
-                    )
-                    up_cost = upstream_reported_usage.get("cost")
+                effective_model = (
+                    selected_model or getattr(model, "_effective_model_name", None) or model_name
+                )
+                if has_upstream_usage:
+                    prompt_tokens = total_prompt_tokens
+                    completion_tokens = total_completion_tokens
+                    total_tokens = prompt_tokens + completion_tokens
+                    up_cost = total_upstream_cost if total_upstream_cost > 0.0 else None
                     cost_usd = self.openrouter_service.calculate_cost(
-                        model_id=model_name,
+                        model_id=effective_model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
-                        upstream_cost=float(up_cost) if up_cost is not None else None,
-                        selected_model=selected_model,
+                        upstream_cost=up_cost,
+                        selected_model=effective_model,
                     )
                     usage = StreamUsage(
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
                         cost_usd=cost_usd,
-                        upstream_cost=float(up_cost) if up_cost is not None else None,
+                        upstream_cost=up_cost,
                         is_estimated=False,
                         cost_source="upstream" if up_cost is not None else "rate_card",
-                        selected_model=selected_model or model_name,
+                        selected_model=effective_model,
                         requested_model=model_name,
                         cost_tier=effective_cost_tier,
                         session_id=session_id,
@@ -818,10 +909,10 @@ class AgentRuntimeManager:
                     prompt_tokens = max(1, len(request.message) // 4)
                     completion_tokens = max(1, len(final_content) // 4)
                     cost_usd = self.openrouter_service.calculate_cost(
-                        model_id=model_name,
+                        model_id=effective_model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
-                        selected_model=selected_model,
+                        selected_model=effective_model,
                     )
                     usage = StreamUsage(
                         prompt_tokens=prompt_tokens,
@@ -831,7 +922,7 @@ class AgentRuntimeManager:
                         upstream_cost=None,
                         is_estimated=True,
                         cost_source="character_estimate",
-                        selected_model=selected_model or model_name,
+                        selected_model=effective_model,
                         requested_model=model_name,
                         cost_tier=effective_cost_tier,
                         session_id=session_id,
@@ -952,6 +1043,10 @@ class AgentRuntimeManager:
             todos: list[AgentTodoItem] = []
             upstream_reported_usage: dict[str, Any] | None = None
             selected_model: str | None = None
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
+            total_upstream_cost = 0.0
+            has_upstream_usage = False
             model_name = model_name_override or self.settings.openrouter_default_model
             effective_cost_tier = self.settings.openrouter_auto_router_cost_tier or "low"
 
@@ -1006,7 +1101,7 @@ class AgentRuntimeManager:
                                         "tool": ev_name,
                                         "server_id": server_id,
                                         "description": tool_desc,
-                                        "input": ev_data.get("input", {}),
+                                        "input": redact_sensitive_value(ev_data.get("input", {})),
                                         "tool_call_id": tc_id,
                                     },
                                 )
@@ -1120,12 +1215,74 @@ class AgentRuntimeManager:
 
                         elif event_type == "on_chat_model_end":
                             output = ev_data.get("output")
+                            # 1. Check llm_output
                             if output and hasattr(output, "llm_output") and output.llm_output:
                                 llm_out = output.llm_output
-                                if "token_usage" in llm_out:
+                                if "token_usage" in llm_out and isinstance(
+                                    llm_out["token_usage"], dict
+                                ):
                                     upstream_reported_usage = llm_out["token_usage"]
-                                if "model_name" in llm_out:
-                                    selected_model = llm_out["model_name"]
+                                    p = int(upstream_reported_usage.get("prompt_tokens", 0))
+                                    c = int(upstream_reported_usage.get("completion_tokens", 0))
+                                    if p or c:
+                                        total_prompt_tokens += p
+                                        total_completion_tokens += c
+                                        has_upstream_usage = True
+                                    cost_val = upstream_reported_usage.get("cost")
+                                    if cost_val is not None:
+                                        try:
+                                            total_upstream_cost += float(cost_val)
+                                        except (ValueError, TypeError):
+                                            pass
+                                if "model_name" in llm_out and not selected_model:
+                                    selected_model = str(llm_out["model_name"])
+
+                            # 2. Extract from AIMessage (usage_metadata and response_metadata)
+                            msg_obj = output if isinstance(output, AIMessage) else None
+                            if (
+                                not msg_obj
+                                and hasattr(output, "generations")
+                                and output.generations
+                            ):
+                                for gen_list in output.generations:
+                                    items = gen_list if isinstance(gen_list, list) else [gen_list]
+                                    for g in items:
+                                        if hasattr(g, "message") and isinstance(
+                                            g.message, AIMessage
+                                        ):
+                                            msg_obj = g.message
+                                            break
+                                    if msg_obj:
+                                        break
+
+                            if msg_obj:
+                                if hasattr(msg_obj, "usage_metadata") and msg_obj.usage_metadata:
+                                    um = msg_obj.usage_metadata
+                                    p = int(um.get("input_tokens", 0))
+                                    c = int(um.get("output_tokens", 0))
+                                    if p or c:
+                                        total_prompt_tokens += p
+                                        total_completion_tokens += c
+                                        has_upstream_usage = True
+                                if (
+                                    hasattr(msg_obj, "response_metadata")
+                                    and msg_obj.response_metadata
+                                ):
+                                    rm = msg_obj.response_metadata
+                                    if "model_name" in rm and not selected_model:
+                                        selected_model = str(rm["model_name"])
+                                    cost_val = rm.get("cost")
+                                    if (
+                                        cost_val is None
+                                        and "cost_details" in rm
+                                        and isinstance(rm["cost_details"], dict)
+                                    ):
+                                        cost_val = rm["cost_details"].get("upstream_inference_cost")
+                                    if cost_val is not None:
+                                        try:
+                                            total_upstream_cost += float(cost_val)
+                                        except (ValueError, TypeError):
+                                            pass
 
                     final_state = await agent.aget_state(config)
                     checkpoint_id = None
@@ -1165,35 +1322,32 @@ class AgentRuntimeManager:
                                     break
 
                     elapsed_ms = int((time.time() - start_time) * 1000)
-                    if upstream_reported_usage:
-                        prompt_tokens = upstream_reported_usage.get(
-                            "prompt_tokens", len(model_req.message) // 4
-                        )
-                        completion_tokens = upstream_reported_usage.get(
-                            "completion_tokens", len(final_content) // 4
-                        )
-                        total_tokens = int(
-                            upstream_reported_usage.get(
-                                "total_tokens", prompt_tokens + completion_tokens
-                            )
-                        )
-                        up_cost = upstream_reported_usage.get("cost")
+                    effective_model = (
+                        selected_model
+                        or getattr(model, "_effective_model_name", None)
+                        or model_name
+                    )
+                    if has_upstream_usage:
+                        prompt_tokens = total_prompt_tokens
+                        completion_tokens = total_completion_tokens
+                        total_tokens = prompt_tokens + completion_tokens
+                        up_cost = total_upstream_cost if total_upstream_cost > 0.0 else None
                         cost_usd = self.openrouter_service.calculate_cost(
-                            model_id=model_name,
+                            model_id=effective_model,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
-                            upstream_cost=float(up_cost) if up_cost is not None else None,
-                            selected_model=selected_model,
+                            upstream_cost=up_cost,
+                            selected_model=effective_model,
                         )
                         usage = StreamUsage(
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
                             cost_usd=cost_usd,
-                            upstream_cost=float(up_cost) if up_cost is not None else None,
+                            upstream_cost=up_cost,
                             is_estimated=False,
                             cost_source="upstream" if up_cost is not None else "rate_card",
-                            selected_model=selected_model or model_name,
+                            selected_model=effective_model,
                             requested_model=model_name,
                             cost_tier=effective_cost_tier,
                             session_id=None,
@@ -1202,10 +1356,10 @@ class AgentRuntimeManager:
                         prompt_tokens = max(1, len(model_req.message) // 4)
                         completion_tokens = max(1, len(final_content) // 4)
                         cost_usd = self.openrouter_service.calculate_cost(
-                            model_id=model_name,
+                            model_id=effective_model,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
-                            selected_model=selected_model,
+                            selected_model=effective_model,
                         )
                         usage = StreamUsage(
                             prompt_tokens=prompt_tokens,
@@ -1215,7 +1369,7 @@ class AgentRuntimeManager:
                             upstream_cost=None,
                             is_estimated=True,
                             cost_source="character_estimate",
-                            selected_model=selected_model or model_name,
+                            selected_model=effective_model,
                             requested_model=model_name,
                             cost_tier=effective_cost_tier,
                             session_id=None,
@@ -1263,6 +1417,33 @@ class AgentRuntimeManager:
                         "error": str(e),
                     },
                 )
+
+    async def resume_agent_execution(
+        self,
+        approval_id: str,
+        decision: Literal["approve", "reject"],
+        validated_thread_id: str | None = None,
+        thread_id: str | None = None,
+        reason: str | None = None,
+        model_name_override: str | None = None,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Resume an interrupted agent run following human approval or rejection.
+
+        Convenience alias with flexible parameter ordering.
+        """
+        effective_thread_id = validated_thread_id or thread_id
+        if not effective_thread_id:
+            raise ValueError(
+                "thread_id or validated_thread_id must be provided to resume agent execution."
+            )
+        async for ev in self.resume_agent(
+            thread_id=effective_thread_id,
+            approval_id=approval_id,
+            decision=decision,
+            reason=reason,
+            model_name_override=model_name_override,
+        ):
+            yield ev
 
     async def get_thread_state(self, thread_id: str) -> AgentThreadStateResponse:
         """Retrieve persisted messages and todo plan items for a specific thread."""
