@@ -26,8 +26,22 @@ export interface StreamAgentParams {
   onApprovalApproved?: (data: { approval_id: string; thread_id: string }) => void;
   onApprovalRejected?: (data: { approval_id: string; thread_id: string; reason?: string }) => void;
   onAgentResumed?: (data: { approval_id: string; thread_id: string; decision: string }) => void;
-  onToolStarted?: (data: { tool: string; input: Record<string, unknown> }) => void;
-  onToolCompleted?: (data: { tool: string; output: string }) => void;
+  onToolRequested?: (data: {
+    tool: string;
+    input: Record<string, unknown>;
+    tool_call_id?: string;
+    server_id?: string;
+    description?: string;
+  }) => void;
+  onToolStarted?: (data: {
+    tool: string;
+    input: Record<string, unknown>;
+    tool_call_id?: string;
+    server_id?: string;
+    description?: string;
+  }) => void;
+  onToolCompleted?: (data: { tool: string; output: string; tool_call_id?: string }) => void;
+  onToolFailed?: (data: { tool: string; error: string; tool_call_id?: string }) => void;
   onRunCompleted?: (data: {
     run_id: string;
     content: string;
@@ -49,8 +63,15 @@ export interface ResumeApprovalParams {
   onApprovalApproved?: (data: { approval_id: string; thread_id: string }) => void;
   onApprovalRejected?: (data: { approval_id: string; thread_id: string; reason?: string }) => void;
   onAgentResumed?: (data: { approval_id: string; thread_id: string; decision: string }) => void;
-  onToolStarted?: (data: { tool: string; input: Record<string, unknown> }) => void;
-  onToolCompleted?: (data: { tool: string; output: string }) => void;
+  onToolStarted?: (data: {
+    tool: string;
+    input: Record<string, unknown>;
+    tool_call_id?: string;
+    server_id?: string;
+    description?: string;
+  }) => void;
+  onToolCompleted?: (data: { tool: string; output: string; tool_call_id?: string }) => void;
+  onToolFailed?: (data: { tool: string; error: string; tool_call_id?: string }) => void;
   onRunCompleted?: (data: {
     run_id: string;
     content: string;
@@ -115,8 +136,10 @@ export const agentService = {
       onApprovalApproved,
       onApprovalRejected,
       onAgentResumed,
+      onToolRequested,
       onToolStarted,
       onToolCompleted,
+      onToolFailed,
       onRunCompleted,
       onRunCancelled,
       onRunFailed,
@@ -256,10 +279,23 @@ export const agentService = {
                 });
                 break;
 
+              case 'tool_requested':
+                onToolRequested?.({
+                  tool: event.data.tool ?? '',
+                  input: (event.data.input as Record<string, unknown>) ?? {},
+                  tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  description: event.data.description as string | undefined,
+                });
+                break;
+
               case 'tool_started':
                 onToolStarted?.({
                   tool: event.data.tool ?? '',
                   input: (event.data.input as Record<string, unknown>) ?? {},
+                  tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  description: event.data.description as string | undefined,
                 });
                 break;
 
@@ -267,6 +303,15 @@ export const agentService = {
                 onToolCompleted?.({
                   tool: event.data.tool ?? '',
                   output: event.data.output ?? '',
+                  tool_call_id: event.data.tool_call_id,
+                });
+                break;
+
+              case 'tool_failed':
+                onToolFailed?.({
+                  tool: event.data.tool ?? '',
+                  error: event.data.error ?? 'Tool execution failed',
+                  tool_call_id: event.data.tool_call_id,
                 });
                 break;
 
@@ -321,6 +366,19 @@ export const agentService = {
       : `${getBaseUrl()}/api/v1/agent/approvals/pending`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`Failed to list approvals: ${await res.text()}`);
+    const data = await res.json();
+    return data.approvals || [];
+  },
+
+  /**
+   * Retrieve all tool call approvals for a specific thread (pending, approved, rejected, cancelled).
+   */
+  async getThreadApprovals(threadId: string): Promise<import('../types/agent').ApprovalRecord[]> {
+    const res = await fetch(
+      `${getBaseUrl()}/api/v1/agent/approvals/thread/${encodeURIComponent(threadId)}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) throw new Error(`Failed to list thread approvals: ${await res.text()}`);
     const data = await res.json();
     return data.approvals || [];
   },
@@ -395,6 +453,7 @@ export const agentService = {
       onAgentResumed,
       onToolStarted,
       onToolCompleted,
+      onToolFailed,
       onRunCompleted,
       onRunCancelled,
       onRunFailed,
@@ -489,6 +548,9 @@ export const agentService = {
                 onToolStarted?.({
                   tool: event.data.tool ?? '',
                   input: (event.data.input as Record<string, unknown>) ?? {},
+                  tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  description: event.data.description as string | undefined,
                 });
                 break;
 
@@ -496,6 +558,15 @@ export const agentService = {
                 onToolCompleted?.({
                   tool: event.data.tool ?? '',
                   output: event.data.output ?? '',
+                  tool_call_id: event.data.tool_call_id,
+                });
+                break;
+
+              case 'tool_failed':
+                onToolFailed?.({
+                  tool: event.data.tool ?? '',
+                  error: event.data.error ?? 'Tool execution failed',
+                  tool_call_id: event.data.tool_call_id,
                 });
                 break;
 

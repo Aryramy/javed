@@ -14,11 +14,11 @@
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 2 / BRICK-005 — Dynamic MCP Tool Registry & Security Gateway** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-005: Dynamic MCP Tool Registry, Validation, Permissions (HITL)** | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) |
-| **Brick Status** | **`IN PROGRESS` (Phase 6/6C: ACCEPTED; Phase 7: NOT STARTED)** | Phase 6C Owner Credential Hardening & Test Inventory Reconciliation Accepted |
+| **Brick Status** | **`IN PROGRESS` (Phase 7: READY FOR REVIEW; Phase 8: NOT STARTED)** | Phase 7 User Mode MCP Tool Interaction & Live Agent Experience Complete |
 | **Last Verified Milestone** | **BRICK-004: Deep Agents & LangGraph Runtime (Security Hardened)** | Owner Approval 2026-10-25 |
-| **Application Code** | **BRICK-005 Phase 6C Accepted** (Hardened local owner authentication with zero default predictable credentials, fail-closed authorization when `JAVED_OWNER_TOKEN` is unset or weak, rejection of empty/placeholder tokens, short-lived memory session tokens, anti-DNS-rebinding Host header validation, cross-origin/CSRF rejection, real cross-process policy persistence across 3 independent OS subprocesses with schema-drift detection, 22/22 targeted admin API tests passed, 1/1 cross-process persistence test passed, 71/71 other MCP tests passed [94/94 BRICK-005 milestone pytests passed; 149 backend tests collected across 18 files], 50/50 frontend Vitest tests passed, 1/1 Playwright Chrome Phase 6B admin live acceptance test passed, 2/2 Playwright Chrome Phase 5B HITL tests passed, 0 Ruff errors, clean Vite production build with zero secrets) | Strict execution boundary |
+| **Application Code** | **BRICK-005 Phase 7 Complete & Ready for Review** (React User Mode live MCP tool activity representation via `ToolActivityCard.tsx` with canonical lifecycle taxonomy, SSE event correlation by `tool_call_id`/`approval_id`/active tool fallback, double-click protection in `ApprovalCard.tsx`, state reconstruction across reloads via `get_thread_state` correlating LangGraph checkpoints and durable `ApprovalStore` SQLite records, 5/5 real Chrome Playwright tests PASSED across Scenarios A through E, 4/4 user mode pytests PASSED, 22/22 admin pytests PASSED, 57/57 Vitest tests PASSED across 11 files, 0 Ruff errors, clean Vite production build) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-005 IN PROGRESS — Phase 6/6C: ACCEPTED; Phase 7: NOT STARTED** | Authoritative Status |
+| **Overall Status** | **BRICK-005 IN PROGRESS — Phase 7: READY FOR REVIEW; Phase 8: NOT STARTED** | Authoritative Status |
 
 ---
 
@@ -49,7 +49,7 @@ stateDiagram-v2
 | **BRICK-002** | FastAPI Integration & Real-Time Communication | **`VERIFIED`** | [REPORT-002.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-002.md) | Explicitly approved by Project Owner on 2026-10-22. |
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
-| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `IN PROGRESS` | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) | Phase 0–5B verified; Phase 6/6B/6C (MCP Admin Security, Owner Credential Hardening & Cross-Process Persistence) accepted: 22/22 admin pytests passed, 1/1 cross-process policy persistence test passed, 71/71 other MCP pytests passed (94/94 BRICK-005 milestone pytests passed; 149 total backend tests collected across 18 files), 50/50 Vitest tests passed, 1/1 Playwright Chrome Phase 6B admin live acceptance test passed, 2/2 Playwright Chrome Phase 5B HITL tests passed. Phase 6/6C: ACCEPTED; Phase 7: NOT STARTED. |
+| **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | `IN PROGRESS` | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) | Phase 0–6C verified and accepted; Phase 7 (Complete React User Mode MCP Tool Interaction & Live Agent Experience) Complete & Ready for Review: 5/5 Playwright Chrome E2E passed across Scenarios A through E, 26/26 backend pytests passed (4 user mode + 22 admin security), 57/57 Vitest frontend tests passed across 11 files, 0 Ruff errors, clean Vite production build. Phase 7: READY FOR REVIEW; Phase 8: NOT STARTED. |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Blocked pending BRICK-005 verification. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
@@ -77,9 +77,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-005 Phase 6C complete and accepted by project owner. Intermediate development checkpoint staged and pushed to `origin/feat/brick-005-mcp-gateway`. Status set to `IN PROGRESS` (Phase 6/6C: ACCEPTED).
-2. **Next Authorized Action**: Await explicit Project Owner review and authorization before proceeding to Phase 7 (Audit Logging, Ledger UI & Verification).
-3. **Strict Stop Condition**: STOP condition enforced. Phase 6/6C: ACCEPTED, BRICK-005: IN PROGRESS, Phase 7: NOT STARTED. Do not push to master, merge, or begin Phase 7 without authorization.
+1. **Current Action**: BRICK-005 Phase 7 complete and verified across real Chrome Playwright E2E, Vitest, and pytest. Status set to `IN PROGRESS` (Phase 7: READY FOR REVIEW; Phase 8: NOT STARTED).
+2. **Next Authorized Action**: Await explicit Project Owner review and authorization before proceeding to Phase 8 (Developer MCP Console & Full Ledger UI).
+3. **Strict Stop Condition**: STOP condition enforced. Phase 7: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 8: NOT STARTED. Do not push to master, merge, or begin Phase 8 without explicit authorization.
 
 ---
 
@@ -119,3 +119,4 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-26 | TASK-050 | BRICK-005 Phase 5 & 5B HITL Chrome E2E, Cross-Process & Security Gate | VERIFIED — READY FOR OWNER ACCEPTANCE | 2/2 Chrome E2E, 1/1 Cross-Process Pytest, 27/27 HITL Pytest, 46/46 Vitest Passed |
 | 2026-10-26 | TASK-050 | BRICK-005 Phase 6 & 6B Secure MCP Admin APIs, Host Policy Management & UI | VERIFIED | 18/18 Admin Pytest, 1/1 Cross-Process Pytest, 50/50 Vitest, 1/1 Chrome E2E Passed |
 | 2026-10-26 | TASK-050 | BRICK-005 Phase 6C Owner Credential Hardening & Test Inventory Reconciliation | ACCEPTED | 22/22 Admin Pytest Passed, 149 Reconciled Backend Tests, 0 Predictable Tokens |
+| 2026-10-27 | TASK-050 | BRICK-005 Phase 7 User Mode MCP Tool Interaction & Live Agent Experience | READY FOR REVIEW | 5/5 Chrome Playwright Passed, 26/26 Pytest Passed, 57/57 Vitest Passed, 0 Ruff Errors |

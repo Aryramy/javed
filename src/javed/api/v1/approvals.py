@@ -78,6 +78,29 @@ async def list_pending_approvals(
 
 
 @router.get(
+    "/thread/{thread_id}",
+    response_model=ApprovalListResponse,
+    summary="List all tool call approvals for a specific thread",
+)
+async def list_thread_approvals(
+    thread_id: str,
+    request: Request,
+) -> ApprovalListResponse:
+    """Retrieve all approval records (pending, approved, rejected, cancelled) for a thread."""
+    try:
+        validated_id = validate_thread_id(thread_id)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid thread_id: {ve!s}",
+        ) from ve
+
+    runtime = _get_agent_runtime(request)
+    records = await runtime.approval_store.get_thread_approvals(validated_id)
+    return ApprovalListResponse(approvals=records, total=len(records))
+
+
+@router.get(
     "/{approval_id}",
     response_model=ApprovalResponse,
     summary="Retrieve single approval record by ID",

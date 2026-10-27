@@ -31,28 +31,38 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [localSubmitting, setLocalSubmitting] = useState(false);
 
+  const isBusy = isProcessing || localSubmitting;
   const isPending = approval.status === 'pending';
   const isApproved = approval.status === 'approved';
   const isRejected = approval.status === 'rejected';
   const isCancelled = approval.status === 'cancelled';
 
   const handleApprove = async () => {
+    if (isBusy) return;
+    setLocalSubmitting(true);
     setActionError(null);
     try {
       await onApprove(approval.approval_id);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLocalSubmitting(false);
     }
   };
 
   const handleRejectConfirm = async () => {
+    if (isBusy) return;
+    setLocalSubmitting(true);
     setActionError(null);
     try {
       await onReject(approval.approval_id, rejectReason.trim() || undefined);
       setShowRejectInput(false);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLocalSubmitting(false);
     }
   };
 
@@ -250,13 +260,13 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="Enter reason for rejection (optional)..."
                     className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-rose-500/60 text-xs text-zinc-100 placeholder:text-zinc-600 outline-none"
-                    disabled={isProcessing}
+                    disabled={isBusy}
                   />
                   <div className="flex items-center gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => setShowRejectInput(false)}
-                      disabled={isProcessing}
+                      disabled={isBusy}
                       className="px-2.5 py-1 rounded-md text-xs text-zinc-400 hover:text-zinc-200"
                     >
                       Back
@@ -266,10 +276,10 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
                       id="confirm-reject-button"
                       data-testid="confirm-reject-button"
                       onClick={handleRejectConfirm}
-                      disabled={isProcessing}
-                      className="px-3 py-1 rounded-md bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                      disabled={isBusy}
+                      className="px-3 py-1 rounded-md bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
                     >
-                      {isProcessing ? (
+                      {isBusy ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
                         <XCircle className="w-3 h-3" />
@@ -289,8 +299,8 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
                       id="reject-tool-button"
                       data-testid="reject-tool-button"
                       onClick={() => setShowRejectInput(true)}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 font-medium text-xs flex items-center gap-1.5 transition-colors"
+                      disabled={isBusy}
+                      className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 font-medium text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
                       title="Reject tool execution and resume agent with refusal"
                     >
                       <XCircle className="w-3.5 h-3.5 text-rose-400" />
@@ -302,11 +312,11 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
                       id="approve-tool-button"
                       data-testid="approve-tool-button"
                       onClick={handleApprove}
-                      disabled={isProcessing}
-                      className="px-3.5 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40"
+                      disabled={isBusy}
+                      className="px-3.5 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 disabled:opacity-50"
                       title="Authorize MCP tool execution and resume agent stream"
                     >
-                      {isProcessing ? (
+                      {isBusy ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <CheckCircle2 className="w-3.5 h-3.5" />

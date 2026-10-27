@@ -125,4 +125,33 @@
       - 2/2 Playwright Phase 5B HITL approve/reject tests passed (`frontend/e2e/brick005.spec.ts`).
       - Ruff lint and formatting passed (0 errors, 56 files formatted).
       - Frontend TypeScript/Vite build passed (`tsc -b && vite build` in 2.15s) with zero leaked secrets.
-- **Stop Condition**: Intermediate checkpoint through Phase 6C staged and pushed to origin/feat/brick-005-mcp-gateway. Mandatory Stop: Phase 6/6C: ACCEPTED, BRICK-005: IN PROGRESS, Phase 7: NOT STARTED. Await project owner explicit authorization before beginning Phase 7.
+  - Phase 7 Complete React User Mode MCP Tool Interaction & Live Agent Experience (READY FOR REVIEW):
+    - React User Mode tool activity presentation in `ChatView.tsx` via `ToolActivityCard.tsx`:
+      - Displays tool identity (`tool_id`), MCP server identity (`server_id`), purpose description, and lifecycle status badge.
+      - Canonical lifecycle taxonomy: `REQUESTED`, `AWAITING_APPROVAL`, `APPROVED`, `REJECTED`, `EXECUTING`, `COMPLETED`, `FAILED`, `CANCELLED`, `UNCERTAIN`.
+      - Real elapsed duration in milliseconds (`${elapsed_ms}ms`) when start/completion timestamps are measured.
+      - Expandable argument viewer with formatted JSON and sanitized result summary / error message.
+      - Zero credential, private checkpoint, or sensitive environment variable exposure.
+    - SSE Event Stream Correlation & In-Place Updates:
+      - Backend correlation: `stream_agent_execution` tracks `pending_tool_call_ids` and binds `tool_call_id` across `tool_requested`, `tool_started`, `tool_completed`, and `tool_failed`.
+      - `resume_agent_execution` binds `approval.tool_call_id` to resumed tool events.
+      - Frontend correlation: `findToolActivityIndex` in `ChatView.tsx` matches by `tool_call_id`, `approval_id`, or in-flight active tool fallback.
+      - Robust in-place updates eliminate duplicate tool cards on replayed/reconnected events.
+    - Human-in-the-Loop Approval UI Integration:
+      - Reused `ApprovalCard.tsx` with local submitting lock (`isBusy = isProcessing || localSubmitting`) to prevent double-click dispatches.
+      - Atomic backend reservation via SQLite execution ledger (`start_dispatch()`).
+      - Verified LangGraph resume on approval and clean execution cancellation on rejection.
+    - Thread Recovery & State Reconstruction:
+      - `GET /api/v1/agent/approvals/thread/{thread_id}` endpoint in `src/javed/api/v1/approvals.py`.
+      - `get_thread_state` correlates LangGraph checkpoints (`AIMessage.tool_calls` and `ToolMessage`) and durable `ApprovalStore` records (`data/approvals.db`).
+      - Page reload recovers pending approvals and completed tool cards faithfully without fabricating data.
+    - Truthful Error Handling & Trust Boundaries:
+      - Handles tool denied by policy, rejected by user, MCP transport error, invalid arguments, controlled server failure, and disconnection truthfully.
+      - Never displays generic success badge on failure; displays exact error in red banner and message bubble.
+    - Verification Matrix:
+      - 5/5 real Chrome Playwright tests PASSED (`frontend/e2e/brick005_phase7.spec.ts`) across Scenarios A through E.
+      - 26/26 backend pytests PASSED (`tests/test_mcp_user_mode.py` and `tests/test_mcp_admin_api.py`).
+      - 57/57 Vitest frontend tests PASSED across 11 files (`frontend/src/test/toolActivity.test.tsx`, `frontend/src/test/approval.test.tsx`, etc.).
+      - Ruff check and format passed (0 errors, 57 files formatted).
+      - Frontend TypeScript/Vite production build passed (`tsc -b && vite build` in 2.63s).
+- **Stop Condition**: Phase 7 Complete & READY FOR REVIEW. Mandatory Stop: Phase 7: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 8: NOT STARTED. Await project owner explicit authorization before beginning Phase 8.

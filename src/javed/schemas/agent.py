@@ -131,13 +131,50 @@ class AgentStreamRequest(BaseModel):
         return validate_thread_id(v)
 
 
+ToolLifecycleState = Literal[
+    "REQUESTED",
+    "AWAITING_APPROVAL",
+    "APPROVED",
+    "REJECTED",
+    "EXECUTING",
+    "COMPLETED",
+    "FAILED",
+    "CANCELLED",
+    "UNCERTAIN",
+]
+
+
+class ToolActivityRecord(BaseModel):
+    """User Mode live representation of an MCP tool invocation."""
+
+    tool_call_id: str = Field(description="Unique tool call or invocation ID")
+    tool_id: str = Field(description="Canonical namespaced tool ID (e.g. time__get_current_time)")
+    server_id: str = Field(default="unknown", description="MCP server identity")
+    tool_name: str | None = Field(default=None, description="Human friendly display name")
+    description: str | None = Field(default=None, description="Tool purpose or summary")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Input arguments")
+    status: ToolLifecycleState = Field(
+        default="COMPLETED",
+        description="Current lifecycle state",
+    )
+    result_summary: str | None = Field(default=None, description="Sanitized result output")
+    error_message: str | None = Field(default=None, description="Sanitized error text")
+    started_at: datetime | None = Field(default=None, description="Start timestamp UTC")
+    completed_at: datetime | None = Field(default=None, description="Completion timestamp UTC")
+    elapsed_ms: int | None = Field(default=None, description="Elapsed duration in milliseconds")
+    approval_id: str | None = Field(default=None, description="Associated approval ID if gated")
+
+
 class AgentStreamEvent(BaseModel):
     """Typed Server-Sent Event envelope emitted during agent execution."""
 
     event: str = Field(
         description=(
             "Agent event type: run_started, planning, plan_updated, "
-            "model_streaming, checkpoint_saved, run_completed, run_cancelled, run_failed"
+            "model_streaming, checkpoint_saved, tool_requested, tool_started, "
+            "tool_completed, tool_failed, approval_required, approval_approved, "
+            "approval_rejected, approval_cancelled, agent_resumed, "
+            "run_completed, run_cancelled, run_failed"
         ),
     )
     data: dict[str, Any] = Field(
@@ -173,6 +210,10 @@ class AgentThreadStateResponse(BaseModel):
     active_model: str | None = Field(
         default=None,
         description="Active model identifier associated with this thread run",
+    )
+    tool_calls: list[ToolActivityRecord] = Field(
+        default_factory=list,
+        description="Tool activity records reconstructed for this thread",
     )
 
 

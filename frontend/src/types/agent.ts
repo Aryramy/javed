@@ -23,12 +23,40 @@ export type AgentStreamEventType =
   | 'approval_rejected'
   | 'approval_cancelled'
   | 'agent_resumed'
+  | 'tool_requested'
   | 'tool_started'
   | 'tool_completed'
   | 'tool_failed'
   | 'run_completed'
   | 'run_cancelled'
   | 'run_failed';
+
+export type ToolLifecycleState =
+  | 'REQUESTED'
+  | 'AWAITING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXECUTING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'UNCERTAIN';
+
+export interface ToolActivityRecord {
+  tool_call_id: string;
+  tool_id: string;
+  server_id: string;
+  tool_name: string;
+  description?: string;
+  arguments: Record<string, unknown>;
+  status: ToolLifecycleState;
+  result_summary?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  elapsed_ms?: number | null;
+  approval_id?: string | null;
+}
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
 export type DispatchStatus = 'not_dispatched' | 'in_flight' | 'completed' | 'failed' | 'uncertain';
@@ -99,6 +127,7 @@ export interface AgentThreadStateResponse {
   todos: AgentTodoItem[];
   checkpoint_id: string | null;
   exists: boolean;
+  tool_calls?: ToolActivityRecord[];
 }
 
 export interface AgentRuntimeStatusResponse {

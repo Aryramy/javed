@@ -170,6 +170,10 @@ class ApprovalStore:
         created_str = record.created_at.isoformat()
         expires_str = record.expires_at.isoformat() if record.expires_at else None
 
+        decision_str = record.decision_at.isoformat() if record.decision_at else None
+        dispatched_str = record.dispatched_at.isoformat() if record.dispatched_at else None
+        completed_str = record.completed_at.isoformat() if record.completed_at else None
+
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             # Check if this approval_id already exists
@@ -187,8 +191,10 @@ class ApprovalStore:
                     approval_id, interrupt_id, run_id, thread_id, server_id,
                     tool_id, tool_call_id, arguments_json, argument_digest,
                     tool_fingerprint, policy_version, created_at, expires_at,
-                    status, dispatch_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, dispatch_status, decision_at, decision_by,
+                    rejection_reason, dispatched_at, completed_at,
+                    result_summary, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.approval_id,
@@ -206,6 +212,13 @@ class ApprovalStore:
                     expires_str,
                     record.status,
                     record.dispatch_status,
+                    decision_str,
+                    record.decision_by,
+                    record.rejection_reason,
+                    dispatched_str,
+                    completed_str,
+                    record.result_summary,
+                    record.error_message,
                 ),
             )
             await db.commit()
@@ -255,6 +268,17 @@ class ApprovalStore:
                 params = ()
 
             async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [_parse_row(r) for r in rows]
+
+    async def get_thread_approvals(self, thread_id: str) -> list[ApprovalRecord]:
+        """Fetch all approval records associated with a specific conversation thread."""
+        await self.initialize()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            query = "SELECT * FROM pending_approvals WHERE thread_id = ? ORDER BY created_at ASC"
+            async with db.execute(query, (thread_id,)) as cursor:
                 rows = await cursor.fetchall()
                 return [_parse_row(r) for r in rows]
 

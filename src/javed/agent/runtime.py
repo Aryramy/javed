@@ -10,6 +10,7 @@ import logging
 import os
 import time
 import uuid
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ from langchain_core.messages import (
     AIMessageChunk,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_openrouter import ChatOpenRouter
@@ -48,6 +50,8 @@ from javed.schemas.agent import (
     AgentStreamRequest,
     AgentThreadStateResponse,
     AgentTodoItem,
+    ToolActivityRecord,
+    ToolLifecycleState,
     extract_message_text,
     validate_thread_id,
 )
@@ -146,18 +150,37 @@ class DeterministicScriptedE2EModel(BaseChatModel):
         if tool_messages:
             last_tool_msg = tool_messages[-1]
             content_str = str(last_tool_msg.content)
+            status_str = getattr(last_tool_msg, "status", "")
             if "cancelled" in content_str.lower() or "rejected" in content_str.lower():
                 resp_text = (
                     "The time request was rejected by human operator. Execution safely cancelled."
                 )
+            elif (
+                status_str == "error"
+                or "error" in content_str.lower()
+                or "failed" in content_str.lower()
+                or "violation" in content_str.lower()
+            ):
+                resp_text = f"Tool execution failed: {content_str}."
             else:
                 resp_text = f"The time operation was authorized and executed: {content_str}."
             return ChatResult(generations=[ChatGeneration(message=AIMessage(content=resp_text))])
 
         call_id = f"call_e2e_{uuid.uuid4().hex[:8]}"
+        last_human_text = ""
+        for m in reversed(messages):
+            if getattr(m, "type", None) == "human" or type(m).__name__ == "HumanMessage":
+                last_human_text = str(getattr(m, "content", ""))
+                break
+
+        tz = (
+            "Invalid/Nonexistent_Timezone"
+            if "invalid" in last_human_text.lower() or "fail" in last_human_text.lower()
+            else "UTC"
+        )
         tool_call = {
             "name": "time__get_current_time",
-            "args": {"timezone": "UTC"},
+            "args": {"timezone": tz},
             "id": call_id,
             "type": "tool_call",
         }
@@ -365,6 +388,7 @@ class AgentRuntimeManager:
             todos: list[AgentTodoItem] = []
             upstream_reported_usage: dict[str, Any] | None = None
             selected_model: str | None = None
+            pending_tool_call_ids: dict[str, list[str]] = defaultdict(list)
 
             try:
                 model = self.create_model(request)
@@ -432,28 +456,131 @@ class AgentRuntimeManager:
 
                     # Track external / MCP tool starts
                     elif event_type == "on_tool_start":
-                        yield AgentStreamEvent(
-                            event="tool_started",
-                            data={
-                                "run_id": run_id,
-                                "thread_id": validated_thread_id,
-                                "tool": ev_name,
-                                "input": ev_data.get("input", {}),
-                            },
-                        )
+                        if ev_name != "write_todos":
+                            server_id = "unknown"
+                            tool_desc = ""
+                            if self.mcp_gateway:
+                                try:
+                                    server_id, _ = parse_namespaced_tool_id(ev_name)
+                                except Exception:
+                                    server_id = "unknown"
+                                t_rec = self.mcp_gateway.registry.get_tool(ev_name)
+                                if t_rec:
+                                    tool_desc = t_rec.description
+
+                            tc_id = None
+                            if pending_tool_call_ids.get(ev_name):
+                                tc_id = pending_tool_call_ids[ev_name][0]
+                            if not tc_id:
+                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
+                                    "run_id"
+                                )
+
+                            yield AgentStreamEvent(
+                                event="tool_started",
+                                data={
+                                    "run_id": run_id,
+                                    "thread_id": validated_thread_id,
+                                    "tool": ev_name,
+                                    "server_id": server_id,
+                                    "description": tool_desc,
+                                    "input": ev_data.get("input", {}),
+                                    "tool_call_id": tc_id,
+                                },
+                            )
 
                     # Track external / MCP tool completions
                     elif event_type == "on_tool_end":
-                        output_val = ev_data.get("output", "")
-                        yield AgentStreamEvent(
-                            event="tool_completed",
-                            data={
-                                "run_id": run_id,
-                                "thread_id": validated_thread_id,
-                                "tool": ev_name,
-                                "output": str(output_val)[:1000],
-                            },
-                        )
+                        if ev_name != "write_todos":
+                            output_val = ev_data.get("output", "")
+                            server_id = "unknown"
+                            if self.mcp_gateway:
+                                try:
+                                    server_id, _ = parse_namespaced_tool_id(ev_name)
+                                except Exception:
+                                    server_id = "unknown"
+
+                            is_error = False
+                            err_msg = ""
+                            if isinstance(output_val, ToolMessage) and output_val.status == "error":
+                                is_error = True
+                                err_msg = str(output_val.content)
+                            elif hasattr(output_val, "status") and output_val.status == "error":
+                                is_error = True
+                                err_msg = str(getattr(output_val, "content", output_val))
+                            elif (
+                                "Security Violation:" in str(output_val)
+                                or "Error executing tool" in str(output_val)
+                                or "MCP server returned tool error" in str(output_val)
+                            ):
+                                is_error = True
+                                err_msg = str(output_val)
+
+                            tc_id = None
+                            if hasattr(output_val, "tool_call_id") and output_val.tool_call_id:
+                                tc_id = output_val.tool_call_id
+                            elif pending_tool_call_ids.get(ev_name):
+                                tc_id = pending_tool_call_ids[ev_name].pop(0)
+                            if not tc_id:
+                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
+                                    "run_id"
+                                )
+
+                            if is_error:
+                                yield AgentStreamEvent(
+                                    event="tool_failed",
+                                    data={
+                                        "run_id": run_id,
+                                        "thread_id": validated_thread_id,
+                                        "tool": ev_name,
+                                        "server_id": server_id,
+                                        "error": err_msg[:1000],
+                                        "tool_call_id": tc_id,
+                                    },
+                                )
+                            else:
+                                out_str = str(getattr(output_val, "content", output_val))[:1000]
+                                yield AgentStreamEvent(
+                                    event="tool_completed",
+                                    data={
+                                        "run_id": run_id,
+                                        "thread_id": validated_thread_id,
+                                        "tool": ev_name,
+                                        "server_id": server_id,
+                                        "output": out_str,
+                                        "tool_call_id": tc_id,
+                                    },
+                                )
+
+                    elif event_type == "on_tool_error":
+                        if ev_name != "write_todos":
+                            err_val = ev_data.get("error", "Tool execution error")
+                            server_id = "unknown"
+                            if self.mcp_gateway:
+                                try:
+                                    server_id, _ = parse_namespaced_tool_id(ev_name)
+                                except Exception:
+                                    server_id = "unknown"
+
+                            tc_id = None
+                            if pending_tool_call_ids.get(ev_name):
+                                tc_id = pending_tool_call_ids[ev_name].pop(0)
+                            if not tc_id:
+                                tc_id = ev.get("metadata", {}).get("tool_call_id") or ev.get(
+                                    "run_id"
+                                )
+
+                            yield AgentStreamEvent(
+                                event="tool_failed",
+                                data={
+                                    "run_id": run_id,
+                                    "thread_id": validated_thread_id,
+                                    "tool": ev_name,
+                                    "server_id": server_id,
+                                    "error": str(err_val)[:1000],
+                                    "tool_call_id": tc_id,
+                                },
+                            )
 
                     # Stream model tokens
                     elif event_type == "on_chat_model_stream":
@@ -473,7 +600,7 @@ class AgentRuntimeManager:
                                 )
                                 token_index += 1
 
-                    # Track model completion metadata
+                    # Track model completion metadata & tool requests
                     elif event_type == "on_chat_model_end":
                         output = ev_data.get("output")
                         if output and hasattr(output, "llm_output") and output.llm_output:
@@ -482,6 +609,47 @@ class AgentRuntimeManager:
                                 upstream_reported_usage = llm_out["token_usage"]
                             if "model_name" in llm_out:
                                 selected_model = llm_out["model_name"]
+
+                        # Check if model requested tool calls
+                        requested_calls: list[dict[str, Any]] = []
+                        if hasattr(output, "generations") and output.generations:
+                            for gen_list in output.generations:
+                                items = gen_list if isinstance(gen_list, list) else [gen_list]
+                                for g in items:
+                                    msg = getattr(g, "message", None)
+                                    if msg and getattr(msg, "tool_calls", None):
+                                        requested_calls.extend(msg.tool_calls)
+                        elif isinstance(output, AIMessage) and output.tool_calls:
+                            requested_calls.extend(output.tool_calls)
+
+                        for tc in requested_calls:
+                            tc_name = tc.get("name", "")
+                            tc_id = tc.get("id")
+                            if tc_name and tc_id:
+                                pending_tool_call_ids[tc_name].append(tc_id)
+                            if tc_name and tc_name != "write_todos":
+                                server_id = "unknown"
+                                tool_desc = ""
+                                if self.mcp_gateway:
+                                    try:
+                                        server_id, _ = parse_namespaced_tool_id(tc_name)
+                                    except Exception:
+                                        server_id = "unknown"
+                                    t_rec = self.mcp_gateway.registry.get_tool(tc_name)
+                                    if t_rec:
+                                        tool_desc = t_rec.description
+                                yield AgentStreamEvent(
+                                    event="tool_requested",
+                                    data={
+                                        "run_id": run_id,
+                                        "thread_id": validated_thread_id,
+                                        "tool": tc_name,
+                                        "server_id": server_id,
+                                        "description": tool_desc,
+                                        "tool_call_id": tc.get("id"),
+                                        "input": tc.get("args") or {},
+                                    },
+                                )
 
                 # Extract final state from checkpointer
                 final_state = await agent.aget_state(config)
@@ -808,26 +976,123 @@ class AgentRuntimeManager:
 
                         if event_type == "on_tool_start":
                             if ev_name != "write_todos":
+                                server_id = "unknown"
+                                tool_desc = ""
+                                if self.mcp_gateway:
+                                    try:
+                                        server_id, _ = parse_namespaced_tool_id(ev_name)
+                                    except Exception:
+                                        server_id = "unknown"
+                                    t_rec = self.mcp_gateway.registry.get_tool(ev_name)
+                                    if t_rec:
+                                        tool_desc = t_rec.description
+
+                                tc_id = (
+                                    ev.get("metadata", {}).get("tool_call_id")
+                                    or approval.tool_call_id
+                                    or ev.get("run_id")
+                                )
+
                                 yield AgentStreamEvent(
                                     event="tool_started",
                                     data={
                                         "run_id": run_id,
                                         "thread_id": validated_thread_id,
                                         "tool": ev_name,
+                                        "server_id": server_id,
+                                        "description": tool_desc,
                                         "input": ev_data.get("input", {}),
+                                        "tool_call_id": tc_id,
                                     },
                                 )
 
                         elif event_type == "on_tool_end":
                             if ev_name != "write_todos":
                                 output_val = ev_data.get("output", "")
+                                server_id = "unknown"
+                                if self.mcp_gateway:
+                                    try:
+                                        server_id, _ = parse_namespaced_tool_id(ev_name)
+                                    except Exception:
+                                        server_id = "unknown"
+
+                                is_error = False
+                                err_msg = ""
+                                if (
+                                    isinstance(output_val, ToolMessage)
+                                    and output_val.status == "error"
+                                ):
+                                    is_error = True
+                                    err_msg = str(output_val.content)
+                                elif hasattr(output_val, "status") and output_val.status == "error":
+                                    is_error = True
+                                    err_msg = str(getattr(output_val, "content", output_val))
+                                elif (
+                                    "Security Violation:" in str(output_val)
+                                    or "Error executing tool" in str(output_val)
+                                    or "MCP server returned tool error" in str(output_val)
+                                ):
+                                    is_error = True
+                                    err_msg = str(output_val)
+
+                                tool_call_id = (
+                                    getattr(output_val, "tool_call_id", None)
+                                    or ev.get("metadata", {}).get("tool_call_id")
+                                    or approval.tool_call_id
+                                    or ev.get("run_id")
+                                )
+
+                                if is_error:
+                                    yield AgentStreamEvent(
+                                        event="tool_failed",
+                                        data={
+                                            "run_id": run_id,
+                                            "thread_id": validated_thread_id,
+                                            "tool": ev_name,
+                                            "server_id": server_id,
+                                            "error": err_msg[:1000],
+                                            "tool_call_id": tool_call_id,
+                                        },
+                                    )
+                                else:
+                                    out_str = str(getattr(output_val, "content", output_val))[:1000]
+                                    yield AgentStreamEvent(
+                                        event="tool_completed",
+                                        data={
+                                            "run_id": run_id,
+                                            "thread_id": validated_thread_id,
+                                            "tool": ev_name,
+                                            "server_id": server_id,
+                                            "output": out_str,
+                                            "tool_call_id": tool_call_id,
+                                        },
+                                    )
+
+                        elif event_type == "on_tool_error":
+                            if ev_name != "write_todos":
+                                err_val = ev_data.get("error", "Tool execution error")
+                                server_id = "unknown"
+                                if self.mcp_gateway:
+                                    try:
+                                        server_id, _ = parse_namespaced_tool_id(ev_name)
+                                    except Exception:
+                                        server_id = "unknown"
+
+                                tc_id = (
+                                    ev.get("metadata", {}).get("tool_call_id")
+                                    or approval.tool_call_id
+                                    or ev.get("run_id")
+                                )
+
                                 yield AgentStreamEvent(
-                                    event="tool_completed",
+                                    event="tool_failed",
                                     data={
                                         "run_id": run_id,
                                         "thread_id": validated_thread_id,
                                         "tool": ev_name,
-                                        "output": str(output_val)[:1000],
+                                        "server_id": server_id,
+                                        "error": str(err_val)[:1000],
+                                        "tool_call_id": tc_id,
                                     },
                                 )
 
@@ -1056,6 +1321,155 @@ class AgentRuntimeManager:
         if tuple_.metadata and isinstance(tuple_.metadata, dict):
             active_model = tuple_.metadata.get("model")
 
+        # Reconstruct tool activities from checkpoint messages and durable approval store
+        tool_activities: list[ToolActivityRecord] = []
+        thread_approvals: list[ApprovalRecord] = []
+        if self.approval_store:
+            try:
+                thread_approvals = await self.approval_store.get_thread_approvals(
+                    validated_thread_id
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not query thread approvals for %s: %s", validated_thread_id, e
+                )
+
+        approval_by_tool_call_id = {
+            appr.tool_call_id: appr for appr in thread_approvals if appr.tool_call_id
+        }
+
+        tool_messages_by_id: dict[str, Any] = {}
+        for msg in raw_messages:
+            if isinstance(msg, ToolMessage) or getattr(msg, "type", None) == "tool":
+                t_cid = getattr(msg, "tool_call_id", "")
+                if t_cid:
+                    tool_messages_by_id[t_cid] = msg
+
+        seen_tool_call_ids: set[str] = set()
+
+        for msg in raw_messages:
+            if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                for tc in msg.tool_calls:
+                    tc_id = tc.get("id") or f"tc_{uuid.uuid4().hex[:8]}"
+                    if tc_id in seen_tool_call_ids:
+                        continue
+                    seen_tool_call_ids.add(tc_id)
+                    t_name = tc.get("name", "")
+                    if t_name == "write_todos":
+                        continue
+
+                    server_id = "unknown"
+                    tool_desc = ""
+                    if self.mcp_gateway:
+                        try:
+                            server_id, _ = parse_namespaced_tool_id(t_name)
+                        except Exception:
+                            server_id = "unknown"
+                        t_rec = self.mcp_gateway.registry.get_tool(t_name)
+                        if t_rec:
+                            tool_desc = t_rec.description
+
+                    matched_appr = approval_by_tool_call_id.get(tc_id)
+                    matched_tool_msg = tool_messages_by_id.get(tc_id)
+
+                    status: ToolLifecycleState = "COMPLETED"
+                    result_summary = None
+                    error_message = None
+                    started_at = None
+                    completed_at = None
+                    elapsed_ms = None
+                    approval_id = None
+
+                    if matched_appr:
+                        approval_id = matched_appr.approval_id
+                        if matched_appr.server_id:
+                            server_id = matched_appr.server_id
+                        started_at = matched_appr.dispatched_at or matched_appr.created_at
+                        completed_at = matched_appr.completed_at
+                        if started_at and completed_at:
+                            elapsed_ms = int((completed_at - started_at).total_seconds() * 1000)
+
+                        if matched_appr.status == "pending":
+                            status = "AWAITING_APPROVAL"
+                        elif matched_appr.status == "rejected":
+                            status = "REJECTED"
+                            error_message = (
+                                matched_appr.rejection_reason or "Tool call was rejected by user."
+                            )
+                        elif matched_appr.status == "cancelled":
+                            status = "CANCELLED"
+                        elif matched_appr.dispatch_status == "uncertain":
+                            status = "UNCERTAIN"
+                            error_message = matched_appr.error_message
+                        elif matched_appr.dispatch_status == "failed":
+                            status = "FAILED"
+                            error_message = matched_appr.error_message
+                        elif matched_appr.dispatch_status == "completed":
+                            status = "COMPLETED"
+                            result_summary = matched_appr.result_summary
+                        elif matched_appr.status == "approved":
+                            status = "APPROVED"
+
+                    if matched_tool_msg:
+                        content_str = str(matched_tool_msg.content)
+                        if (
+                            getattr(matched_tool_msg, "status", None) == "error"
+                            or "Security Violation:" in content_str
+                        ):
+                            status = "FAILED"
+                            error_message = content_str
+                        elif not result_summary:
+                            result_summary = content_str
+                    elif not matched_appr:
+                        status = "EXECUTING"
+
+                    tool_activities.append(
+                        ToolActivityRecord(
+                            tool_call_id=tc_id,
+                            tool_id=t_name,
+                            server_id=server_id,
+                            tool_name=t_name,
+                            description=tool_desc,
+                            arguments=tc.get("args") or {},
+                            status=status,
+                            result_summary=result_summary,
+                            error_message=error_message,
+                            started_at=started_at,
+                            completed_at=completed_at,
+                            elapsed_ms=elapsed_ms,
+                            approval_id=approval_id,
+                        )
+                    )
+
+        # Include any pending approvals from approval_store not already attached
+        for appr in thread_approvals:
+            if appr.tool_call_id not in seen_tool_call_ids and appr.approval_id not in [
+                t.approval_id for t in tool_activities if t.approval_id
+            ]:
+                seen_tool_call_ids.add(appr.tool_call_id)
+                tool_activities.append(
+                    ToolActivityRecord(
+                        tool_call_id=appr.tool_call_id or f"appr_{appr.approval_id}",
+                        tool_id=appr.tool_id,
+                        server_id=appr.server_id,
+                        tool_name=appr.tool_id,
+                        description="",
+                        arguments=appr.arguments,
+                        status="AWAITING_APPROVAL"
+                        if appr.status == "pending"
+                        else (
+                            "REJECTED"
+                            if appr.status == "rejected"
+                            else ("CANCELLED" if appr.status == "cancelled" else "COMPLETED")
+                        ),
+                        result_summary=appr.result_summary,
+                        error_message=appr.error_message or appr.rejection_reason,
+                        started_at=appr.created_at,
+                        completed_at=appr.completed_at,
+                        approval_id=appr.approval_id,
+                    )
+                )
+
         return AgentThreadStateResponse(
             thread_id=validated_thread_id,
             messages=messages,
@@ -1063,6 +1477,7 @@ class AgentRuntimeManager:
             checkpoint_id=str(checkpoint_id) if checkpoint_id else None,
             exists=True,
             active_model=active_model,
+            tool_calls=tool_activities,
         )
 
     async def get_status(self) -> AgentRuntimeStatusResponse:

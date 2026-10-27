@@ -526,5 +526,99 @@ In compliance with owner authorization, the backend test inventory has been veri
 ### 12.4 Mandatory Acceptance Status
 - **Phase 6C**: **ACCEPTED**
 - **Phase 6**: **ACCEPTED**
+- **Phase 7**: **READY FOR REVIEW**
 - **BRICK-005**: **IN PROGRESS**
-- **Phase 7**: **NOT STARTED** (Awaiting owner authorization)
+- **Phase 8**: **NOT STARTED**
+
+---
+
+## 13. Phase 7: Complete React User Mode MCP Tool Interaction & Live Agent Experience
+
+### 13.1 Objective & User Mode Scope
+Phase 7 delivers a complete, production-grade User Mode experience for JAVED's MCP-enabled agent runtime:
+- Users interact naturally in User Mode (`ChatView.tsx`) without needing Developer Mode.
+- Real agent/tool interactions are displayed truthfully through canonical SSE lifecycle states.
+- Reuses existing UI components (`ApprovalCard`, `TaskPlanPanel`, model auto-router, token/cost meter) without secondary chat apps or parallel execution engines.
+- Strict security boundaries: User Mode never receives the owner token or administrative mutation capabilities.
+
+### 13.2 Tool Lifecycle State Machine
+Each real tool invocation in User Mode transitions through explicit, host-governed states:
+```
+REQUESTED ──┬──> [ALLOWED_READ_ONLY] ───────────────> EXECUTING ──┬──> COMPLETED
+            │                                                      └──> FAILED
+            └──> [APPROVAL_REQUIRED] ──> AWAITING_APPROVAL
+                                                │
+                                                ├──> APPROVED ───────> EXECUTING ──┬──> COMPLETED
+                                                │                                  └──> FAILED
+                                                ├──> REJECTED
+                                                ├──> CANCELLED
+                                                └──> UNCERTAIN
+```
+- **REQUESTED**: Emitted on `on_chat_model_end` when the LLM generates a tool call.
+- **AWAITING_APPROVAL**: Emitted when host gateway detects `APPROVAL_REQUIRED` policy and pauses with LangGraph HITL interrupt.
+- **APPROVED**: Emitted when the user confirms approval; tool moves to execution queue.
+- **REJECTED**: Emitted when the user rejects approval; transport execution is completely bypassed.
+- **EXECUTING**: Emitted on `on_tool_start` when the tool begins dispatch through the `SecureMCPGateway`.
+- **COMPLETED**: Emitted on `on_tool_end` when execution succeeds with a verified result summary.
+- **FAILED**: Emitted on `on_tool_error` or server tool error; displays truthful error message without success badges.
+- **CANCELLED**: Emitted when agent execution is aborted by user.
+- **UNCERTAIN**: Emitted if transport drops during dispatch; never automatically retried.
+
+### 13.3 Real-Time SSE Event Correlation Strategy
+To handle out-of-order, repeated, interrupted, or reconnected SSE events safely, the frontend and backend implement deterministic correlation:
+1. **Backend Correlation (`src/javed/agent/runtime.py`)**:
+   - `stream_agent_execution` maintains `pending_tool_call_ids: dict[str, list[str]] = defaultdict(list)` to track tool call IDs emitted by `on_chat_model_end`.
+   - `on_tool_start`, `on_tool_end`, and `on_tool_error` correlate with the active tool call ID, ensuring `tool_requested`, `tool_started`, `tool_completed`, and `tool_failed` share the exact same `tool_call_id`.
+   - `resume_agent_execution` explicitly binds `approval.tool_call_id` to resumed tool events.
+2. **Frontend In-Place Matching (`findToolActivityIndex` in `ChatView.tsx`)**:
+   - Matches by `tool_call_id` if present.
+   - Matches by `approval_id` if present.
+   - Falls back to matching active in-flight tool records with matching `tool_id`/`tool_name` (`REQUESTED`, `AWAITING_APPROVAL`, `APPROVED`, `EXECUTING`).
+   - Updates matching records in place; prevents duplicate tool cards on replayed/reconnected events.
+
+### 13.4 Component Architecture & User Experience
+1. **`ToolActivityCard.tsx` (`frontend/src/components/chat/ToolActivityCard.tsx`)**:
+   - Glassmorphism design system matching JAVED styling (`border-zinc-800/80 bg-zinc-900/50 backdrop-blur-md`).
+   - Displays tool identity (`tool_id`), MCP server identity (`server_id`), purpose description, and lifecycle status badge with distinct semantic color tokens.
+   - Displays real elapsed duration in milliseconds (`${elapsed_ms}ms`) when start and completion timestamps are measured.
+   - Expandable argument viewer with formatted JSON and sanitized result summary / error message.
+   - Zero credential, private checkpoint, or sensitive environment variable exposure.
+2. **`ApprovalCard.tsx` Double-Click Protection**:
+   - Reused from Phase 5B with enhanced local state lock (`isBusy = isProcessing || localSubmitting`).
+   - Disables buttons immediately upon first click while the backend resume request is in flight.
+   - Paired with backend atomic reservation in SQLite execution ledger (`start_dispatch()`).
+3. **Thread State Reconstruction & Reload Recovery**:
+   - `GET /api/v1/agent/approvals/thread/{thread_id}` endpoint in `src/javed/api/v1/approvals.py`.
+   - `AgentRuntimeManager.get_thread_state` correlates LangGraph checkpoints (`AIMessage.tool_calls` and `ToolMessage`) with durable `ApprovalStore` records (`data/approvals.db`).
+   - On page reload or thread selection, historical tool cards are restored with their genuine terminal states (`COMPLETED`, `FAILED`, `REJECTED`, or pending `AWAITING_APPROVAL`). Zero fabricated data.
+
+### 13.5 Verification Evidence Matrix (Phase 7)
+
+#### 1. Real Chrome Playwright E2E Suite (`frontend/e2e/brick005_phase7.spec.ts`)
+Executed against live FastAPI backend (`127.0.0.1:8000`), Vite dev server (`127.0.0.1:5173`), LangGraph runtime, SQLite checkpoints, and STDIO `mcp-server-time.exe`:
+- **Scenario A — Read-only Time tool**: `ALLOWED_READ_ONLY` policy; real tool dispatches through gateway without approval dialog; displays `REQUESTED` -> `EXECUTING` -> `COMPLETED` card with `${elapsed_ms}ms` duration and real time response. (**PASSED**, 23.6s)
+- **Scenario B — Human approval**: `APPROVAL_REQUIRED` policy; triggers `ApprovalCard` (`pending`) and `ToolActivityCard` (`AWAITING_APPROVAL`); user clicks Approve; verifies LangGraph resume, single MCP dispatch, state transition to `COMPLETED`, and final agent response. (**PASSED**, 22.9s)
+- **Scenario C — Denial**: `APPROVAL_REQUIRED` policy; user clicks Reject with audit reason; confirms zero transport execution, `ApprovalCard` updates to `rejected`, `ToolActivityCard` reflects `REJECTED`, agent response truthfully acknowledges human rejection. (**PASSED**, 23.7s)
+- **Scenario D — Reload recovery**: Approval requested; page reloads while pending; verifies restored `ApprovalCard` and single `ToolActivityCard`; user clicks Approve after reload; resumes agent successfully to `COMPLETED` without duplicate card generation. (**PASSED**, 23.9s)
+- **Scenario E — Controlled tool failure**: `ALLOWED_READ_ONLY` policy; invalid timezone requested; real Time MCP server returns tool error; verifies `ToolActivityCard` transitions to `FAILED`, displays sanitized error message, no success badge appears, and assistant bubble truthfully acknowledges failure. (**PASSED**, 22.6s)
+- **Playwright Summary**: **5/5 PASSED (100%)** in 2.0m.
+
+#### 2. Backend Pytest Suite (`tests/test_mcp_user_mode.py` & `tests/test_mcp_admin_api.py`)
+- `tests/test_mcp_user_mode.py`: **4 tests PASSED** (Thread state reconstruction with tool calls, tool event lifecycle in stream_agent, tool failure event emission, and list thread approvals API endpoint).
+- `tests/test_mcp_admin_api.py`: **22 tests PASSED** (Security, admin, owner authentication, fail-closed guards).
+- Total: **26/26 PASSED** in 5.54s.
+
+#### 3. Frontend Vitest Component Suite
+- `src/test/toolActivity.test.tsx`: **7 tests PASSED** (Lifecycle badges, duration rendering, timestamp displays, purpose description, collapsible arguments, error banner, result summary).
+- `src/test/approval.test.tsx`: **5 tests PASSED** (Pending card, approve button click, rejection input reveal, double-click protection).
+- Total: **57/57 PASSED** across 11 test files in 20.22s.
+
+#### 4. Code Quality & Build Verification
+- **Ruff**: `ruff check src tests` (All checks passed!), `ruff format --check src tests` (57 files already formatted).
+- **TypeScript & Vite Build**: `tsc -b && vite build` built in 2.63s with 0 errors.
+
+### 13.6 Mandatory Stop Condition
+- **Phase 7**: **READY FOR REVIEW**
+- **BRICK-005**: **IN PROGRESS**
+- **Phase 8 (Developer MCP Console)**: **NOT STARTED**
+- Merging to master, pushing to GitHub, and advancing to Phase 8 remain blocked pending explicit Project Owner review and acceptance.

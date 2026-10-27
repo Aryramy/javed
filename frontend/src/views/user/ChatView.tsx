@@ -13,12 +13,14 @@ import {
   Route,
   RefreshCw,
   Workflow,
+  Wrench,
 } from 'lucide-react';
 import { ModelSelector } from '../../components/chat/ModelSelector';
 import { TokenCostMeter } from '../../components/chat/TokenCostMeter';
 import { MarkdownContent } from '../../components/chat/MarkdownContent';
 import { TaskPlanPanel } from '../../components/chat/TaskPlanPanel';
 import { ApprovalCard } from '../../components/chat/ApprovalCard';
+import { ToolActivityCard } from '../../components/chat/ToolActivityCard';
 import { chatService } from '../../services/chatService';
 import { agentService } from '../../services/agentService';
 import { useBackend, useMode } from '../../context';
@@ -32,7 +34,12 @@ import type {
   ModelInfo,
   StreamUsage,
 } from '../../types/chat';
-import type { AgentRunTelemetry, AgentTodoItem, ApprovalRecord } from '../../types/agent';
+import type {
+  AgentRunTelemetry,
+  AgentTodoItem,
+  ApprovalRecord,
+  ToolActivityRecord,
+} from '../../types/agent';
 
 const DEFAULT_MODELS: ModelInfo[] = [
   {
@@ -125,6 +132,38 @@ function generateMessageId(role: string): string {
   return `${role}-${msgCounter}`;
 }
 
+function findToolActivityIndex(
+  activities: ToolActivityRecord[],
+  target: {
+    tool_call_id?: string | null;
+    approval_id?: string | null;
+    tool?: string | null;
+  }
+): number {
+  if (target.tool_call_id) {
+    const idx = activities.findIndex((t) => t.tool_call_id === target.tool_call_id);
+    if (idx >= 0) return idx;
+  }
+  if (target.approval_id) {
+    const idx = activities.findIndex((t) => t.approval_id === target.approval_id);
+    if (idx >= 0) return idx;
+  }
+  if (target.tool) {
+    const activeIdx = activities.findLastIndex(
+      (t) =>
+        (t.tool_id === target.tool || t.tool_name === target.tool) &&
+        !['COMPLETED', 'FAILED', 'REJECTED', 'CANCELLED'].includes(t.status)
+    );
+    if (activeIdx >= 0) return activeIdx;
+
+    const lastMatchingIdx = activities.findLastIndex(
+      (t) => t.tool_id === target.tool || t.tool_name === target.tool
+    );
+    if (lastMatchingIdx >= 0) return lastMatchingIdx;
+  }
+  return -1;
+}
+
 export const ChatView: React.FC = () => {
   const { status, latencyMs, systemStatus } = useBackend();
   const { mode } = useMode();
@@ -154,6 +193,7 @@ export const ChatView: React.FC = () => {
   const [checkpointId, setCheckpointId] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
   const [isApprovalProcessing, setIsApprovalProcessing] = useState<boolean>(false);
+  const [toolActivities, setToolActivities] = useState<ToolActivityRecord[]>([]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelInfo[]>(DEFAULT_MODELS);
@@ -235,6 +275,9 @@ export const ChatView: React.FC = () => {
         if (state.checkpoint_id) {
           setCheckpointId(state.checkpoint_id);
         }
+        if (state.tool_calls) {
+          setToolActivities(state.tool_calls);
+        }
       }
 
       // Recover any pending approvals for this thread
@@ -267,6 +310,7 @@ export const ChatView: React.FC = () => {
       restoreThreadState(threadId);
     } else {
       setAgentTodos([]);
+      setToolActivities([]);
       setAgentStatus('idle');
     }
   };
@@ -280,6 +324,7 @@ export const ChatView: React.FC = () => {
     setMessages([]);
     setAgentTodos([]);
     setPendingApprovals([]);
+    setToolActivities([]);
     setActiveRunId(null);
     setCheckpointId(null);
     setAgentStatus('idle');
@@ -334,6 +379,7 @@ export const ChatView: React.FC = () => {
     setMessages([]);
     setAgentTodos([]);
     setPendingApprovals([]);
+    setToolActivities([]);
     setActiveRunId(null);
     setCheckpointId(null);
     setAgentStatus('idle');
@@ -438,6 +484,39 @@ export const ChatView: React.FC = () => {
                 }
                 return [...prev, approval];
               });
+              setToolActivities((prev) => {
+                const existingIndex = findToolActivityIndex(prev, {
+                  tool_call_id: approval.tool_call_id,
+                  approval_id: approval.approval_id,
+                  tool: approval.tool_id,
+                });
+                const now = new Date().toISOString();
+                if (existingIndex >= 0) {
+                  const copy = [...prev];
+                  copy[existingIndex] = {
+                    ...copy[existingIndex],
+                    status: 'AWAITING_APPROVAL',
+                    approval_id: approval.approval_id,
+                    server_id: approval.server_id || copy[existingIndex].server_id,
+                    arguments: approval.arguments,
+                    tool_call_id: approval.tool_call_id || copy[existingIndex].tool_call_id,
+                  };
+                  return copy;
+                }
+                return [
+                  ...prev,
+                  {
+                    tool_call_id: approval.tool_call_id || `tc-${Date.now()}`,
+                    tool_id: approval.tool_id,
+                    server_id: approval.server_id,
+                    tool_name: approval.tool_id,
+                    arguments: approval.arguments,
+                    status: 'AWAITING_APPROVAL',
+                    approval_id: approval.approval_id,
+                    started_at: approval.created_at || now,
+                  },
+                ];
+              });
               setAgentStatus('idle');
               setIsStreaming(false);
               abortControllerRef.current = null;
@@ -446,6 +525,15 @@ export const ChatView: React.FC = () => {
               setPendingApprovals((prev) =>
                 prev.map((p) => (p.approval_id === data.approval_id ? { ...p, status: 'approved' } : p))
               );
+              setToolActivities((prev) => {
+                const idx = findToolActivityIndex(prev, { approval_id: data.approval_id });
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = { ...copy[idx], status: 'APPROVED' };
+                  return copy;
+                }
+                return prev;
+              });
             },
             onApprovalRejected: (data) => {
               setPendingApprovals((prev) =>
@@ -455,15 +543,166 @@ export const ChatView: React.FC = () => {
                     : p
                 )
               );
+              setToolActivities((prev) => {
+                const idx = findToolActivityIndex(prev, { approval_id: data.approval_id });
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = {
+                    ...copy[idx],
+                    status: 'REJECTED',
+                    error_message: data.reason || 'Tool execution was rejected by user.',
+                  };
+                  return copy;
+                }
+                return prev;
+              });
+            },
+            onToolRequested: (data) => {
+              setToolActivities((prev) => {
+                const existingIndex = findToolActivityIndex(prev, {
+                  tool_call_id: data.tool_call_id,
+                  tool: data.tool,
+                });
+                const record: ToolActivityRecord = {
+                  tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                  tool_id: data.tool,
+                  server_id: data.server_id || 'unknown',
+                  tool_name: data.tool,
+                  description: data.description,
+                  arguments: data.input,
+                  status: 'REQUESTED',
+                  started_at: new Date().toISOString(),
+                };
+                if (existingIndex >= 0) {
+                  const copy = [...prev];
+                  copy[existingIndex] = { ...copy[existingIndex], ...record };
+                  return copy;
+                }
+                return [...prev, record];
+              });
+            },
+            onToolStarted: (data) => {
+              setToolActivities((prev) => {
+                const existingIndex = findToolActivityIndex(prev, {
+                  tool_call_id: data.tool_call_id,
+                  tool: data.tool,
+                });
+                const now = new Date().toISOString();
+                if (existingIndex >= 0) {
+                  const copy = [...prev];
+                  copy[existingIndex] = {
+                    ...copy[existingIndex],
+                    status: 'EXECUTING',
+                    started_at: copy[existingIndex].started_at || now,
+                    server_id: data.server_id || copy[existingIndex].server_id,
+                    description: data.description || copy[existingIndex].description,
+                    arguments:
+                      data.input && Object.keys(data.input).length > 0
+                        ? data.input
+                        : copy[existingIndex].arguments,
+                  };
+                  return copy;
+                }
+                return [
+                  ...prev,
+                  {
+                    tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                    tool_id: data.tool,
+                    server_id: data.server_id || 'unknown',
+                    tool_name: data.tool,
+                    description: data.description,
+                    arguments: data.input,
+                    status: 'EXECUTING',
+                    started_at: now,
+                  },
+                ];
+              });
             },
             onToolCompleted: (data) => {
               setPendingApprovals((prev) =>
                 prev.map((p) =>
-                  p.tool_id === data.tool
+                  p.tool_id === data.tool || (data.tool_call_id && p.tool_call_id === data.tool_call_id)
                     ? { ...p, dispatch_status: 'completed', result_summary: data.output }
                     : p
                 )
               );
+              setToolActivities((prev) => {
+                const existingIndex = findToolActivityIndex(prev, {
+                  tool_call_id: data.tool_call_id,
+                  tool: data.tool,
+                });
+                const now = new Date().toISOString();
+                if (existingIndex >= 0) {
+                  const copy = [...prev];
+                  const current = copy[existingIndex];
+                  const started = current.started_at ? new Date(current.started_at).getTime() : null;
+                  const elapsed = started ? Math.round(new Date(now).getTime() - started) : null;
+                  copy[existingIndex] = {
+                    ...current,
+                    status: 'COMPLETED',
+                    result_summary: data.output,
+                    completed_at: now,
+                    elapsed_ms: elapsed ?? current.elapsed_ms,
+                  };
+                  return copy;
+                }
+                return [
+                  ...prev,
+                  {
+                    tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                    tool_id: data.tool,
+                    server_id: 'unknown',
+                    tool_name: data.tool,
+                    arguments: {},
+                    status: 'COMPLETED',
+                    result_summary: data.output,
+                    completed_at: now,
+                  },
+                ];
+              });
+            },
+            onToolFailed: (data) => {
+              setPendingApprovals((prev) =>
+                prev.map((p) =>
+                  p.tool_id === data.tool || (data.tool_call_id && p.tool_call_id === data.tool_call_id)
+                    ? { ...p, dispatch_status: 'failed', error_message: data.error }
+                    : p
+                )
+              );
+              setToolActivities((prev) => {
+                const existingIndex = findToolActivityIndex(prev, {
+                  tool_call_id: data.tool_call_id,
+                  tool: data.tool,
+                });
+                const now = new Date().toISOString();
+                if (existingIndex >= 0) {
+                  const copy = [...prev];
+                  const current = copy[existingIndex];
+                  const started = current.started_at ? new Date(current.started_at).getTime() : null;
+                  const elapsed = started ? Math.round(new Date(now).getTime() - started) : null;
+                  copy[existingIndex] = {
+                    ...current,
+                    status: 'FAILED',
+                    error_message: data.error,
+                    completed_at: now,
+                    elapsed_ms: elapsed ?? current.elapsed_ms,
+                  };
+                  return copy;
+                }
+                return [
+                  ...prev,
+                  {
+                    tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                    tool_id: data.tool,
+                    server_id: 'unknown',
+                    tool_name: data.tool,
+                    arguments: {},
+                    status: 'FAILED',
+                    error_message: data.error,
+                    completed_at: now,
+                  },
+                ];
+              });
             },
             onRunCompleted: (data) => {
               const duration = Math.round(performance.now() - startTime);
@@ -706,15 +945,141 @@ export const ChatView: React.FC = () => {
           setPendingApprovals((prev) =>
             prev.map((p) => (p.approval_id === data.approval_id ? { ...p, status: 'approved' } : p))
           );
+          setToolActivities((prev) => {
+            const idx = findToolActivityIndex(prev, { approval_id: data.approval_id });
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], status: 'APPROVED' };
+              return copy;
+            }
+            return prev;
+          });
+        },
+        onToolStarted: (data) => {
+          setToolActivities((prev) => {
+            const existingIndex = findToolActivityIndex(prev, {
+              tool_call_id: data.tool_call_id,
+              approval_id: approvalId,
+              tool: data.tool,
+            });
+            const now = new Date().toISOString();
+            if (existingIndex >= 0) {
+              const copy = [...prev];
+              copy[existingIndex] = {
+                ...copy[existingIndex],
+                status: 'EXECUTING',
+                started_at: copy[existingIndex].started_at || now,
+                server_id: data.server_id || copy[existingIndex].server_id,
+                description: data.description || copy[existingIndex].description,
+                arguments:
+                  data.input && Object.keys(data.input).length > 0
+                    ? data.input
+                    : copy[existingIndex].arguments,
+              };
+              return copy;
+            }
+            return [
+              ...prev,
+              {
+                tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                tool_id: data.tool,
+                server_id: data.server_id || 'unknown',
+                tool_name: data.tool,
+                description: data.description,
+                arguments: data.input,
+                status: 'EXECUTING',
+                started_at: now,
+              },
+            ];
+          });
         },
         onToolCompleted: (data) => {
           setPendingApprovals((prev) =>
             prev.map((p) =>
-              p.tool_id === data.tool
+              p.tool_id === data.tool || (data.tool_call_id && p.tool_call_id === data.tool_call_id)
                 ? { ...p, dispatch_status: 'completed', result_summary: data.output }
                 : p
             )
           );
+          setToolActivities((prev) => {
+            const existingIndex = findToolActivityIndex(prev, {
+              tool_call_id: data.tool_call_id,
+              approval_id: approvalId,
+              tool: data.tool,
+            });
+            const now = new Date().toISOString();
+            if (existingIndex >= 0) {
+              const copy = [...prev];
+              const current = copy[existingIndex];
+              const started = current.started_at ? new Date(current.started_at).getTime() : null;
+              const elapsed = started ? Math.round(new Date(now).getTime() - started) : null;
+              copy[existingIndex] = {
+                ...current,
+                status: 'COMPLETED',
+                result_summary: data.output,
+                completed_at: now,
+                elapsed_ms: elapsed ?? current.elapsed_ms,
+              };
+              return copy;
+            }
+            return [
+              ...prev,
+              {
+                tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                tool_id: data.tool,
+                server_id: 'unknown',
+                tool_name: data.tool,
+                arguments: {},
+                status: 'COMPLETED',
+                result_summary: data.output,
+                completed_at: now,
+              },
+            ];
+          });
+        },
+        onToolFailed: (data) => {
+          setPendingApprovals((prev) =>
+            prev.map((p) =>
+              p.tool_id === data.tool || (data.tool_call_id && p.tool_call_id === data.tool_call_id)
+                ? { ...p, dispatch_status: 'failed', error_message: data.error }
+                : p
+            )
+          );
+          setToolActivities((prev) => {
+            const existingIndex = findToolActivityIndex(prev, {
+              tool_call_id: data.tool_call_id,
+              approval_id: approvalId,
+              tool: data.tool,
+            });
+            const now = new Date().toISOString();
+            if (existingIndex >= 0) {
+              const copy = [...prev];
+              const current = copy[existingIndex];
+              const started = current.started_at ? new Date(current.started_at).getTime() : null;
+              const elapsed = started ? Math.round(new Date(now).getTime() - started) : null;
+              copy[existingIndex] = {
+                ...current,
+                status: 'FAILED',
+                error_message: data.error,
+                completed_at: now,
+                elapsed_ms: elapsed ?? current.elapsed_ms,
+              };
+              return copy;
+            }
+            return [
+              ...prev,
+              {
+                tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
+                tool_id: data.tool,
+                server_id: 'unknown',
+                tool_name: data.tool,
+                arguments: {},
+                status: 'FAILED',
+                error_message: data.error,
+                completed_at: now,
+              },
+            ];
+          });
         },
         onToken: (token) => {
           setMessages((prev) => {
@@ -862,6 +1227,17 @@ export const ChatView: React.FC = () => {
               p.approval_id === data.approval_id
                 ? { ...p, status: 'rejected', rejection_reason: data.reason }
                 : p
+            )
+          );
+          setToolActivities((prev) =>
+            prev.map((t) =>
+              t.approval_id === data.approval_id
+                ? {
+                    ...t,
+                    status: 'REJECTED',
+                    error_message: data.reason || 'Tool execution was rejected by user.',
+                  }
+                : t
             )
           );
         },
@@ -1151,6 +1527,19 @@ export const ChatView: React.FC = () => {
                 activeRunId={activeRunId ?? undefined}
                 isStreaming={isStreaming}
               />
+            )}
+
+            {/* Real MCP Tool Activity Cards */}
+            {interactionMode === 'agent' && toolActivities.length > 0 && (
+              <div id="tool-activity-section" data-testid="tool-activity-section" className="space-y-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider px-1">
+                  <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>MCP Tool Activity ({toolActivities.length})</span>
+                </div>
+                {toolActivities.map((act) => (
+                  <ToolActivityCard key={act.tool_call_id} activity={act} />
+                ))}
+              </div>
             )}
 
             {/* Human In The Loop Tool Call Approvals */}
