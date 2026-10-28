@@ -1,19 +1,22 @@
-import { Compass } from 'lucide-react'
-import { EmptyState } from '@/components/common/EmptyState'
+import React from 'react'
+import { BrowserPreviewPanel } from '@/components/browser/BrowserPreviewPanel'
 
-export const BrowserView = () => {
+export const BrowserView: React.FC = () => {
   return (
-    <EmptyState
-      icon={Compass}
-      title="Dual-Engine Browser Control Center"
-      description="Live browser automation combining deterministic Playwright automation for known pages and vision-guided Browser Use for exploratory web navigation."
-      scheduledBrick="BRICK-006: Deterministic Playwright Execution"
-      stage="Stage 4: Browser Automation & Web Intelligence"
-      prerequisites={[
-        'BRICK-006: Playwright Python Chromium Runner & Live Viewport Streaming',
-        'BRICK-008: Intelligent Dynamic Exploration with Browser Use',
-      ]}
-      architectureNote="Architecture Reference: Section 3.6 of docs/ARCHITECTURE.md. Ephemeral context isolation and download quarantine."
-    />
+    <div className="flex-1 flex flex-col p-4 md:p-6 max-w-7xl mx-auto w-full space-y-4">
+      <div>
+        <h1 className="text-xl font-bold text-zinc-100">
+          Browser Automation Console
+        </h1>
+        <p className="text-xs text-zinc-400 mt-1">
+          Deterministic Playwright execution with real-time viewport streaming,
+          ephemeral context isolation, and security guardrails.
+        </p>
+      </div>
+
+      <div className="flex-1">
+        <BrowserPreviewPanel />
+      </div>
+    </div>
   )
 }

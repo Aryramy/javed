@@ -272,11 +272,18 @@ flowchart TD
   - Registered router in `src/javed/api/v1/router.py` and mounted root alias `/ws/browser` in `src/javed/main.py`.
   - Added unit & integration test suite in `tests/test_browser_streamer.py` (5/5 passed).
 
-- **Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer**
-  - Implement `frontend/src/components/browser/BrowserPreviewPanel.tsx`.
-  - WebSocket client hook `useBrowserStream.ts`.
-  - Live canvas rendering, connection status, URL bar, action overlay, and emergency stop button.
-  - Component unit tests in Vitest.
+- **Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer** [COMPLETED]
+  - Implemented `frontend/src/hooks/useBrowserStream.ts`:
+    - Full WebSocket lifecycle (`CONNECTING`, `CONNECTED`, `DISCONNECTED`, `ERROR`), URL auto-detection, and reconnect backoff.
+    - Viewport frame payload parsing (`EventEnvelope(type="viewport_frame")`), telemetry tracking, and ping/pong roundtrip latency calculation.
+    - Stream control methods: `sendPing`, `requestStatus`, `toggleStream`, `pauseStream`, `resumeStream`, `emergencyStop`.
+  - Implemented `frontend/src/components/browser/BrowserPreviewPanel.tsx`:
+    - Responsive live viewport canvas/image rendering with frame HUD and live status indicator.
+    - Simulated browser navigation bar with lock indicator, SSL status, and copyable URL input box.
+    - Stream pause/resume toggle, ping/refresh button, fullscreen toggle, and Emergency Stop button.
+    - Security posture indicator (Ephemeral isolation active, zero credentials stored, SSRF protected).
+  - Integrated `BrowserPreviewPanel` into `frontend/src/views/user/BrowserView.tsx`.
+  - Authored comprehensive Vitest unit tests in `frontend/src/test/browserPreview.test.tsx` (12/12 passed).
 
 - **Phase 7: `@playwright/mcp` Gateway Integration & 3-Tier Policy Evaluation**
   - Register `@playwright/mcp` configuration in `DynamicMCPRegistry` (`src/javed/mcp/registry.py`).

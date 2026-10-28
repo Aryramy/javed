@@ -22,6 +22,11 @@ export default defineConfig({
         changeOrigin: false,
         ws: true,
       },
+      '/ws': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: false,
+        ws: true,
+      },
     },
   },
 })
