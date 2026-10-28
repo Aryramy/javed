@@ -280,7 +280,7 @@
   - Formulated Dual / Hybrid Strategy: in-process Python Playwright for live viewport streaming and deterministic tool execution; @playwright/mcp for standardized MCP interoperability.
   - Authored comprehensive specification: docs/bricks/BRICK-006.md.
 - **Pending Phases**:
-  - Phase 2: Python Playwright Subsystem Core & Clean Lifecycle Management
+  - **Phase 2 Status**: **COMPLETED** (BrowserEngineManager, ephemeral contexts, 8/8 tests passed in 4.92s, 173/173 full regression passed, 0 leaks)
   - Phase 3: Security Guard, SSRF Blocker & Sensitive Input Masking
   - Phase 4: Deterministic Browser Agent Tools & Pydantic Definitions
   - Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (/ws/browser)

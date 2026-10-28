@@ -19,6 +19,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "langchain[mcp]==1.4.7",
     "mcp-server-time==2026.10.19",
+    "playwright>=1.40.0",
 ]
 
 [project.optional-dependencies]
