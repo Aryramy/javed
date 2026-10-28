@@ -2,8 +2,8 @@
 
 > **Project**: Javed — New JARVIS<br/>
 > **Status**: IN PROGRESS<br/>
-> **Current Stage**: Stage 3 — Deterministic Playwright Execution & Playwright MCP Evaluation (BRICK-005 VERIFIED; Awaiting BRICK-006 Phase 0 Preflight Authorization)<br/>
-> **Active Brick**: BRICK-005 (VERIFIED — 2026-10-28; Awaiting BRICK-006 Authorization)<br/>
+> **Current Stage**: Stage 3 — Deterministic Playwright Execution & Playwright MCP Evaluation (BRICK-006 IN PROGRESS: Phase 0–1 Preflight & Evaluation Completed)<br/>
+> **Active Brick**: BRICK-006 (IN PROGRESS — Phase 0–1 Preflight Completed; Awaiting Phase 2 Authorization)<br/>
 > **Last Revision**: 2026-10-28
 
 ---
@@ -15,14 +15,14 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 1. **Read Project Rules**: Review [RULES.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/RULES.md). All 12 core rules are strictly binding. Violations will halt work immediately.
 2. **Check Current Progress & State**: Inspect [PROGRESS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/PROGRESS.md) to understand current project state, active brick, and last verified milestone.
 3. **Inspect Task Registry**: Check [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) to verify active task IDs, blockers, prerequisites, and explicit acceptance criteria.
-4. **Read Active Brick Specification**: Check [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) (or currently active brick in [docs/bricks/](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/)). Do not touch code outside the scope of the active brick.
+4. **Read Active Brick Specification**: Check [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) (or currently active brick in [docs/bricks/](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/)). Do not touch code outside the scope of the active brick.
 5. **Verify Single Source of Truth**: Never duplicate authoritative data across files. Refer to the designated owner document (see [Section 3](#3-single-source-of-truth-map)).
 
 ---
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: BRICK-001, BRICK-002, BRICK-003, BRICK-004, and BRICK-005 are **`VERIFIED`**. The next milestone is **BRICK-006 (Deterministic Playwright Execution & Playwright MCP Evaluation)**, currently awaiting explicit Project Owner authorization to initiate Phase 0–1 preflight. Do not write code or install dependencies for BRICK-006 until authorized.
+- **Strict Stage Boundaries**: BRICK-001, BRICK-002, BRICK-003, BRICK-004, and BRICK-005 are **`VERIFIED`**. The active milestone is **BRICK-006 (Deterministic Playwright Execution & Playwright MCP Evaluation)**, currently in Phase 0–1 preflight and evaluation. Do not write implementation code or install dependencies for Phase 2 until explicitly authorized by the Project Owner.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.

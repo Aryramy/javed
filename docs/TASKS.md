@@ -1,7 +1,7 @@
 # Master Task Registry — JARVIS
 
 > **Document ID**: `TASKS-001`  
-> **Version**: 5.1 (Stage 2: BRICK-005 VERIFIED — Awaiting BRICK-006 Authorization)  
+> **Version**: 6.0 (Stage 3: BRICK-006 IN PROGRESS — Phase 0–1 Preflight & Evaluation Completed)  
 > **Status**: ACTIVE  
 > **Project**: Javed — New JARVIS  
 > **Current Stage**: Stage 3 / BRICK-006 — Deterministic Playwright Browser & MCP Evaluation  
@@ -38,7 +38,7 @@
 | **TASK-030** | BRICK-003 | Implement OpenRouter Adapter, Live Streaming Chat & Intelligent Auto Router | **VERIFIED** | Requires BRICK-002 Verification | Dynamic catalog, SSE streaming, assistant-ui runtime, OpenRouter Auto Router multi-tier routing, micro-cost accounting. 35 pytest, 35 vitest, 12 Playwright E2E passed. Formally approved by Project Owner on 2026-10-22. |
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
-| **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **NOT STARTED** | Requires BRICK-005 Verification (Satisfied) | Next milestone; awaiting Project Owner Phase 0 preflight authorization. |
+| **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **IN PROGRESS** | Requires BRICK-005 Verification (Satisfied) | Phase 0–1 Preflight & Compatibility Evaluation completed. Authoritative spec BRICK-006.md delivered. Phases 2–10 pending Owner authorization. |
 | **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **NOT STARTED** | Requires BRICK-006 Verification | Web and multi-format document extraction with table and provenance support. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
@@ -255,3 +255,38 @@
 - **Final Milestone Status**: **`VERIFIED`** (Explicit Project Owner Sign-Off Granted 2026-10-28). BRICK-005 is formally complete. Fast-forward merge to `master` authorized.
 - **Stop Condition**: Stage 3 / BRICK-006 is `NOT STARTED`. Mandatory Stop: Await explicit Project Owner authorization before initiating BRICK-006 Phase 0–1 preflight.
 
+
+---
+
+### TASK-060: BRICK-006 Deterministic Playwright Execution & Playwright MCP Evaluation
+- **Status**: **IN PROGRESS** (Phase 0–1 Preflight & Compatibility Evaluation Completed)
+- **Anchor Commit**: 1895072 (Verified BRICK-005 synchronized on master)
+- **Working Branch**: feat/brick-006-playwright
+- **Scope & Objectives**:
+  - Implement deterministic Python Playwright automation subsystem (src/javed/browser/) with ephemeral context isolation (browser.new_context()).
+  - Implement real-time low-latency viewport frame streamer over FastAPI WebSocket (/ws/browser) into React BrowserPreviewPanel.tsx.
+  - Evaluate official Microsoft @playwright/mcp@0.0.83 server as an external Model Context Protocol integration under SecureMCPGateway.
+  - Enforce zero-trust security: SSRF / private IP blocker, password & credit card input blocker, download quarantine, and zero leaked handles.
+- **Phase 0 Status**: **COMPLETED**:
+  - Baseline verification passed cleanly: 165/165 backend pytests passed in 142.21s; 62/62 frontend Vitest tests passed across 12 files in 12.08s.
+  - Windows environment prerequisites verified: Python 3.12.15 in .venv, uv 0.13.3, Node.js v24.19.0, npm 11.17.0, system Chrome integration.
+  - 0 orphaned subprocesses or retained handles.
+- **Phase 1 Status**: **COMPLETED**:
+  - Audited @playwright/mcp@0.0.83 via live STDIO JSON-RPC handshake.
+  - Discovered and classified all 25 exposed tools under JARVIS's 3-tier host permission gateway:
+    - DENIED (3 tools): browser_run_code_unsafe, browser_evaluate, browser_file_upload.
+    - APPROVAL_REQUIRED (9 tools): browser_click, browser_fill_form, browser_type, browser_press_key, browser_select_option, browser_drop, browser_drag, browser_handle_dialog, browser_close.
+    - ALLOWED_READ_ONLY (13 tools): browser_snapshot, browser_take_screenshot, browser_find, browser_console_messages, browser_network_requests, browser_network_request, browser_tabs, browser_wait_for, browser_navigate, browser_navigate_back, browser_resize, browser_emulate_media, browser_hover.
+  - Formulated Dual / Hybrid Strategy: in-process Python Playwright for live viewport streaming and deterministic tool execution; @playwright/mcp for standardized MCP interoperability.
+  - Authored comprehensive specification: docs/bricks/BRICK-006.md.
+- **Pending Phases**:
+  - Phase 2: Python Playwright Subsystem Core & Clean Lifecycle Management
+  - Phase 3: Security Guard, SSRF Blocker & Sensitive Input Masking
+  - Phase 4: Deterministic Browser Agent Tools & Pydantic Definitions
+  - Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (/ws/browser)
+  - Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer
+  - Phase 7: @playwright/mcp Gateway Integration & 3-Tier Policy Evaluation
+  - Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding
+  - Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)
+  - Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006
+- **Stop Condition**: Mandatory Preflight Stop Enforced. Await explicit Project Owner authorization before initiating Phase 2 implementation.

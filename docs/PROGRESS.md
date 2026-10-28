@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 5.1 (BRICK-001 through BRICK-005 VERIFIED; Awaiting BRICK-006 Authorization)<br/>
+> **Version**: 6.0 (BRICK-001 through BRICK-005 VERIFIED; BRICK-006 Phase 0–1 Preflight Completed)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
 > **Last Updated**: 2026-10-28
 
@@ -12,13 +12,13 @@
 | Parameter | Current Value | Authority Reference |
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
-| **Current Stage** | **Stage 2 / BRICK-005 — Dynamic MCP Tool Registry & Security Gateway** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
-| **Current Brick** | **BRICK-005: Dynamic MCP Tool Registry, Validation, Permissions (HITL)** | [BRICK-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-005.md) |
+| **Current Stage** | **Stage 3 / BRICK-006 — Deterministic Playwright Execution & Playwright MCP Evaluation** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
+| **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
 | **Brick Status** | **`VERIFIED`** | Formally approved and accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
-| **Last Verified Milestone** | **BRICK-004: Deep Agents & LangGraph Runtime (Security Hardened)** | Owner Approval 2026-10-25 |
+| **Last Verified Milestone** | **BRICK-005: Tool Registry, Validation, Permissions (HITL) & Initial MCP** | Formally accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
 | **Application Code** | **BRICK-005 Phase 9/9B Complete & Verified** (Normal Windows process teardown verified without `os._exit`, 28/28 admin/user mode pytests cleanly pass in 4.03s, 8/8 live OpenRouter acceptance scenarios reconciled with OpenRouter API telemetry ($0.0085 USD total spend vs $0.50 budget), 1/1 real live Chrome Playwright acceptance test in Agent Mode passed in 28.0s through real OpenRouter + Time MCP STDIO server, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-005 VERIFIED — Stage 3 / BRICK-006 Awaiting Phase 0 Preflight Authorization** | Authoritative Status |
+| **Overall Status** | **BRICK-006 IN PROGRESS (Phase 0–1 Preflight & Evaluation Complete; Awaiting Phase 2 Authorization)** | Authoritative Status |
 
 
 ---
@@ -33,7 +33,7 @@ stateDiagram-v2
     BRICK_002_FastAPI --> BRICK_003_OpenRouter: VERIFIED (2026-10-22)
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
-    BRICK_005_Tools_HITL --> BRICK_006_Playwright: Authorized / Next Milestone
+    BRICK_005_Tools_HITL --> BRICK_006_Playwright: IN PROGRESS (Phase 0-1)
     BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: Blocked
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
@@ -125,3 +125,21 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 | 2026-10-27 | TASK-050 | BRICK-005 Phase 9B Windows Runner Lifecycle Hardening & Real Live Model Browser Acceptance | VERIFIED — READY FOR OWNER ACCEPTANCE | 28/28 Pytest Clean Exit (4.03s, 0 os._exit), 1/1 Real Chrome Live Model E2E Passed (28.0s, $0.000276 USD), Live OpenRouter Reconciliation ($0.0085 USD Spend vs $0.50 Budget), 62 Vitest Passed, 0 Ruff Errors |
 | 2026-10-28 | TASK-050 | BRICK-005 Phase 10 Final Polish, Full Regression Gate & REPORT-005 Delivery | READY FOR ACCEPTANCE | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) (165 Deterministic Backend Pytests, 62 Vitest Passed, 0 Ruff Errors, 0 Subprocess Leaks, Clean Production Build) |
 | 2026-10-28 | TASK-050 | Project Owner Formal Acceptance & Verification of BRICK-005 | VERIFIED | Formally approved and accepted by Project Owner (Commit 24bbb24; REPORT-005.md; Fast-forward merge to master authorized) |
+
+### TASK-060: BRICK-006 Phase 0–1 Preflight & Compatibility Evaluation
+- **Date**: 2026-10-28
+- **Working Branch**: feat/brick-006-playwright (Anchor commit 1895072)
+- **Baseline Verification**:
+  - Full deterministic backend pytest suite: 165/165 PASSED in 142.21s with exit code 0.
+  - Full frontend Vitest suite: 62/62 PASSED in 12.08s across 12 files.
+  - Subprocess leak check: 0 dangling Playwright or orphaned processes.
+- **MCP Compatibility & Security Audit**:
+  - Inspected @playwright/mcp@0.0.83 via live STDIO JSON-RPC handshake.
+  - Audited full 25-tool inventory and mapped to 3-tier host security policy:
+    - DENIED (3 tools): browser_run_code_unsafe, browser_evaluate, browser_file_upload.
+    - APPROVAL_REQUIRED (9 tools): browser_click, browser_fill_form, browser_type, browser_press_key, browser_select_option, browser_drop, browser_drag, browser_handle_dialog, browser_close.
+    - ALLOWED_READ_ONLY (13 tools): browser_snapshot, browser_take_screenshot, browser_find, browser_console_messages, browser_network_requests, browser_network_request, browser_tabs, browser_wait_for, browser_navigate, browser_navigate_back, browser_resize, browser_emulate_media, browser_hover.
+- **Architectural Formulation**: Dual / Hybrid Strategy approved:
+  1. Python Playwright engine (src/javed/browser/) for ephemeral context management, download quarantine, sensitive field masking, and low-latency WebSocket viewport streaming (/ws/browser).
+  2. External @playwright/mcp integration evaluated under SecureMCPGateway in src/javed/mcp/registry.py.
+- **Deliverables**: Created docs/bricks/BRICK-006.md (Phases 0–10 plan); synchronized governance files; halted at mandatory preflight stop condition.
