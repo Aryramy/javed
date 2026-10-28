@@ -14,7 +14,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from javed.agent.runtime import AgentRuntimeManager
+from javed.api.v1.browser_ws import BrowserWebSocketManager, browser_websocket_endpoint
 from javed.api.v1.router import api_v1_router
+from javed.browser.streamer import BrowserFrameStreamer
 from javed.config import Settings, get_settings
 from javed.mcp.gateway import SecureMCPGateway
 from javed.mcp.registry import DynamicMCPRegistry
@@ -119,6 +121,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Error closing agent runtime: %s", e)
 
+    if hasattr(app.state, "browser_ws_manager") and app.state.browser_ws_manager:
+        try:
+            await app.state.browser_ws_manager.close_all(code=1001, reason="Server shutting down")
+        except Exception as e:
+            logger.warning("Error closing browser WebSocket manager: %s", e)
+
+    if hasattr(app.state, "browser_streamer") and app.state.browser_streamer:
+        try:
+            await app.state.browser_streamer.stop()
+        except Exception as e:
+            logger.warning("Error stopping browser frame streamer: %s", e)
+
     await app.state.ws_manager.close_all(code=1001, reason="Server shutting down")
     logger.info("Javed Backend shutdown complete")
 
@@ -142,6 +156,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ws_manager = WebSocketManager(app_settings)
     app.state.sse_manager = SSEManager()
     app.state.openrouter_service = OpenRouterService(app_settings)
+    app.state.browser_streamer = BrowserFrameStreamer()
+    app.state.browser_ws_manager = BrowserWebSocketManager(
+        app_settings, streamer=app.state.browser_streamer
+    )
     app.state.mcp_registry = DynamicMCPRegistry()
     try:
         app.state.mcp_registry.register_server(create_time_server_config())
@@ -183,6 +201,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # 4. Include API v1 Router
     app.include_router(api_v1_router)
+
+    # Route alias for root-level WebSocket /ws/browser
+    app.websocket("/ws/browser")(browser_websocket_endpoint)
 
     # 5. Root status endpoint
     @app.get("/", summary="Root Health & Identity")

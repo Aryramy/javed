@@ -260,10 +260,17 @@ flowchart TD
   - Pydantic models with defensive error messages.
   - Integration with `ApprovalStore` for `APPROVAL_REQUIRED` gating.
 
-- **Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (`/ws/browser`)**
-  - Implement `src/javed/browser/streamer.py` for efficient frame rasterization.
-  - Implement FastAPI WebSocket endpoint `/ws/browser` in `src/javed/api/browser_ws.py`.
-  - REST endpoints: `/api/browser/status`, `/api/browser/stop`.
+- **Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (`/ws/browser`)** [COMPLETED]
+  - Implemented `src/javed/browser/streamer.py` (`BrowserFrameStreamer`):
+    - Throttled periodic viewport capture (~3-5 fps, JPEG quality 60, configurable).
+    - Base64 data URL packaging into `EventEnvelope(type="viewport_frame")`.
+    - Auto-pause when subscriber count drops to 0 (zero idle CPU/GPU consumption).
+  - Implemented FastAPI WebSocket endpoint `/ws/browser` & `/api/v1/ws/browser` in `src/javed/api/v1/browser_ws.py`:
+    - `BrowserWebSocketManager` connection tracking, origin validation, and handshake (`connection_established`).
+    - Incoming client control messages (`ping`, `status`, `pause`/`unsubscribe`, `resume`/`subscribe`).
+    - Clean disconnection and subscriber lifecycle synchronization.
+  - Registered router in `src/javed/api/v1/router.py` and mounted root alias `/ws/browser` in `src/javed/main.py`.
+  - Added unit & integration test suite in `tests/test_browser_streamer.py` (5/5 passed).
 
 - **Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer**
   - Implement `frontend/src/components/browser/BrowserPreviewPanel.tsx`.

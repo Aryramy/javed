@@ -179,3 +179,21 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Verified 0 Ruff lint/formatting errors across 67 files.
   - Verified 0 orphaned browser/driver processes on Windows.
 
+- **Phase 5 Implementation & Verification (2026-10-28)**:
+  - Implemented `BrowserFrameStreamer` in `src/javed/browser/streamer.py`:
+    - Throttled periodic viewport capture (~3-5 fps, JPEG quality 60, bounded interval 0.3s).
+    - Base64 data URL packaging into standardized `EventEnvelope(type="viewport_frame")`.
+    - Auto-pause when subscriber count drops to 0, eliminating idle CPU/GPU consumption.
+  - Implemented FastAPI WebSocket endpoint `/ws/browser` (and `/api/v1/ws/browser`) in `src/javed/api/v1/browser_ws.py`:
+    - `BrowserWebSocketManager` connection tracking, origin validation, and handshake (`connection_established`).
+    - Incoming client control messages (`ping`, `status`, `pause`/`unsubscribe`, `resume`/`subscribe`).
+    - Clean disconnection and subscriber lifecycle synchronization with zero lingering tasks.
+  - Exported `BrowserFrameStreamer` in `src/javed/browser/__init__.py`.
+  - Registered router in `src/javed/api/v1/router.py` and mounted root alias `/ws/browser` in `src/javed/main.py`.
+  - Authored dedicated unit & integration test suite `tests/test_browser_streamer.py` with 5 tests (5/5 PASSED in 9.48s).
+  - Verified combined browser suite: 34/34 PASSED in 21.30s (8 core + 12 security + 9 tools + 5 streamer/ws).
+  - Verified full backend deterministic regression suite: 199/199 PASSED.
+  - Verified 0 Ruff lint/formatting errors across 70 files.
+  - Verified 0 orphaned browser/driver processes on Windows.
+
+

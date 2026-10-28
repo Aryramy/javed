@@ -283,7 +283,7 @@
   - **Phase 2 Status**: **COMPLETED** (BrowserEngineManager, ephemeral contexts, 8/8 tests passed in 4.92s, 173/173 full regression passed, 0 leaks)
   - **Phase 3 Status**: **COMPLETED** (BrowserSecurityGuard, SSRF blocker, sensitive field detector, 12/12 security tests passed, 185/185 full regression passed, 0 leaks)
   - **Phase 4 Status**: **COMPLETED** (5 deterministic tools, Pydantic schemas, BrowserSession, argument redaction, 9/9 tests passed in 5.98s, 194/194 full regression passed, 0 leaks)
-  - Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (/ws/browser)
+  - **Phase 5 Status**: **COMPLETED** (BrowserFrameStreamer, /ws/browser & /api/v1/ws/browser WebSocket endpoints, auto-pause zero-idle logic, 5/5 tests passed in 9.48s, 199/199 full regression passed, 0 leaks)
   - Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer
   - Phase 7: @playwright/mcp Gateway Integration & 3-Tier Policy Evaluation
   - Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding

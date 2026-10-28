@@ -19,6 +19,7 @@ from javed.browser.security import (
     mask_sensitive_value,
     redact_sensitive_value,
 )
+from javed.browser.streamer import BrowserFrameStreamer
 from javed.browser.tools import (
     BrowserSession,
     ClickInput,
@@ -34,6 +35,7 @@ __all__ = [
     "BrowserContextError",
     "BrowserEngineError",
     "BrowserEngineManager",
+    "BrowserFrameStreamer",
     "BrowserInitializationError",
     "BrowserSecurityGuard",
     "BrowserSession",
