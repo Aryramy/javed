@@ -28,6 +28,7 @@ from javed.browser.tools import (
     NavigateInput,
     TakeScreenshotInput,
     create_browser_tools,
+    create_browser_tools_inventory,
     redact_browser_tool_args,
 )
 
@@ -51,6 +52,7 @@ __all__ = [
     "TakeScreenshotInput",
     "assert_safe_form_input",
     "create_browser_tools",
+    "create_browser_tools_inventory",
     "inspect_attributes_sensitivity",
     "inspect_locator_sensitivity",
     "mask_sensitive_value",

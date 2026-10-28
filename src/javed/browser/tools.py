@@ -127,10 +127,10 @@ class BrowserSession:
 
     def __init__(
         self,
-        engine: BrowserEngineManager,
+        engine: BrowserEngineManager | None = None,
         security_guard: BrowserSecurityGuard | None = None,
     ) -> None:
-        self.engine = engine
+        self.engine = engine or BrowserEngineManager(headless=True)
         self.security_guard = security_guard or BrowserSecurityGuard()
         self._context: Any | None = None
         self._page: Any | None = None
@@ -502,6 +502,17 @@ def create_browser_tools(session: BrowserSession) -> list[StructuredTool]:
         ),
     ]
     return tools
+
+
+def create_browser_tools_inventory(
+    session: BrowserSession | None = None,
+) -> list[StructuredTool]:
+    """Create and return the deterministic browser tools inventory.
+
+    If session is None, creates a default BrowserSession with an ephemeral BrowserEngineManager.
+    """
+    active_session = session if session is not None else BrowserSession()
+    return active_session.get_tools()
 
 
 def redact_browser_tool_args(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:

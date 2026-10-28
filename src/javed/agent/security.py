@@ -25,6 +25,17 @@ logger = logging.getLogger("javed.agent.security")
 # The only authorized internal agent tool in BRICK-004
 ALLOWED_TOOLS: frozenset[str] = frozenset({"write_todos"})
 
+# Deterministic browser automation tools in BRICK-006
+BROWSER_TOOLS: frozenset[str] = frozenset(
+    {
+        "browser_navigate",
+        "browser_click",
+        "browser_fill_form",
+        "browser_extract_text",
+        "browser_take_screenshot",
+    }
+)
+
 # Known privileged tools explicitly excluded via HarnessProfile
 EXCLUDED_TOOLS: frozenset[str] = frozenset(
     {
@@ -67,21 +78,26 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
 
     name: str = "PositiveToolAllowlistMiddleware"
 
-    def __init__(self, gateway: Any | None = None) -> None:
+    def __init__(self, gateway: Any | None = None, enable_browser: bool = False) -> None:
         super().__init__()
         self.gateway = gateway
+        self.enable_browser = enable_browser
 
     def _get_model_visible_tools(self) -> frozenset[str]:
+        allowed = set(ALLOWED_TOOLS)
+        if self.enable_browser:
+            allowed |= set(BROWSER_TOOLS)
         if self.gateway is not None:
-            return ALLOWED_TOOLS | frozenset(
-                self.gateway.get_model_visible_tools(include_approval_required=True)
-            )
-        return ALLOWED_TOOLS
+            allowed |= set(self.gateway.get_model_visible_tools(include_approval_required=True))
+        return frozenset(allowed)
 
     def _get_executable_tools(self) -> frozenset[str]:
+        allowed = set(ALLOWED_TOOLS)
+        if self.enable_browser:
+            allowed |= set(BROWSER_TOOLS)
         if self.gateway is not None:
-            return ALLOWED_TOOLS | frozenset(self.gateway.get_executable_tools())
-        return ALLOWED_TOOLS
+            allowed |= set(self.gateway.get_executable_tools())
+        return frozenset(allowed)
 
     def wrap_model_call(
         self,
@@ -109,6 +125,10 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
 
         # Internal agent tools (e.g. write_todos)
         if tool_name in ALLOWED_TOOLS:
+            return None
+
+        # Deterministic browser tools (when enable_browser is True)
+        if self.enable_browser and tool_name in BROWSER_TOOLS:
             return None
 
         # MCP Gateway execution validation (Layer 2)
@@ -197,13 +217,19 @@ def ensure_agent_security_profile() -> None:
     )
 
 
-def assert_safe_tools(tools_by_name: dict[str, Any], gateway: Any | None = None) -> None:
+def assert_safe_tools(
+    tools_by_name: dict[str, Any],
+    gateway: Any | None = None,
+    enable_browser: bool = False,
+) -> None:
     """Verify that only authorized tools exist in the tool registry (Strict Positive Allowlist).
 
     Raises:
         PermissionError: If any tool outside authorized list is detected in the registry.
     """
     allowed = set(ALLOWED_TOOLS)
+    if enable_browser:
+        allowed |= set(BROWSER_TOOLS)
     if gateway is not None:
         allowed |= set(gateway.get_executable_tools())
     unauthorized = set(tools_by_name.keys()) - allowed
@@ -214,7 +240,11 @@ def assert_safe_tools(tools_by_name: dict[str, Any], gateway: Any | None = None)
         )
 
 
-def assert_safe_agent_runtime(agent: CompiledStateGraph, gateway: Any | None = None) -> None:
+def assert_safe_agent_runtime(
+    agent: CompiledStateGraph,
+    gateway: Any | None = None,
+    enable_browser: bool = False,
+) -> None:
     """Fail-closed runtime verification on compiled Deep Agent graph.
 
     Verifies that the compiled agent graph includes PositiveToolAllowlistMiddleware

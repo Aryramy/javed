@@ -232,6 +232,19 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Verified 0 Ruff lint/formatting errors across 71 files.
   - Verified 0 orphaned browser/driver processes on Windows.
 
+- **Phase 8 Implementation & Verification (2026-10-28)**:
+  - Implemented `create_browser_tools_inventory` in `src/javed/browser/tools.py` and exported in `src/javed/browser/__init__.py`.
+  - Updated `PositiveToolAllowlistMiddleware` and `assert_safe_tools` in `src/javed/agent/security.py` to support `enable_browser: bool = False` with `BROWSER_TOOLS` positive allowlist gating.
+  - Bound deterministic browser tools (`browser_navigate`, `browser_click`, `browser_fill_form`, `browser_extract_text`, `browser_take_screenshot`) into `AgentRuntimeManager.create_agent` in `src/javed/agent/runtime.py`.
+  - Wired HITL interruption and approval flows for mutating browser tools (`browser_click`, `browser_fill_form`) with persistent durable state in `ApprovalStore`.
+  - Enforced sensitive argument redaction (`redact_browser_tool_args`) across agent event telemetry (`tool_started`, `approval_required`).
+  - Implemented comprehensive integration test suite in `tests/test_browser_agent_e2e.py` with 8 tests (8/8 PASSED in 3.41s).
+  - Combined browser suite verification: 52/52 PASSED in 22.56s (8 core + 12 security + 9 tools + 5 streamer/ws + 10 Playwright MCP gateway + 8 agent e2e).
+  - Full backend deterministic regression suite: 217/217 PASSED.
+  - Full frontend Vitest suite: 74/74 PASSED across 13 test files in 10.13s.
+  - Verified 0 Ruff lint/formatting errors across 72 files.
+  - Verified 0 orphaned browser/driver processes on Windows.
+
 
 
 

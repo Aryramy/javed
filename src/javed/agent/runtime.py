@@ -36,11 +36,13 @@ from langgraph.types import Command
 from javed.agent.checkpointer import AgentCheckpointerManager
 from javed.agent.security import (
     ALLOWED_TOOLS,
+    BROWSER_TOOLS,
     EXCLUDED_TOOLS,
     PositiveToolAllowlistMiddleware,
     assert_safe_agent_runtime,
     ensure_agent_security_profile,
 )
+from javed.browser.tools import BrowserSession, redact_browser_tool_args
 from javed.config import Settings, get_settings
 from javed.mcp.approval_store import ApprovalStore, redact_sensitive_value
 from javed.mcp.gateway import SecureMCPGateway, current_approval_context
@@ -243,6 +245,9 @@ class AgentRuntimeManager:
         model_override: BaseChatModel | None = None,
         mcp_gateway: SecureMCPGateway | None = None,
         approval_store: ApprovalStore | None = None,
+        enable_browser: bool = False,
+        browser_session: BrowserSession | None = None,
+        browser_approval_required: bool = True,
     ) -> None:
         self.settings = settings or get_settings()
         self.openrouter_service = openrouter_service or OpenRouterService(self.settings)
@@ -254,8 +259,19 @@ class AgentRuntimeManager:
         if mcp_gateway is not None and mcp_gateway.approval_store is None:
             mcp_gateway.approval_store = self.approval_store
         self.mcp_gateway = mcp_gateway
+        self.enable_browser = enable_browser
+        self._browser_session = browser_session
+        self.browser_approval_required = browser_approval_required
         self.thread_lock_manager = ThreadLockManager()
         self._is_initialized = False
+
+    def get_browser_session(self) -> BrowserSession | None:
+        """Return the active BrowserSession or instantiate one if enable_browser is True."""
+        if not self.enable_browser:
+            return None
+        if self._browser_session is None:
+            self._browser_session = BrowserSession()
+        return self._browser_session
 
     async def initialize(self) -> None:
         """Initialize checkpointer, approval store, and enforce Zero-Trust security profile."""
@@ -279,12 +295,19 @@ class AgentRuntimeManager:
             raise
 
     async def close(self) -> None:
-        """Close checkpointer, approval store, and active MCP transports cleanly."""
+        """Close checkpointer, store, browser, and active MCP transports cleanly."""
         if self.mcp_gateway is not None and getattr(self.mcp_gateway, "registry", None) is not None:
             try:
                 await self.mcp_gateway.registry.disconnect_all()
             except Exception as e:
                 logger.warning("Error disconnecting MCP servers on runtime close: %s", e)
+        if self._browser_session is not None:
+            try:
+                await self._browser_session.close()
+            except Exception as e:
+                logger.warning("Error closing browser session on runtime close: %s", e)
+            finally:
+                self._browser_session = None
         if hasattr(self.checkpointer_manager, "close"):
             try:
                 await self.checkpointer_manager.close()
@@ -380,13 +403,30 @@ class AgentRuntimeManager:
         """Construct compiled Deep Agent state graph with safe backend,
         positive allowlist, and HITL.
         """
-        mcp_tools = self.mcp_gateway.build_langchain_tools() if self.mcp_gateway else []
+        tools: list[Any] = []
+        if self.mcp_gateway:
+            tools.extend(self.mcp_gateway.build_langchain_tools())
+        if self.enable_browser:
+            session = self.get_browser_session()
+            if session:
+                tools.extend(session.get_tools())
+
         middleware = [
             TodoListMiddleware(),
-            PositiveToolAllowlistMiddleware(gateway=self.mcp_gateway),
+            PositiveToolAllowlistMiddleware(
+                gateway=self.mcp_gateway,
+                enable_browser=self.enable_browser,
+            ),
         ]
 
-        approval_tools = self.mcp_gateway.get_approval_required_tools() if self.mcp_gateway else []
+        approval_tools: list[str] = (
+            list(self.mcp_gateway.get_approval_required_tools()) if self.mcp_gateway else []
+        )
+        if self.enable_browser and self.browser_approval_required:
+            for b_tool in ("browser_click", "browser_fill_form"):
+                if b_tool not in approval_tools:
+                    approval_tools.append(b_tool)
+
         interrupt_on = (
             {tid: {"allowed_decisions": ["approve", "reject"]} for tid in approval_tools}
             if approval_tools
@@ -395,14 +435,18 @@ class AgentRuntimeManager:
 
         agent = create_deep_agent(
             model=model,
-            tools=mcp_tools,
+            tools=tools,
             system_prompt=AGENT_SYSTEM_PROMPT,
             middleware=middleware,
             backend=StateBackend(),
             checkpointer=checkpointer,
             interrupt_on=interrupt_on,
         )
-        assert_safe_agent_runtime(agent, gateway=self.mcp_gateway)
+        assert_safe_agent_runtime(
+            agent,
+            gateway=self.mcp_gateway,
+            enable_browser=self.enable_browser,
+        )
         return agent
 
     async def stream_agent(self, request: AgentStreamRequest) -> AsyncIterator[AgentStreamEvent]:
@@ -524,6 +568,8 @@ class AgentRuntimeManager:
                                 t_rec = self.mcp_gateway.registry.get_tool(ev_name)
                                 if t_rec:
                                     tool_desc = t_rec.description
+                            elif ev_name.startswith("browser_"):
+                                server_id = "browser"
 
                             tc_id = ev.get("metadata", {}).get("tool_call_id")
                             if not tc_id and pending_tool_call_ids.get(ev_name):
@@ -534,6 +580,12 @@ class AgentRuntimeManager:
                             if ev.get("run_id") and tc_id:
                                 run_to_tool_call_id[ev["run_id"]] = tc_id
 
+                            raw_input = ev_data.get("input", {})
+                            if ev_name.startswith("browser_") and isinstance(raw_input, dict):
+                                safe_input = redact_browser_tool_args(ev_name, raw_input)
+                            else:
+                                safe_input = redact_sensitive_value(raw_input)
+
                             yield AgentStreamEvent(
                                 event="tool_started",
                                 data={
@@ -542,7 +594,7 @@ class AgentRuntimeManager:
                                     "tool": ev_name,
                                     "server_id": server_id,
                                     "description": tool_desc,
-                                    "input": redact_sensitive_value(ev_data.get("input", {})),
+                                    "input": safe_input,
                                     "tool_call_id": tc_id,
                                 },
                             )
@@ -557,6 +609,8 @@ class AgentRuntimeManager:
                                     server_id, _ = parse_namespaced_tool_id(ev_name)
                                 except Exception:
                                     server_id = "unknown"
+                            elif ev_name.startswith("browser_"):
+                                server_id = "browser"
 
                             is_error = False
                             err_msg = ""
@@ -620,6 +674,8 @@ class AgentRuntimeManager:
                                     server_id, _ = parse_namespaced_tool_id(ev_name)
                                 except Exception:
                                     server_id = "unknown"
+                            elif ev_name.startswith("browser_"):
+                                server_id = "browser"
 
                             tc_id = None
                             if ev.get("run_id") and ev["run_id"] in run_to_tool_call_id:
@@ -820,6 +876,10 @@ class AgentRuntimeManager:
                                         if t_rec:
                                             tool_fingerprint = t_rec.fingerprint
                                         policy_ver = self.mcp_gateway.policy_version
+                                    elif tool_name.startswith("browser_"):
+                                        server_id = "browser"
+                                        tool_fingerprint = "browser_v1"
+                                        policy_ver = 1
 
                                     arg_digest = compute_argument_digest(tool_args)
                                     approval_id = f"appr_{uuid.uuid4().hex[:12]}"
@@ -861,6 +921,11 @@ class AgentRuntimeManager:
                         len(interrupted_approvals),
                     )
                     for appr in interrupted_approvals:
+                        appr_args = appr.arguments
+                        if appr.tool_id.startswith("browser_") and isinstance(appr_args, dict):
+                            appr_args = redact_browser_tool_args(appr.tool_id, appr_args)
+                        else:
+                            appr_args = redact_sensitive_value(appr_args)
                         yield AgentStreamEvent(
                             event="approval_required",
                             data={
@@ -871,7 +936,7 @@ class AgentRuntimeManager:
                                 "server_id": appr.server_id,
                                 "tool_id": appr.tool_id,
                                 "tool_call_id": appr.tool_call_id,
-                                "arguments": redact_sensitive_value(appr.arguments),
+                                "arguments": appr_args,
                                 "argument_digest": appr.argument_digest,
                                 "tool_fingerprint": appr.tool_fingerprint,
                                 "policy_version": appr.policy_version,
@@ -1129,12 +1194,20 @@ class AgentRuntimeManager:
                                     t_rec = self.mcp_gateway.registry.get_tool(ev_name)
                                     if t_rec:
                                         tool_desc = t_rec.description
+                                elif ev_name.startswith("browser_"):
+                                    server_id = "browser"
 
                                 tc_id = (
                                     ev.get("metadata", {}).get("tool_call_id")
                                     or approval.tool_call_id
                                     or ev.get("run_id")
                                 )
+
+                                raw_input = ev_data.get("input", {})
+                                if ev_name.startswith("browser_") and isinstance(raw_input, dict):
+                                    safe_input = redact_browser_tool_args(ev_name, raw_input)
+                                else:
+                                    safe_input = redact_sensitive_value(raw_input)
 
                                 yield AgentStreamEvent(
                                     event="tool_started",
@@ -1144,7 +1217,7 @@ class AgentRuntimeManager:
                                         "tool": ev_name,
                                         "server_id": server_id,
                                         "description": tool_desc,
-                                        "input": redact_sensitive_value(ev_data.get("input", {})),
+                                        "input": safe_input,
                                         "tool_call_id": tc_id,
                                     },
                                 )
@@ -1158,6 +1231,8 @@ class AgentRuntimeManager:
                                         server_id, _ = parse_namespaced_tool_id(ev_name)
                                     except Exception:
                                         server_id = "unknown"
+                                elif ev_name.startswith("browser_"):
+                                    server_id = "browser"
 
                                 is_error = False
                                 err_msg = ""
@@ -1220,6 +1295,8 @@ class AgentRuntimeManager:
                                         server_id, _ = parse_namespaced_tool_id(ev_name)
                                     except Exception:
                                         server_id = "unknown"
+                                elif ev_name.startswith("browser_"):
+                                    server_id = "browser"
 
                                 tc_id = (
                                     ev.get("metadata", {}).get("tool_call_id")
@@ -1732,9 +1809,12 @@ class AgentRuntimeManager:
         if not self._is_initialized:
             await self.initialize()
 
-        allowed = sorted(list(ALLOWED_TOOLS))
+        allowed_set = set(ALLOWED_TOOLS)
+        if self.enable_browser:
+            allowed_set |= set(BROWSER_TOOLS)
         if self.mcp_gateway is not None:
-            allowed = sorted(list(ALLOWED_TOOLS | set(self.mcp_gateway.get_executable_tools())))
+            allowed_set |= set(self.mcp_gateway.get_executable_tools())
+        allowed = sorted(list(allowed_set))
 
         return AgentRuntimeStatusResponse(
             status="ready",

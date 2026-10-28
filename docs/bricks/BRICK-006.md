@@ -299,9 +299,13 @@ flowchart TD
     - Verified permission promotion for safe read-only inspection tools.
     - Verified fingerprint drift and schema poisoning defense resets tools to DENIED.
 
-- **Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding**
-  - Bind deterministic browser tools into LangGraph agent graph in `src/javed/agent/runtime.py`.
-  - Verify state reconstruction, multi-step execution, and HITL interrupt/resume workflow with browser actions.
+- **Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding** [COMPLETED]
+  - Implemented `create_browser_tools_inventory` in `src/javed/browser/tools.py` and exported in `src/javed/browser/__init__.py`.
+  - Updated `PositiveToolAllowlistMiddleware` and `assert_safe_tools` in `src/javed/agent/security.py` to support `enable_browser: bool = False` and defined `BROWSER_TOOLS`.
+  - Bound deterministic browser tools (`browser_navigate`, `browser_click`, `browser_fill_form`, `browser_extract_text`, `browser_take_screenshot`) into `AgentRuntimeManager.create_agent` in `src/javed/agent/runtime.py`.
+  - Configured HITL interruption and approval flows for mutating browser tools (`browser_click`, `browser_fill_form`) with persistent durable state in `ApprovalStore`.
+  - Enforced sensitive argument redaction (`redact_browser_tool_args`) across agent event telemetry (`tool_started`, `approval_required`).
+  - Implemented comprehensive integration test suite in `tests/test_browser_agent_e2e.py` (8/8 passed).
 
 - **Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)**
   - Deterministic integration test suite covering navigation, text extraction, form interaction, and screenshot capture.
