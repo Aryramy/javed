@@ -19,6 +19,16 @@ from javed.browser.security import (
     mask_sensitive_value,
     redact_sensitive_value,
 )
+from javed.browser.tools import (
+    BrowserSession,
+    ClickInput,
+    ExtractTextInput,
+    FillFormInput,
+    NavigateInput,
+    TakeScreenshotInput,
+    create_browser_tools,
+    redact_browser_tool_args,
+)
 
 __all__ = [
     "BrowserContextError",
@@ -26,14 +36,22 @@ __all__ = [
     "BrowserEngineManager",
     "BrowserInitializationError",
     "BrowserSecurityGuard",
+    "BrowserSession",
+    "ClickInput",
     "DangerousSchemeError",
+    "ExtractTextInput",
+    "FillFormInput",
+    "NavigateInput",
     "SSRFBlockedError",
     "SecurityViolationError",
     "SensitiveFieldBlockedError",
     "SensitivityInspectionResult",
+    "TakeScreenshotInput",
     "assert_safe_form_input",
+    "create_browser_tools",
     "inspect_attributes_sensitivity",
     "inspect_locator_sensitivity",
     "mask_sensitive_value",
+    "redact_browser_tool_args",
     "redact_sensitive_value",
 ]

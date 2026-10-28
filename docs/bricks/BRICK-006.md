@@ -254,7 +254,7 @@ flowchart TD
     - Download quarantine directory management (`data/quarantine/`).
   - Unit tests for security rejection and boundary enforcement.
 
-- **Phase 4: Deterministic Browser Agent Tools & Pydantic Definitions**
+- **Phase 4: Deterministic Browser Agent Tools & Pydantic Definitions** [COMPLETED]
   - Implement `src/javed/browser/tools.py`:
     - `browser_navigate`, `browser_click`, `browser_fill_form`, `browser_extract_text`, `browser_take_screenshot`.
   - Pydantic models with defensive error messages.
