@@ -273,13 +273,26 @@ flowchart TD
   - Prohibits all privileged execution tools (`ls`, `execute`, `read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, `task`, `eval`, `shell`).
   - Ensures compiled tools strictly match host-authorized tools (`ALLOWED_TOOLS | gateway.get_executable_tools()`).
 
-### 6.2 Canonical Permission Model
+### 6.2 Canonical Permission Model & 4-Tier Risk-Tier Architecture Mapping
 
-| Permission Tier | LLM Visibility | Execution Gating | Phase 4 Behavior |
-|---|---|---|---|
-| **`DENIED`** (Default) | Hidden (`[]`) | Rejected | Blocked immediately with `MCPPermissionDeniedError` (`"DENIED by host policy"`). |
-| **`ALLOWED_READ_ONLY`** | Visible | Permitted | Full Layer 2 argument validation, fingerprint check, bounded execution over genuine MCP STDIO client. |
-| **`APPROVAL_REQUIRED`** | Hidden (`[]`) | Rejected | Fails closed with `MCPApprovalUnavailableError` (`"approval-not-available"`). No bypasses or fake approvals permitted. |
+Project Javed aligns dynamic MCP tool authorization with the project's canonical 4-tier risk architecture:
+
+| Architecture Risk Tier | Canonical MCP Policy | LLM Visibility | Execution Gating | Runtime Behavior & Gating Profile |
+|---|---|---|---|---|
+| **Tier 0 (Internal / Task Planning)** | Internal Allowlist (`ALLOWED_TOOLS`) | Visible | Permitted | Internal agent tools (e.g., `write_todos`); bypassed around external MCP gateway; executed in-process. |
+| **Tier 1 (Safe Read-Only MCP Tools)** | **`ALLOWED_READ_ONLY`** | Visible | Permitted | Direct execution over genuine MCP transport; Layer 2 JSON Schema argument validation, SHA-256 fingerprint check, zero HITL interruption. |
+| **Tier 2 (Controlled Mutation / State)** | **`APPROVAL_REQUIRED`** | Visible (Phase 5+) / Hidden (Phase 4) | Gated by HITL | LangGraph interrupt suspends execution; durable record created in `data/approvals.db`; resumes ONLY upon explicit cryptographic/human operator approval. |
+| **Tier 3 (Consequential / Destructive)** | **`APPROVAL_REQUIRED`** or **`DENIED`** | Visible (Phase 5+) / Hidden (Phase 4) | Strictly Gated / Blocked | High-impact actions; requires explicit human rationale, argument digest locking, or permanent revocation (`DENIED`). |
+| **Newly Discovered / Unregistered** | **`DENIED`** (Default) | Hidden (`[]`) | Rejected | Discovered tools default fail-closed (`enabled=False`, `permission="denied"`). Blocked immediately with `MCPPermissionDeniedError`. |
+
+> [!IMPORTANT]
+> **Strict Tool Boundary Enforcement (Rule 1 & Rule 2)**:
+> In BRICK-005, only local, user-configured MCP servers (demonstrated via the read-only STDIO `mcp-server-time` reference server) are authorized.
+> - **Local Filesystem Tools** (`read_file`, `write_file`, `edit_file`, `delete`, `glob`, `grep`): Strictly prohibited and blocked at Layer 3 runtime assert (`EXCLUDED_TOOLS`).
+> - **Local Shell / Command Execution** (`bash`, `cmd`, `execute`, `eval`, `shell`): Strictly prohibited and blocked at Layer 3 runtime assert (`EXCLUDED_TOOLS`).
+> - **Browser Automation MCP Servers** (Playwright MCP): Strictly deferred to **BRICK-006**.
+> - **Full Managed MCP Ecosystem**: Evaluated and integrated in **BRICK-010**.
+> No filesystem, shell, or browser tools are accessible to the LLM or runtime in BRICK-005.
 
 ### 6.3 Raw MCP Dispatch Bypass Review & Security Boundary
 
@@ -818,7 +831,7 @@ Reconciliation across all eight Phase 9 live inference scenarios and account tel
 | **C: Timezone Conversion** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | `time__get_current_time`, `time__convert_time` | `time__convert_time({"source_timezone": "Europe/London", ...})` | Structured time conversion | Auto-approved (`allowed_read_only`) | 465 / 82 | ~$0.00012 | 3.8s | **PASSED** |
 | **D: Human Approval** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | `time__get_current_time`, `time__convert_time` | `time__get_current_time({"timezone": "Asia/Tokyo"})` | Real Tokyo timestamp upon resume | Human Approved via `record_decision` | 510 / 95 | ~$0.00014 | 4.2s | **PASSED** |
 | **E: Human Rejection** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | `time__get_current_time`, `time__convert_time` | `time__get_current_time({"timezone": "Europe/Berlin"})` | Zero dispatch (Safely blocked) | Human Rejected; truthful refusal | 480 / 70 | ~$0.00011 | 3.6s | **PASSED** |
-| **F: Denied Tool / Injection** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | `time__get_current_time`, `time__convert_time` | Model prompted with admin override | Host gateway blocked execution | Policy DENIED (Zero execution) | 410 / 55 | ~$0.00009 | 2.8s | **PASSED** |
+| **F: Denied Tool / Injection** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | Stripped prior to model binding by Layer 0 (`build_langchain_tools`) and Layer 1 (`PositiveToolAllowlistMiddleware.wrap_model_call`); LLM received `write_todos` only | Model prompted with admin override; zero tool call emitted | Host gateway blocked execution (fail-closed) | Policy DENIED (Zero execution) | 410 / 55 | ~$0.00009 | 2.8s | **PASSED** |
 | **G: Multi-Turn Context** | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` | Verified | `time__get_current_time`, `time__convert_time` | Turn 1: Doha time; Turn 2: London time | Both turns executed sequentially | Both turns `allowed_read_only` | 820 / 140 | ~$0.00021 | 6.1s | **PASSED** |
 | **H: Model Fallback** | `unknown/non-tool-model` | `google/gemini-2.5-flash` | Verified | `time__get_current_time`, `time__convert_time` | `time__get_current_time({"timezone": "UTC"})` | Real UTC timestamp via STDIO | Auto-approved (`allowed_read_only`) | 435 / 75 | ~$0.00032 | 3.5s | **PASSED** |
 

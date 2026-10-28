@@ -156,6 +156,7 @@ async def admin_fixture(tmp_path):
     }
 
     await client.aclose()
+    await runtime.close()
     await approval_store.close()
 
 

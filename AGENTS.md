@@ -2,9 +2,9 @@
 
 > **Project**: Javed — New JARVIS<br/>
 > **Status**: IN PROGRESS<br/>
-> **Current Stage**: Stage 2 — Dynamic MCP Tool Registry & Security Gateway (BRICK-005 In Progress; Phase 6/6C Accepted)<br/>
-> **Active Brick**: BRICK-005 (IN PROGRESS — Phase 6/6C ACCEPTED; Awaiting Phase 7 Authorization)<br/>
-> **Last Revision**: 2026-10-26
+> **Current Stage**: Stage 2 — Dynamic MCP Tool Registry & Security Gateway (BRICK-005 Phase 10 Complete — READY FOR ACCEPTANCE)<br/>
+> **Active Brick**: BRICK-005 (READY FOR ACCEPTANCE — Awaiting Owner Milestone Sign-Off)<br/>
+> **Last Revision**: 2026-10-28
 
 ---
 
@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: We are currently in **Stage 2 (Dynamic MCP Tool Registry & Security Gateway — BRICK-005)**. BRICK-001, BRICK-002, BRICK-003, and BRICK-004 are VERIFIED. BRICK-005 Phases 0–6C are ACCEPTED. Do not install browser automation, persistent memory, or voice until authorized in subsequent bricks.
+- **Strict Stage Boundaries**: We are currently in **Stage 2 (Dynamic MCP Tool Registry & Security Gateway — BRICK-005)**. BRICK-001, BRICK-002, BRICK-003, and BRICK-004 are VERIFIED. BRICK-005 Phases 0–10 are COMPLETE (`READY FOR ACCEPTANCE`). Do not install browser automation, persistent memory, or voice until authorized in subsequent bricks.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.

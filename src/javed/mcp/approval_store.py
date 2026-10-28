@@ -64,6 +64,7 @@ def redact_sensitive_value(value: Any) -> Any:
         return value
     return value
 
+
 CREATE_PENDING_APPROVALS_TABLE = """
 CREATE TABLE IF NOT EXISTS pending_approvals (
     approval_id TEXT PRIMARY KEY,

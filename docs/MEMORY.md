@@ -48,6 +48,21 @@ This document captures durable technical insights, discovered platform constrain
 
 ---
 
+
+### 2.7 aiosqlite Worker Thread Teardown & Partial-Init Rollback on Windows
+- **Insight**: `aiosqlite` spawns internal non-daemon worker threads (`Thread(target=self._worker)`). If connections are not explicitly closed before pytest/Python exit, Python's standard `threading._shutdown()` hangs indefinitely waiting to join unclosed threads. Furthermore, if `AgentRuntimeManager.initialize()` fails partway through startup (e.g., during approval store or adapter setup), previously opened checkpointer connections remain orphaned.
+- **Pattern**:
+  1. Wrap `AgentRuntimeManager.initialize()` internal steps in `try ... except Exception: await self.close(); raise` ensuring fail-closed rollback.
+  2. All pytest fixtures that instantiate `AgentRuntimeManager` or `AgentCheckpointerManager` must be async generator fixtures with `try: yield obj finally: await obj.close()`.
+  3. Validate resume contracts explicitly: verify thread/approval correlation against the approval record and reject swapped parameter UUID pairs with clear `ValueError`.
+
+### 2.8 3-Layer MCP Authorization & Durable Storage Segregation
+- **Insight**: Tool checkpoints and approval/execution audit records serve fundamentally different lifecycles and concurrency requirements. Checkpoints hold transient LangGraph execution graphs, whereas approval records and execution ledgers constitute immutable audit trails, cryptographic argument digests (`SHA-256`), and `UNCERTAIN` flight state records.
+- **Pattern**:
+  1. Segregate storage into dedicated SQLite databases: `data/checkpoints.db` for `AsyncSqliteSaver` and `data/approvals.db` for `ApprovalStore`.
+  2. Implement 3-layer authorization: Layer 1 strips denied tools before model binding (`wrap_model_call`); Layer 2 verifies JSON Schema, fingerprints, and permissions host-side before dispatch (`wrap_tool_call`); Layer 3 asserts compiled graph safety at startup (`assert_safe_agent_runtime`).
+  3. Prevent duplicate side effects: never retry `UNCERTAIN` tool executions automatically; surface explicit warning banners requiring human operator review.
+
 ## 3. Discovered Technical & Environmental Constraints
 
 | Category | Discovered Constraint | Engineering Workaround / Defense |
@@ -58,6 +73,8 @@ This document captures durable technical insights, discovered platform constrain
 | **OpenRouter Billing Limits** | Client-side token estimation cannot guarantee hard billing enforcement due to dropped connection retries or concurrent streaming requests. | Enforce client-side soft thresholds and warning triggers, but require an authoritative hard spending limit configured directly on the OpenRouter provider dashboard. |
 | **Windows Portability (Non-Admin)** | User runs on Windows 11 without administrator privileges. | Use `uv` for Python package management and virtual environments; use user-level Node.js/npm. Never write installation scripts requiring global `PATH` modifications or admin UAC elevation. |
 | **Playwright on Windows** | Chromium binaries must install within user directory. | Execute `playwright install chromium` inside the local virtual environment; binaries reside in `%USERPROFILE%\AppData\Local\ms-playwright`. |
+| **Windows MCP Subprocess Leak Detection** | Python-based MCP STDIO servers run under `python.exe`, making `tasklist | findstr mcp` ineffective. | Inspect process command lines via `Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python' -and $_.CommandLine -match 'mcp_server_time|mcp-server-time' }` to ensure zero orphaned background servers. |
+
 | **Playwright Windows Chrome Channel** | Playwright Chromium download may fail on certain CDN endpoints (Azure CDN 404). | Configure Playwright with `channel: 'chrome'` to leverage the user's pre-installed Google Chrome binary directly with zero remote downloads. |
 | **FastAPI / Starlette Lifespan TestClient State** | Starlette TestClient does not automatically enter ASGI lifespan context in simple unit tests, leaving lifespan-only state uninitialized. | Initialize long-lived application state managers (`ws_manager`, `sse_manager`) directly on `app.state` during `create_app()` rather than strictly inside the lifespan context. |
 | **Vitest vs Playwright E2E Test Discovery** | Vitest matches all `.spec.ts` files by default and crashes when trying to parse Playwright's `test.describe()`. | Configure `include: ['src/test/**/*.{test,spec}.{ts,tsx}']` and `exclude: ['e2e/**']` in `vitest.config.ts` to cleanly decouple unit tests from E2E suites. |

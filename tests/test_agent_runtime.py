@@ -142,3 +142,37 @@ async def test_agent_runtime_status() -> None:
     assert "read_file" in status.excluded_tools
 
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_partial_initialization_failure_teardown() -> None:
+    """Verify that a failure partway through runtime.initialize() triggers clean teardown
+    of previously initialized components (such as checkpointer aiosqlite threads)
+    and leaves zero dangling connections.
+    """
+    from unittest.mock import AsyncMock
+
+    cp_mgr = AgentCheckpointerManager(db_path=":memory:")
+    failing_approval_store = AsyncMock()
+    failing_approval_store.initialize.side_effect = RuntimeError(
+        "Simulated mid-initialization failure in approval store"
+    )
+    failing_approval_store.close = AsyncMock()
+
+    runtime = AgentRuntimeManager(
+        checkpointer_manager=cp_mgr,
+        approval_store=failing_approval_store,
+    )
+
+    with pytest.raises(RuntimeError, match="Simulated mid-initialization failure"):
+        await runtime.initialize()
+
+    # Runtime must fail closed and reset initialized flag
+    assert runtime._is_initialized is False
+
+    # Checkpointer async connection must be cleanly closed by rollback teardown
+    assert cp_mgr._async_conn is None
+    assert cp_mgr._async_saver is None
+
+    # Failing component's close was invoked in teardown
+    failing_approval_store.close.assert_awaited_once()

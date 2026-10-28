@@ -535,3 +535,47 @@ async def test_resume_api_contract_validation(
             thread_id="thread_test_123",
         )
         await _gen.__anext__()
+
+    # 7. Swapped (approval_id, thread_id) UUID pair in resume_agent
+    from javed.schemas.approval import ApprovalRecord, compute_argument_digest
+
+    real_approval = ApprovalRecord(
+        approval_id="appr_contract_test_7",
+        interrupt_id="intr_contract_7",
+        run_id="run_contract_7",
+        thread_id="thread_contract_test_7",
+        server_id="time",
+        tool_id="time__get_current_time",
+        tool_call_id="tc_contract_7",
+        tool_fingerprint="fp_test",
+        policy_version=1,
+        arguments={"timezone": "UTC"},
+        argument_digest=compute_argument_digest({"timezone": "UTC"}),
+    )
+    await user_mode_runtime.approval_store.create_approval(real_approval)
+
+    with pytest.raises(ValueError, match="Positional parameters appear swapped"):
+        _gen = user_mode_runtime.resume_agent(
+            thread_id="appr_contract_test_7",
+            approval_id="thread_contract_test_7",
+            decision="approve",
+        )
+        await _gen.__anext__()
+
+    # 8. Mismatched thread_id and approval.thread_id in resume_agent
+    with pytest.raises(ValueError, match="Thread mismatch"):
+        _gen = user_mode_runtime.resume_agent(
+            thread_id="thread_completely_different",
+            approval_id="appr_contract_test_7",
+            decision="approve",
+        )
+        await _gen.__anext__()
+
+    # 9. Swapped (approval_id, thread_id) in resume_agent_execution
+    with pytest.raises(ValueError, match="Positional parameters appear swapped"):
+        _gen = user_mode_runtime.resume_agent_execution(
+            approval_id="thread_contract_test_7",
+            decision="approve",
+            thread_id="appr_contract_test_7",
+        )
+        await _gen.__anext__()

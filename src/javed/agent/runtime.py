@@ -262,32 +262,39 @@ class AgentRuntimeManager:
         if self._is_initialized:
             return
 
-        ensure_agent_security_profile()
-        await self.checkpointer_manager.initialize_async()
-        await self.approval_store.initialize()
-        if self.mcp_gateway is not None and self.mcp_gateway.approval_store is None:
-            self.mcp_gateway.approval_store = self.approval_store
-        self._is_initialized = True
-        logger.info(
-            "AgentRuntimeManager initialized (checkpoints: %s, approvals: %s)",
-            self.checkpointer_manager.db_path,
-            self.approval_store.db_path,
-        )
+        try:
+            ensure_agent_security_profile()
+            await self.checkpointer_manager.initialize_async()
+            await self.approval_store.initialize()
+            if self.mcp_gateway is not None and self.mcp_gateway.approval_store is None:
+                self.mcp_gateway.approval_store = self.approval_store
+            self._is_initialized = True
+            logger.info(
+                "AgentRuntimeManager initialized (checkpoints: %s, approvals: %s)",
+                self.checkpointer_manager.db_path,
+                self.approval_store.db_path,
+            )
+        except Exception:
+            await self.close()
+            raise
 
     async def close(self) -> None:
         """Close checkpointer, approval store, and active MCP transports cleanly."""
-        if (
-            self.mcp_gateway is not None
-            and getattr(self.mcp_gateway, "registry", None) is not None
-        ):
+        if self.mcp_gateway is not None and getattr(self.mcp_gateway, "registry", None) is not None:
             try:
                 await self.mcp_gateway.registry.disconnect_all()
             except Exception as e:
                 logger.warning("Error disconnecting MCP servers on runtime close: %s", e)
         if hasattr(self.checkpointer_manager, "close"):
-            await self.checkpointer_manager.close()
+            try:
+                await self.checkpointer_manager.close()
+            except Exception as e:
+                logger.warning("Error closing checkpointer manager on runtime close: %s", e)
         if hasattr(self.approval_store, "close"):
-            await self.approval_store.close()
+            try:
+                await self.approval_store.close()
+            except Exception as e:
+                logger.warning("Error closing approval store on runtime close: %s", e)
         self._is_initialized = False
         logger.info("AgentRuntimeManager closed")
 
@@ -1012,11 +1019,19 @@ class AgentRuntimeManager:
         async with self.thread_lock_manager.lock_thread(validated_thread_id):
             approval = await self.approval_store.get_approval(approval_id)
             if not approval:
+                # Check if caller swapped approval_id and thread_id
+                swapped = await self.approval_store.get_approval(validated_thread_id)
+                if swapped is not None:
+                    raise ValueError(
+                        f"Positional parameters appear swapped: '{validated_thread_id}' is an "
+                        "approval ID, not a thread ID. "
+                        "Expected (thread_id, approval_id, decision)."
+                    )
                 raise KeyError(f"Approval '{approval_id}' not found.")
             if approval.thread_id != validated_thread_id:
-                raise PermissionError(
-                    f"Wrong thread ID. Approval belongs to thread '{approval.thread_id}', "
-                    f"not '{validated_thread_id}'."
+                raise ValueError(
+                    f"Thread mismatch: Approval '{approval_id}' belongs to thread "
+                    f"'{approval.thread_id}', not '{validated_thread_id}'."
                 )
             if approval.status != "pending":
                 raise ValueError(

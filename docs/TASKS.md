@@ -1,11 +1,11 @@
 # Master Task Registry — JARVIS
 
 > **Document ID**: `TASKS-001`  
-> **Version**: 4.0 (Stage 2: BRICK-004 Verified — BRICK-005 Phase 2 In Progress)  
+> **Version**: 5.0 (Stage 2: BRICK-005 Phase 10 Complete — READY FOR ACCEPTANCE)  
 > **Status**: ACTIVE  
 > **Project**: Javed — New JARVIS  
 > **Current Stage**: Stage 2 / BRICK-005 — Dynamic MCP Tool Discovery & Security Gateway  
-> **Last Revision**: 2026-10-26  
+> **Last Revision**: 2026-10-28  
 
 ---
 
@@ -37,7 +37,7 @@
 | **TASK-020** | BRICK-002 | Draft & Implement FastAPI WebSocket & SSE Gateway | **VERIFIED** | Requires BRICK-001 Verification | Real-time gateway connecting UI status bar with live backend server; 15 pytest, 24 vitest, 5 Playwright E2E passed. Approved by owner 2026-10-22. |
 | **TASK-030** | BRICK-003 | Implement OpenRouter Adapter, Live Streaming Chat & Intelligent Auto Router | **VERIFIED** | Requires BRICK-002 Verification | Dynamic catalog, SSE streaming, assistant-ui runtime, OpenRouter Auto Router multi-tier routing, micro-cost accounting. 35 pytest, 35 vitest, 12 Playwright E2E passed. Formally approved by Project Owner on 2026-10-22. |
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
-| **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **IN PROGRESS** | Authorized by Owner on 2026-10-26 | Phase 0 & Phase 1 verified; Phase 2 (Dynamic MCP Registry) complete: langchain[mcp] 1.4.7 + mcp-server-time 2026.10.19 pinned, DynamicMCPRegistry implemented, default-deny gating, SHA-256 fingerprinting, change invalidation. Ready for review. |
+| **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **READY FOR ACCEPTANCE** | Authorized by Owner on 2026-10-26 | Phases 0–10 complete: 4-Tier tool sandbox, dynamic MCP registry with FastMCP/Time reference server (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger with UNCERTAIN handling, recursive argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 delivered. Ready for Owner Acceptance. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **NOT STARTED** | Requires BRICK-005 Verification | Scripted browser automation, Playwright MCP evaluation, and real-time viewport preview panel. |
 | **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **NOT STARTED** | Requires BRICK-006 Verification | Web and multi-format document extraction with table and provenance support. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards. |
@@ -52,7 +52,7 @@
 ## 3. Active Task Details (BRICK-005 In Progress)
 
 ### TASK-050: BRICK-005 Tool Registry, Permissions & MCP Integration
-- **Status**: `IN PROGRESS` (Phase 5: VERIFIED — READY FOR OWNER ACCEPTANCE)
+- **Status**: `READY FOR ACCEPTANCE` (Phase 10 Complete — READY FOR OWNER ACCEPTANCE)
 - **Scope**:
   - Official LangChain MCP integration (`langchain[mcp]==1.4.7`) + `mcp-server-time==2026.10.19`.
   - Dynamic registry (`DynamicMCPRegistry`) in `src/javed/mcp/registry.py`.
@@ -158,7 +158,7 @@
 - **Phase 8 Scope**: Complete Developer MCP Console, Execution Ledger & Live Diagnostics:
   - Developer MCP Console Architecture (`frontend/src/components/dev/MCPAdminPanel.tsx`):
     - Dedicated operational tabs: Overview, Servers, Tools, Ledger, Approvals, Diagnostics.
-    - Servers overview: Displays connection status, transport (`stdio`), negotiated protocol version (`2024-11-05`), discovered tools count, last discovery timestamp, and sanitized error messages.
+    - Servers overview: Displays connection status, transport (`stdio`), negotiated protocol version (`2026-07-28`), discovered tools count, last discovery timestamp, and sanitized error messages.
     - Authenticated Refresh Discovery action: Requires memory-only owner session, provides truthful execution progress and error reporting.
   - Tool Registry Explorer:
     - Lists discovered tools with namespaced IDs (`time__get_current_time`, `time__convert_time`), server ID, human descriptions, effective host policies, schema fingerprints, and collapsible JSON schemas.
@@ -233,5 +233,24 @@
     - Verified full real stack: React User Mode (Agent Mode) -> Real FastAPI -> Real Deep Agents -> Real OpenRouter `openai/gpt-4o-mini` -> Real `time__get_current_time` with `Asia/Qatar` -> Real Time MCP STDIO server -> Truthful Doha time synthesis in React.
     - Verified `ToolActivityCard` renders with status `COMPLETED` and no scripted-model substitution.
     - PASSED in 28.0s; incremental spend: $0.000276 USD (0.027 cents), within $0.10 limit.
-- **Stop Condition**: Phase 9 & 9B: **VERIFIED — READY FOR OWNER ACCEPTANCE**. Mandatory Stop: Phase 9: VERIFIED — READY FOR OWNER ACCEPTANCE, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Await project owner explicit authorization before beginning Phase 10.
+- **Phase 10 Scope**: Final Polish, Full Regression Gate, Governance Synchronization & REPORT-005 Delivery:
+  - Code Hardening:
+    - Wrapped internal startup steps of `AgentRuntimeManager.initialize()` in `try ... except Exception: await self.close(); raise` to ensure partial-initialization rollback and zero leaked `aiosqlite` threads. Verified with dedicated test `test_partial_initialization_failure_teardown` (PASSED).
+    - Hardened `resume_agent` and `resume_agent_execution` against swapped parameter pairs and thread mismatches, raising explicit `ValueError`. Verified with dedicated test in `test_mcp_user_mode.py` (PASSED).
+    - Fixed fixture teardown in `tests/test_agent_api.py` (`test_app`) to ensure `await runtime.close()` is always called, resolving Python process shutdown hang on Windows (runs and exits in 2.79s).
+  - Full Deterministic Quality & Regression Sweep:
+    - 165/165 backend pytests PASSED in 141.80s with exit code 0 (`.\.venv\Scripts\python.exe -m pytest --ignore=tests/test_live_openrouter_mcp.py -v`).
+    - 62/62 frontend Vitest tests PASSED across 12 files in 10.91s (`npm.cmd run test`).
+    - 0 Ruff errors, 60 files formatted (`ruff check src tests` & `ruff format --check src tests`).
+    - 0 Oxlint errors on 71 files (`npm.cmd run lint`).
+    - Clean TypeScript/Vite production build in 0.99s (`npm.cmd run build`).
+    - 0 orphaned `python.exe` MCP subprocesses verified via `Get-CimInstance Win32_Process`.
+  - Governance Synchronization:
+    - Reconciled Scenario F table in `BRICK-005.md` to truthfully reflect pre-model binding stripping by Layer 0/1.
+    - Updated canonical 4-tier risk-to-MCP mapping in `BRICK-005.md` and explicitly noted out-of-scope boundaries (Filesystem, Shell, Playwright MCP).
+    - Reconciled protocol version references consistently to `2026-07-28`.
+    - Delivered authoritative milestone verification report `docs/reports/REPORT-005.md`.
+    - Synchronized `AGENTS.md`, `PROGRESS.md`, `MEMORY.md`, and `ENVIRONMENT.md`.
+- **Phase 10 Status**: **VERIFIED — READY FOR OWNER ACCEPTANCE**.
+- **Stop Condition**: BRICK-005: **READY FOR ACCEPTANCE** (Phases 0 through 10 Complete). Mandatory Stop: Do NOT start BRICK-006, do NOT merge to `master`, do NOT push to remote. Await explicit Project Owner review and sign-off on `REPORT-005.md`.
 

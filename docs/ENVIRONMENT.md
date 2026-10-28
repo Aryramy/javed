@@ -64,6 +64,10 @@
   3. **Zero Credential Exposure**: API keys, tokens, or private secrets must never be printed, logged, committed, or echoed in documentation or agent messages.
   4. **Sanitized Template**: A sanitized [.env.example](file:///c:/Users/arehman/Desktop/AI Projects/Javed/.env.example) template is maintained at root containing placeholders only.
 
+
+> [!IMPORTANT]
+> **Firm AI Spending Limit ($20/Month)**: Per project budget governance, external paid API spending (OpenRouter) is strictly capped at **$20/month** (~$0.65/day sustained average). All testing must default to deterministic/mocked runners; live OpenRouter suites must be tightly targeted and bounded.
+
 ### 4.2 Standard Configuration Schema
 
 ```bash
@@ -77,7 +81,7 @@ JAVED_LOG_LEVEL=INFO                    # DEBUG | INFO | WARNING | ERROR
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_DEFAULT_MODEL=anthropic/claude-3.5-sonnet
-OPENROUTER_DAILY_BUDGET_USD=5.00
+OPENROUTER_DAILY_BUDGET_USD=5.00        # Soft daily limit. Note: Firm $20/month total AI budget ceiling (~$0.65/day sustained average) per project budget governance.
 
 # Provisional Voice Pipeline Configuration (OpenRouter Audio Gateway)
 OPENROUTER_STT_MODEL=openai/whisper-large-v3-turbo

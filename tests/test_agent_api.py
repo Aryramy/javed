@@ -38,7 +38,7 @@ class ApiMockModel(BaseChatModel):
 
 
 @pytest.fixture
-def test_app():
+async def test_app():
     settings = Settings(
         env="test",
         openrouter_api_key="sk-or-v1-mock-test-key",
@@ -68,7 +68,10 @@ def test_app():
         model_override=mock_model,
     )
     app.state.agent_runtime = runtime
-    return app
+    try:
+        yield app
+    finally:
+        await runtime.close()
 
 
 @pytest.mark.asyncio
