@@ -285,10 +285,19 @@ flowchart TD
   - Integrated `BrowserPreviewPanel` into `frontend/src/views/user/BrowserView.tsx`.
   - Authored comprehensive Vitest unit tests in `frontend/src/test/browserPreview.test.tsx` (12/12 passed).
 
-- **Phase 7: `@playwright/mcp` Gateway Integration & 3-Tier Policy Evaluation**
-  - Register `@playwright/mcp` configuration in `DynamicMCPRegistry` (`src/javed/mcp/registry.py`).
-  - Verify STDIO subprocess spawning, tool fingerprinting, and automatic default-denied classification.
-  - Verify policy enforcement: `browser_run_code_unsafe` and `browser_evaluate` blocked under `DENIED`; mutating tools intercepted for HITL approval.
+- **Phase 7: `@playwright/mcp` Gateway Integration & 3-Tier Policy Evaluation** [COMPLETED]
+  - Registered `@playwright/mcp` configuration in `src/javed/mcp/servers.py` (`create_playwright_mcp_config`, `find_playwright_mcp_command`) using safe STDIO parameters (`--browser chrome --isolated --headless`).
+  - Added default server registration in `create_app` in `src/javed/main.py`.
+  - Defined authoritative 3-tier policy constants in `src/javed/mcp/servers.py`:
+    - `PLAYWRIGHT_MCP_DANGEROUS_TOOLS` (3 tools): `browser_run_code_unsafe`, `browser_evaluate`, `browser_file_upload`.
+    - `PLAYWRIGHT_MCP_MUTATING_TOOLS` (9 tools): `browser_click`, `browser_fill_form`, `browser_type`, `browser_press_key`, `browser_select_option`, `browser_drop`, `browser_drag`, `browser_handle_dialog`, `browser_close`.
+    - `PLAYWRIGHT_MCP_READONLY_TOOLS` (13 tools): `browser_snapshot`, `browser_take_screenshot`, `browser_find`, etc.
+  - Implemented unit & policy verification suite in `tests/test_playwright_mcp_gateway.py` (10/10 passed):
+    - Verified default-denied classification across all 25 tools.
+    - Verified permanent execution denial and model hiding for dangerous tools.
+    - Verified HITL approval requirement and argument digest validation for mutating actions.
+    - Verified permission promotion for safe read-only inspection tools.
+    - Verified fingerprint drift and schema poisoning defense resets tools to DENIED.
 
 - **Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding**
   - Bind deterministic browser tools into LangGraph agent graph in `src/javed/agent/runtime.py`.

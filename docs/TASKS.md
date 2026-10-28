@@ -285,7 +285,7 @@
   - **Phase 4 Status**: **COMPLETED** (5 deterministic tools, Pydantic schemas, BrowserSession, argument redaction, 9/9 tests passed in 5.98s, 194/194 full regression passed, 0 leaks)
   - **Phase 5 Status**: **COMPLETED** (BrowserFrameStreamer, /ws/browser & /api/v1/ws/browser WebSocket endpoints, auto-pause zero-idle logic, 5/5 tests passed in 9.48s, 199/199 full regression passed, 0 leaks)
   - **Phase 6 Status**: **COMPLETED** (useBrowserStream hook, BrowserPreviewPanel, BrowserView integration, 12/12 Vitest tests passed, 74/74 full Vitest suite passed, clean Vite build)
-  - Phase 7: @playwright/mcp Gateway Integration & 3-Tier Policy Evaluation
+  - **Phase 7 Status**: **COMPLETED** (@playwright/mcp server config, 3-tier policy constants, 10/10 gateway unit tests passed, 44/44 combined browser tests passed)
   - Phase 8: Full Dual-Mode End-to-End Orchestration & LangGraph Binding
   - Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)
   - Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006

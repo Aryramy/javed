@@ -20,7 +20,7 @@ from javed.browser.streamer import BrowserFrameStreamer
 from javed.config import Settings, get_settings
 from javed.mcp.gateway import SecureMCPGateway
 from javed.mcp.registry import DynamicMCPRegistry
-from javed.mcp.servers import create_time_server_config
+from javed.mcp.servers import create_playwright_mcp_config, create_time_server_config
 from javed.services.openrouter import OpenRouterService
 from javed.transport.sse import SSEManager
 from javed.transport.websocket import WebSocketManager
@@ -163,8 +163,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.mcp_registry = DynamicMCPRegistry()
     try:
         app.state.mcp_registry.register_server(create_time_server_config())
+        app.state.mcp_registry.register_server(create_playwright_mcp_config())
     except Exception as exc:
-        logger.warning("Could not register default Time MCP server: %s", exc)
+        logger.warning("Could not register default MCP servers: %s", exc)
     app.state.mcp_gateway = SecureMCPGateway(app.state.mcp_registry)
 
     app.state.agent_runtime = AgentRuntimeManager(

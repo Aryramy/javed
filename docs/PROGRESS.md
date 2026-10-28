@@ -215,5 +215,23 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Full backend deterministic regression suite: 199/199 PASSED.
   - 0 orphaned browser/driver processes on Windows.
 
+- **Phase 7 Implementation & Verification (2026-10-28)**:
+  - Registered `@playwright/mcp` configuration in `src/javed/mcp/servers.py` (`create_playwright_mcp_config`, `find_playwright_mcp_command`) using safe STDIO parameters (`--browser chrome --isolated --headless`).
+  - Added default server registration in `create_app` in `src/javed/main.py`.
+  - Defined authoritative 3-tier policy constants in `src/javed/mcp/servers.py`:
+    - `PLAYWRIGHT_MCP_DANGEROUS_TOOLS` (3 tools): `browser_run_code_unsafe`, `browser_evaluate`, `browser_file_upload`.
+    - `PLAYWRIGHT_MCP_MUTATING_TOOLS` (9 tools): `browser_click`, `browser_fill_form`, `browser_type`, `browser_press_key`, `browser_select_option`, `browser_drop`, `browser_drag`, `browser_handle_dialog`, `browser_close`.
+    - `PLAYWRIGHT_MCP_READONLY_TOOLS` (13 tools): `browser_snapshot`, `browser_take_screenshot`, `browser_find`, etc.
+  - Implemented unit & policy verification suite in `tests/test_playwright_mcp_gateway.py` with 10 tests (10/10 PASSED in 2.04s):
+    - Verified default-denied classification across all 25 tools.
+    - Verified permanent execution denial and model hiding for dangerous tools.
+    - Verified HITL approval requirement and argument digest validation for mutating actions.
+    - Verified permission promotion for safe read-only inspection tools.
+    - Verified fingerprint drift and schema poisoning defense resets tools to DENIED.
+  - Combined browser suite verification: 44/44 PASSED in 20.38s (8 core + 12 security + 9 tools + 5 streamer/ws + 10 Playwright MCP gateway).
+  - Verified 0 Ruff lint/formatting errors across 71 files.
+  - Verified 0 orphaned browser/driver processes on Windows.
+
+
 
 
