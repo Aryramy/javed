@@ -281,7 +281,7 @@
   - Authored comprehensive specification: docs/bricks/BRICK-006.md.
 - **Pending Phases**:
   - **Phase 2 Status**: **COMPLETED** (BrowserEngineManager, ephemeral contexts, 8/8 tests passed in 4.92s, 173/173 full regression passed, 0 leaks)
-  - Phase 3: Security Guard, SSRF Blocker & Sensitive Input Masking
+  - **Phase 3 Status**: **COMPLETED** (BrowserSecurityGuard, SSRF blocker, sensitive field detector, 12/12 security tests passed, 185/185 full regression passed, 0 leaks)
   - Phase 4: Deterministic Browser Agent Tools & Pydantic Definitions
   - Phase 5: Viewport Frame Streamer & FastAPI WebSocket Subsystem (/ws/browser)
   - Phase 6: Frontend React Live Browser Preview Panel & HITL Visualizer

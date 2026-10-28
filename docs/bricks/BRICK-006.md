@@ -247,7 +247,7 @@ flowchart TD
   - Implement `src/javed/browser/manager.py` with singleton `BrowserManager`, ephemeral context creation (`browser.new_context()`), and rigorous async teardown on FastAPI shutdown.
   - Unit tests for lifecycle management and zero orphaned process leaks.
 
-- **Phase 3: Security Guard, SSRF Blocker & Sensitive Input Masking**
+- **Phase 3: Security Guard, SSRF Blocker & Sensitive Input Masking** [COMPLETED]
   - Implement `src/javed/browser/security.py`:
     - SSRF / private IP blocker (RFC 1918, link-local, loopback).
     - Password / credit card / sensitive input blocker.
