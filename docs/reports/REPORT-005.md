@@ -3,9 +3,11 @@
 
 > **Project**: Javed — New JARVIS  
 > **Brick**: `BRICK-005`  
-> **Status**: `READY FOR ACCEPTANCE`  
+> **Status**: **`VERIFIED — OWNER ACCEPTED`**  
 > **Milestone Stage**: Stage 2 — Dynamic MCP Tool Registry & Security Gateway  
 > **Date**: 2026-10-28  
+> **Acceptance Date**: 2026-10-28  
+> **Acceptance Authority**: Project Owner Explicit Sign-Off (Commit 24bbb24)  
 > **Verification Engineer**: Antigravity Full-Stack Agent  
 > **Working Branch**: `feat/brick-005-mcp-gateway`  
 > **Baseline Anchor**: Commit `094e7e2` (BRICK-004 Verified Baseline)  
@@ -185,5 +187,7 @@ pie title BRICK-005 Test Inventory by Execution Mode
 
 BRICK-005 has fulfilled all acceptance criteria defined in `docs/bricks/BRICK-005.md` and `docs/TASKS.md` across Phases 0 through 10. The codebase demonstrates zero test flakes, zero unhandled errors, zero subprocess leaks, and zero security bypasses.
 
-**Status**: **`READY FOR ACCEPTANCE`**  
-**Action Required**: Awaiting explicit Project Owner review and sign-off on `REPORT-005.md` to achieve `VERIFIED` status and authorize progression to BRICK-006.
+**Status**: **`VERIFIED — OWNER ACCEPTED`**  
+**Formal Acceptance Granted**: 2026-10-28 by Project Owner for commit `24bbb24`.  
+**Milestone Action**: Fast-forward merge of `feat/brick-005-mcp-gateway` to `master` authorized. Progression to BRICK-006 authorized pending Phase 0 preflight.
+

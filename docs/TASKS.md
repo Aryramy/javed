@@ -1,10 +1,10 @@
 # Master Task Registry — JARVIS
 
 > **Document ID**: `TASKS-001`  
-> **Version**: 5.0 (Stage 2: BRICK-005 Phase 10 Complete — READY FOR ACCEPTANCE)  
+> **Version**: 5.1 (Stage 2: BRICK-005 VERIFIED — Awaiting BRICK-006 Authorization)  
 > **Status**: ACTIVE  
 > **Project**: Javed — New JARVIS  
-> **Current Stage**: Stage 2 / BRICK-005 — Dynamic MCP Tool Discovery & Security Gateway  
+> **Current Stage**: Stage 3 / BRICK-006 — Deterministic Playwright Browser & MCP Evaluation  
 > **Last Revision**: 2026-10-28  
 
 ---
@@ -37,8 +37,8 @@
 | **TASK-020** | BRICK-002 | Draft & Implement FastAPI WebSocket & SSE Gateway | **VERIFIED** | Requires BRICK-001 Verification | Real-time gateway connecting UI status bar with live backend server; 15 pytest, 24 vitest, 5 Playwright E2E passed. Approved by owner 2026-10-22. |
 | **TASK-030** | BRICK-003 | Implement OpenRouter Adapter, Live Streaming Chat & Intelligent Auto Router | **VERIFIED** | Requires BRICK-002 Verification | Dynamic catalog, SSE streaming, assistant-ui runtime, OpenRouter Auto Router multi-tier routing, micro-cost accounting. 35 pytest, 35 vitest, 12 Playwright E2E passed. Formally approved by Project Owner on 2026-10-22. |
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
-| **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **READY FOR ACCEPTANCE** | Authorized by Owner on 2026-10-26 | Phases 0–10 complete: 4-Tier tool sandbox, dynamic MCP registry with FastMCP/Time reference server (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger with UNCERTAIN handling, recursive argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 delivered. Ready for Owner Acceptance. |
-| **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **NOT STARTED** | Requires BRICK-005 Verification | Scripted browser automation, Playwright MCP evaluation, and real-time viewport preview panel. |
+| **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
+| **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **NOT STARTED** | Requires BRICK-005 Verification (Satisfied) | Next milestone; awaiting Project Owner Phase 0 preflight authorization. |
 | **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **NOT STARTED** | Requires BRICK-006 Verification | Web and multi-format document extraction with table and provenance support. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
@@ -52,7 +52,7 @@
 ## 3. Active Task Details (BRICK-005 In Progress)
 
 ### TASK-050: BRICK-005 Tool Registry, Permissions & MCP Integration
-- **Status**: `READY FOR ACCEPTANCE` (Phase 10 Complete — READY FOR OWNER ACCEPTANCE)
+- **Status**: **`VERIFIED`** (Formally accepted by Project Owner on 2026-10-28)
 - **Scope**:
   - Official LangChain MCP integration (`langchain[mcp]==1.4.7`) + `mcp-server-time==2026.10.19`.
   - Dynamic registry (`DynamicMCPRegistry`) in `src/javed/mcp/registry.py`.
@@ -252,5 +252,6 @@
     - Delivered authoritative milestone verification report `docs/reports/REPORT-005.md`.
     - Synchronized `AGENTS.md`, `PROGRESS.md`, `MEMORY.md`, and `ENVIRONMENT.md`.
 - **Phase 10 Status**: **VERIFIED — READY FOR OWNER ACCEPTANCE**.
-- **Stop Condition**: BRICK-005: **READY FOR ACCEPTANCE** (Phases 0 through 10 Complete). Mandatory Stop: Do NOT start BRICK-006, do NOT merge to `master`, do NOT push to remote. Await explicit Project Owner review and sign-off on `REPORT-005.md`.
+- **Final Milestone Status**: **`VERIFIED`** (Explicit Project Owner Sign-Off Granted 2026-10-28). BRICK-005 is formally complete. Fast-forward merge to `master` authorized.
+- **Stop Condition**: Stage 3 / BRICK-006 is `NOT STARTED`. Mandatory Stop: Await explicit Project Owner authorization before initiating BRICK-006 Phase 0–1 preflight.
 
