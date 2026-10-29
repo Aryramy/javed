@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 0 Preflight & Architecture Completed; 153 packages evaluated; normalized schema & security boundaries defined in docs/bricks/BRICK-007.md. Awaiting Phase 1 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 1 Dependency Installation & Lifecycle Verification Completed (CPU torch, 5/5 smoke tests passed, 229/229 regression passed, 0 leaks). Awaiting Phase 2 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -315,7 +315,7 @@
 ---
 
 ### TASK-070: BRICK-007 Crawl4AI & Docling Extraction Pipeline
-- **Status**: **IN PROGRESS** (Phase 0 Preflight & Architecture Completed; Awaiting Phase 1 Authorization)
+- **Status**: **IN PROGRESS** (Phase 1 Dependency Installation & Lifecycle Verification Completed; Awaiting Phase 2 Authorization)
 - **Anchor Commit**: 83cdeea (Verified BRICK-006 synchronized on master)
 - **Working Branch**: feat/brick-007-extraction
 - **Scope & Objectives**:
@@ -334,6 +334,24 @@
   - Authored comprehensive specification: docs/bricks/BRICK-007.md.
   - Updated docs/decisions/ADR-006.md to ACCEPTED (PHASE 0 EVALUATED).
   - Enforced Phase 0 mandatory stop condition.
+- **Phase 1 Status**: **COMPLETED** (2026-10-29):
+
+  - Installed direct dependencies `crawl4ai>=0.9.0,<1.0.0` (0.9.5), `docling>=2.140.0,<3.0.0` (2.144.0), and `pypdfium2>=5.10.0,<6.0.0` (5.14.0) via `uv pip sync requirements.lock --torch-backend cpu`.
+
+  - Pinned CPU-only PyTorch wheels (`torch==2.15.0+cpu`, `torchvision==0.29.2+cpu`), completely eliminating massive CUDA binaries.
+
+  - Recorded hardware sandbox metrics: `.venv` size grew from 268.53 MB to 1445.09 MB (+1.15 GB), free disk space from 211.12 GB to 209.46 GB (-1.66 GB), memory load 93%. Process RSS at idle is 17.28 MB, reaching 374.55 MB with lightweight Docling initialized.
+
+  - Implemented and verified `tests/test_extraction_smoke.py`: 5/5 passed (import compatibility, AsyncWebCrawler lifecycle and clean teardown, Docling lightweight initialization with HuggingFace download blocking, warm import time < 0.25s, thread hygiene).
+
+  - Executed full project regression gate: 229/229 backend pytests passed in 192.12s.
+
+  - Verified code quality: 0 Ruff errors, 74 files formatted.
+
+  - Process teardown hygiene verified: 0 dangling Chromium, Node.js, Python, or Docling processes.
+
+  - Enforced Phase 1 stop condition.
+
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox
   - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
@@ -345,5 +363,5 @@
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 0 Preflight Completed; Awaiting Phase 1 Authorization).
-- **Stop Condition**: Phase 0 preflight and planning complete. Mandatory Stop: Await explicit Project Owner review and Phase 1 authorization before modifying pyproject.toml or installing dependencies.
+- **Milestone Status**: **IN PROGRESS** (Phase 1 Completed; Awaiting Phase 2 Authorization).
+- **Stop Condition**: Phase 1 dependency installation and lifecycle verification complete. Mandatory Stop: Await explicit Project Owner review and Phase 2 authorization before authoring production schemas or extraction pipeline code.
