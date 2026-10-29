@@ -289,20 +289,22 @@
   - **Phase 8 Status**: **COMPLETED** (create_browser_tools_inventory, PositiveToolAllowlistMiddleware & assert_safe_tools browser support, AgentRuntimeManager browser binding & HITL click/fill gating, telemetry redaction, 8/8 tests passed in 3.41s, 52/52 combined browser tests passed)
   - **Phase 9 Status**: **COMPLETED** (Live OpenRouter browser acceptance suite, model-driven navigation & text extraction, multi-turn state retention, HITL interrupt/resume, budget reconciliation < $0.05, 4/4 tests passed in 23.22s)
   - **Phase 10 Status**: **COMPLETED**:
-    - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (5 new tests, 13/13 total passed):
+    - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (7 new tests, 15/15 total passed):
       - Exactly-once browser tool execution across approval resumption with zero replay on duplicate decision attempts.
       - Rejection prevents tool dispatch and duplicate decision attempts fail-closed.
       - Cross-thread isolation rejecting approval decisions for mismatched thread IDs.
       - Cancellation flow preventing mutating browser tool execution.
       - Stale/expired approval rejection preventing mutating browser tool execution.
-    - Completed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation and zero-trust fail-closed host layers.
+      - Unknown approval ID rejection and full cryptographic binding integrity in `ApprovalRecord`.
+      - Checkpoint continuity without tool action duplication across subsequent conversational turns.
+    - Completed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation, narrow browser tool scoping, and zero-trust fail-closed host layers.
     - Full project regression test gate:
-      - 222/222 backend pytests PASSED in 163.89s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
-      - 57/57 browser and Playwright MCP gateway tests PASSED in 27.45s.
-      - 74/74 frontend Vitest tests PASSED across 13 test files in 11.62s.
+      - 224/224 backend pytests PASSED in 164.86s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
+      - 59/59 browser and Playwright MCP gateway tests PASSED in 40.55s.
+      - 74/74 frontend Vitest tests PASSED across 13 test files in 13.79s.
       - 0 Ruff lint errors, 73 files formatted.
       - 0 Oxlint errors across 63 frontend files.
-      - Clean TypeScript/Vite production build in 1.50s (`npm.cmd --prefix frontend run build`).
+      - Clean TypeScript/Vite production build in 1.64s (`npm.cmd --prefix frontend run build`).
     - Subprocess leak audit: verified 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes via `Get-CimInstance Win32_Process`.
     - Zero `os._exit` calls across codebase.
     - Authored comprehensive verification report `docs/reports/REPORT-006.md`.

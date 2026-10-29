@@ -442,6 +442,10 @@ class AgentRuntimeManager:
                 "browser_click, browser_fill_form, browser_extract_text, "
                 "browser_take_screenshot) when asked to visit web pages, extract "
                 "content, or interact with elements. "
+                "Mutating browser operations (browser_click, browser_fill_form) are "
+                "approval-controlled and require human authorization before execution. "
+                "Sensitive values (passwords, payment cards, CVVs, credentials) must never "
+                "be requested, retained, or handled unnecessarily. "
                 "Call the appropriate tool rather than refusing."
             )
 

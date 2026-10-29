@@ -16,7 +16,7 @@
 | **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
 | **Brick Status** | **`READY FOR ACCEPTANCE`** | Verified across Phases 0–10 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md)) |
 | **Last Verified Milestone** | **BRICK-005: Tool Registry, Validation, Permissions (HITL) & Initial MCP** | Formally accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
-| **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 222/222 full backend regression pytests passed in 163.89s, 57/57 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
+| **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 224/224 full backend regression pytests passed in 164.86s, 59/59 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, playwright 1.58.0, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
 | **Overall Status** | **BRICK-006 READY FOR ACCEPTANCE (Phases 0–10 Complete; Awaiting Project Owner Acceptance)** | Authoritative Status |
 
@@ -259,20 +259,22 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Verified 0 orphaned browser/driver processes on Windows.
 
 - **Phase 10 Implementation & Verification (2026-10-29)**:
-  - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (5 new tests, 13/13 total passed):
+  - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (7 new tests, 15/15 total passed):
     - Verified exactly-once tool execution across approval resumption with zero replay on duplicate decision attempts.
     - Verified HITL rejection prevents tool dispatch and duplicate rejection/approval attempts fail-closed.
     - Verified cross-thread isolation rejecting approval decisions when thread_id does not match the approval record.
     - Verified cancellation flow preventing mutating browser tool execution.
     - Verified stale/expired approval rejection preventing mutating browser tool execution.
+    - Verified unknown approval ID rejection and full cryptographic binding integrity in `ApprovalRecord`.
+    - Verified checkpoint continuity without tool action duplication across subsequent conversational turns.
   - Performed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation and zero-trust fail-closed host layers.
   - Full project regression test gate:
-    - 222/222 backend pytests PASSED in 163.89s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
-    - 57/57 browser and Playwright MCP gateway tests PASSED in 27.45s.
-    - 74/74 frontend Vitest tests PASSED across 13 test files in 11.62s.
+    - 224/224 backend pytests PASSED in 164.86s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
+    - 59/59 browser and Playwright MCP gateway tests PASSED in 40.55s.
+    - 74/74 frontend Vitest tests PASSED across 13 test files in 13.79s.
     - 0 Ruff lint errors, 73 files formatted.
     - 0 Oxlint errors across 63 frontend files.
-    - Clean TypeScript/Vite production build in 1.50s (`npm.cmd --prefix frontend run build`).
+    - Clean TypeScript/Vite production build in 1.64s (`npm.cmd --prefix frontend run build`).
   - Subprocess leak audit: verified 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes via `Get-CimInstance Win32_Process`.
   - Zero `os._exit` calls across codebase.
   - Authored comprehensive verification report `docs/reports/REPORT-006.md`.

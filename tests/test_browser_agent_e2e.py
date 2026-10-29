@@ -13,6 +13,8 @@ Comprehensive integration tests covering Phase 8 and Phase 10 hardening requirem
 10. Cross-thread isolation rejecting approval decisions for mismatched threads.
 11. HITL cancellation flow preventing mutating browser tool execution.
 12. Stale/expired approval rejection preventing mutating browser tool execution.
+13. Unknown approval rejection and approval record binding integrity.
+14. Graph resumption after checkpoint restoration without tool action duplication.
 """
 
 import uuid
@@ -824,5 +826,134 @@ async def test_browser_hitl_stale_expired_approval_rejection(tmp_path: Any) -> N
     record = await runtime.approval_store.get_approval(approval_id)
     assert record is not None
     assert record.status == "expired"
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_unknown_approval_rejection_and_binding_integrity(
+    tmp_path: Any,
+) -> None:
+    """Verify unknown approval IDs are rejected and approval records bind all required metadata."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-bind-{uuid.uuid4().hex[:6]}"
+
+    # 1. Unknown approval ID must raise KeyError fail-closed
+    with pytest.raises(KeyError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id="appr_nonexistent_9999",
+            decision="approve",
+        ):
+            pass
+    assert "not found" in str(exc_info.value)
+
+    # 2. Trigger legitimate approval pause
+    req = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Click the submit button.",
+    )
+    events = []
+    async for ev in runtime.stream_agent(req):
+        events.append(ev)
+
+    approval_events = [e for e in events if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    appr_data = approval_events[0].data
+    approval_id = appr_data["approval_id"]
+
+    # 3. Assert full binding integrity in ApprovalStore
+    rec = await runtime.approval_store.get_approval(approval_id)
+    assert rec is not None
+    assert rec.thread_id == thread_id
+    assert rec.tool_id == "browser_click"
+    assert rec.server_id == "browser"
+    assert rec.arguments == {"selector": "button#submit-action"}
+    assert rec.status == "pending"
+    assert rec.dispatch_status == "not_dispatched"
+    assert rec.tool_call_id == appr_data["tool_call_id"]
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_checkpoint_continuity_no_action_duplication(tmp_path: Any) -> None:
+    """Verify graph resumption after checkpoint restoration preserves state and prevents
+    tool duplication.
+    """
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-continuity-{uuid.uuid4().hex[:6]}"
+    req1 = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Click the submit button.",
+    )
+
+    # Turn 1: Emit approval_required
+    events_t1 = []
+    async for ev in runtime.stream_agent(req1):
+        events_t1.append(ev)
+    approval_id = [e for e in events_t1 if e.event == "approval_required"][0].data["approval_id"]
+    assert mock_session.click.await_count == 0
+
+    # Turn 2: Approve and complete execution
+    events_t2 = []
+    async for ev in runtime.resume_agent(
+        thread_id=thread_id,
+        approval_id=approval_id,
+        decision="approve",
+        reason="Operator verified target button",
+    ):
+        events_t2.append(ev)
+
+    assert mock_session.click.await_count == 1
+    assert any(e.event == "run_completed" for e in events_t2)
+
+    # Turn 3: Follow-up conversational turn on the exact same thread
+    # Model returns final response without tool calls
+    req2 = AgentStreamRequest(
+        thread_id=thread_id,
+        message="What is the result of the click operation?",
+    )
+    events_t3 = []
+    async for ev in runtime.stream_agent(req2):
+        events_t3.append(ev)
+
+    # Verify tool was NOT executed again on subsequent turn (no duplication)
+    assert mock_session.click.await_count == 1
+    assert any(e.event == "run_completed" for e in events_t3)
 
     await runtime.close()
