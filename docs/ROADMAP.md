@@ -105,7 +105,7 @@ flowchart LR
 - **Frontend Scope**: Live Browser Preview panel in right workspace split displaying real-time viewport frames and step indicators.
 - **UI Deliverable**: User requests to scrape or inspect a URL -> Playwright/Playwright MCP opens page -> UI Browser Preview panel renders live page snapshot and highlights clicked elements.
 - **Test Requirements**: Headless Playwright integration test; Playwright MCP tool verification test; screenshot capture assertion; Playwright UI preview test.
-- **Status**: `NOT STARTED`
+- **Status**: VERIFIED (Formally approved by Project Owner on 2026-10-29; Merge Commit 3110d62)
 
 ---
 
@@ -116,7 +116,7 @@ flowchart LR
 - **Frontend Scope**: Document upload dropzone in prompt console, extracted document table viewer, source citation chips in chat bubbles.
 - **UI Deliverable**: User drops a complex multi-column PDF or financial spreadsheet -> Docling extracts tables -> UI displays extracted table preview and enables conversational Q&A with exact page citations.
 - **Test Requirements**: Complex PDF table parsing test; XLSX multi-sheet extraction test; Crawl4AI markdown conversion test.
-- **Status**: `NOT STARTED`
+- **Status**: IN PROGRESS (Phase 0 Preflight & Architecture Completed; Awaiting Phase 1 Authorization)
 
 ---
 

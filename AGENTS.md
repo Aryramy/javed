@@ -1,10 +1,10 @@
 # AGENTS.md — Agent Onboarding and Operating Protocol
 
 > **Project**: Javed — New JARVIS<br/>
-> **Status**: IN PROGRESS<br/>
-> **Current Stage**: Stage 3 — Deterministic Playwright Execution & Playwright MCP Evaluation (BRICK-006 IN PROGRESS: Phase 0–1 Preflight & Evaluation Completed)<br/>
-> **Active Brick**: BRICK-006 (IN PROGRESS — Phase 0–1 Preflight Completed; Awaiting Phase 2 Authorization)<br/>
-> **Last Revision**: 2026-10-28
+> **Status**: STAGE 4 IN PROGRESS (BRICK-007 Phase 0 Preflight Completed; Awaiting Phase 1 Authorization)<br/>
+> **Current Stage**: Stage 4 — Crawl4AI & Docling Extraction Pipeline<br/>
+> **Active Brick**: BRICK-007 (IN PROGRESS — Phase 0 Preflight Completed; Awaiting Phase 1 Authorization)<br/>
+> **Last Revision**: 2026-10-29
 
 ---
 
@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: BRICK-001, BRICK-002, BRICK-003, BRICK-004, BRICK-005, and BRICK-006 are **`VERIFIED`**. The next milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently `NOT STARTED`. Do not write implementation code or install dependencies for BRICK-007 until explicitly authorized by the Project Owner.
+- **Strict Stage Boundaries**: BRICK-001 through BRICK-006 are **VERIFIED**. The active milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently in Phase 0 preflight. Do not write production implementation code or install dependencies for Phase 1 until explicitly authorized by the Project Owner.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.

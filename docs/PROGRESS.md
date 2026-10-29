@@ -18,7 +18,7 @@
 | **Last Verified Milestone** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | Formally accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
 | **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 224/224 full backend regression pytests passed in 164.86s, 59/59 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, playwright 1.58.0, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-006 VERIFIED & MERGED (Stage 3 Complete; Stage 4 / BRICK-007 NOT STARTED — Awaiting Owner Authorization)** | Authoritative Status |
+| **Overall Status** | **BRICK-007 IN PROGRESS (Phase 0 Preflight Completed; Awaiting Phase 1 Authorization)** | Authoritative Status |
 
 
 ---
@@ -34,7 +34,7 @@ stateDiagram-v2
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
     BRICK_005_Tools_HITL --> BRICK_006_Playwright: VERIFIED (2026-10-29)
-    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: NOT STARTED
+    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: IN PROGRESS (Phase 0)
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
     BRICK_009_Memory_RAG --> BRICK_010_MCP: Blocked

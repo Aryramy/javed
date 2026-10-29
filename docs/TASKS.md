@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **NOT STARTED** | Requires BRICK-006 Verification | Web and multi-format document extraction with table and provenance support. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 0 Preflight & Architecture Completed; 153 packages evaluated; normalized schema & security boundaries defined in docs/bricks/BRICK-007.md. Awaiting Phase 1 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -310,3 +310,40 @@
     - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
 - **Milestone Status**: **`VERIFIED`** (Explicit Project Owner Sign-Off Granted 2026-10-29; Fast-Forward Merge to `master` Completed at `3110d62`).
 - **Stop Condition**: Stage 4 / BRICK-007 is NOT STARTED. Mandatory Stop: Await explicit Project Owner preflight authorization before initiating BRICK-007.
+
+
+---
+
+### TASK-070: BRICK-007 Crawl4AI & Docling Extraction Pipeline
+- **Status**: **IN PROGRESS** (Phase 0 Preflight & Architecture Completed; Awaiting Phase 1 Authorization)
+- **Anchor Commit**: 83cdeea (Verified BRICK-006 synchronized on master)
+- **Working Branch**: feat/brick-007-extraction
+- **Scope & Objectives**:
+  - Implement dual-engine content extraction pipeline: Crawl4AI for web pages and Docling for local documents (PDF, DOCX, XLSX).
+  - Design and enforce a unified intermediate schema (NormalizedDocument) capturing elements, structured tables, and page/bounding-box provenance.
+  - Implement zero-trust security: file size limit (25 MB), page limit (200), MIME magic byte whitelist, archive expansion blocking, path traversal prevention, and pre-crawl SSRF IP gating (BrowserSecurityGuard).
+  - Implement content hashing (SHA-256), SQLite deduplication registry, and incremental document versioning.
+  - Expose LangChain agent tools (extract_web_page, extract_document, list_ingested_documents) gated under host permissions.
+  - Expose FastAPI REST endpoints (/upload, /crawl, /documents) with streaming progress.
+  - Build React Document Ingestion UI and Extraction Viewer in Developer/User modes.
+- **Phase 0 Status**: **COMPLETED** (2026-10-29):
+  - Verified clean master baseline at 83cdeea; branched feat/brick-007-extraction.
+  - Dependency compatibility evaluation completed via uv pip compile: resolved 153 packages in 3.75s with zero conflicts on Windows 11 Python 3.12.15.
+  - Documented offline fallback strategy (SimplePdfPipeline / PyPdfiumDocumentBackend) when vision models or HuggingFace Hub are unreachable.
+  - Designed canonical NormalizedDocument, ExtractionElement, TableRepresentation, and ElementProvenance Pydantic models.
+  - Authored comprehensive specification: docs/bricks/BRICK-007.md.
+  - Updated docs/decisions/ADR-006.md to ACCEPTED (PHASE 0 EVALUATED).
+  - Enforced Phase 0 mandatory stop condition.
+- **Phased Implementation Roadmap**:
+  - **TASK-071 (Phase 1)**: Dependency Installation & Hardware Sandbox
+  - **TASK-072 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
+  - **TASK-073 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator
+  - **TASK-074 (Phase 4)**: Crawl4AI Web Extraction Subsystem
+  - **TASK-075 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX)
+  - **TASK-076 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
+  - **TASK-077 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
+  - **TASK-078 (Phase 8)**: REST API & Developer Mode Telemetry
+  - **TASK-079 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
+  - **TASK-080 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007
+- **Milestone Status**: **IN PROGRESS** (Phase 0 Preflight Completed; Awaiting Phase 1 Authorization).
+- **Stop Condition**: Phase 0 preflight and planning complete. Mandatory Stop: Await explicit Project Owner review and Phase 1 authorization before modifying pyproject.toml or installing dependencies.
