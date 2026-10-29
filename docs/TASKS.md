@@ -287,6 +287,6 @@
   - **Phase 6 Status**: **COMPLETED** (useBrowserStream hook, BrowserPreviewPanel, BrowserView integration, 12/12 Vitest tests passed, 74/74 full Vitest suite passed, clean Vite build)
   - **Phase 7 Status**: **COMPLETED** (@playwright/mcp server config, 3-tier policy constants, 10/10 gateway unit tests passed, 44/44 combined browser tests passed)
   - **Phase 8 Status**: **COMPLETED** (create_browser_tools_inventory, PositiveToolAllowlistMiddleware & assert_safe_tools browser support, AgentRuntimeManager browser binding & HITL click/fill gating, telemetry redaction, 8/8 tests passed in 3.41s, 52/52 combined browser tests passed)
-  - Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)
+  - **Phase 9 Status**: **COMPLETED** (Live OpenRouter browser acceptance suite, model-driven navigation & text extraction, multi-turn state retention, HITL interrupt/resume, budget reconciliation < $0.05, 4/4 tests passed in 23.22s)
   - Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006
-- **Stop Condition**: Phase 8 completed. Await explicit Project Owner authorization before initiating Phase 9.
+- **Stop Condition**: Phase 9 completed. Await explicit Project Owner authorization before initiating Phase 10.

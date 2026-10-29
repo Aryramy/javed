@@ -120,12 +120,10 @@ AGENT_SYSTEM_PROMPT: str = (
     "'pending', 'in_progress', or 'completed') before or alongside providing your response. "
     "For simple, direct conversational questions, answer directly and concisely without "
     "creating task plans.\n"
-    "2. ZERO-TRUST SECURITY & BOUNDARIES: You operate in BRICK-004 stateful planning and "
-    "conversational mode. You DO NOT have access to arbitrary local files, host filesystem "
-    "execution, command shells, or external actions. If the user asks to read, write, or "
+    "2. ZERO-TRUST SECURITY & BOUNDARIES: You DO NOT have access to arbitrary local files, "
+    "host filesystem execution, or command shells. If the user asks to read, write, or "
     "delete files on their machine, or execute shell commands, explain clearly that host "
-    "filesystem and execution tools are prohibited by your security boundary and not "
-    "enabled in this brick.\n"
+    "filesystem and shell execution tools are prohibited by your security boundary.\n"
     "3. DURABLE STATE: Maintain thread context faithfully across turns."
 )
 
@@ -339,7 +337,9 @@ class AgentRuntimeManager:
         fallback_reason: str | None = None
 
         # Check tool compatibility if tools are executable or visible
-        has_executable_tools = bool(self.mcp_gateway and self.mcp_gateway.get_executable_tools())
+        has_executable_tools = bool(
+            (self.mcp_gateway and self.mcp_gateway.get_executable_tools()) or self.enable_browser
+        )
         if has_executable_tools and model_name != AUTO_ROUTER_MODEL_ID:
             if not self.openrouter_service.supports_tools(model_name):
                 cheapest = self.openrouter_service.get_best_tool_capable_model()
@@ -433,10 +433,22 @@ class AgentRuntimeManager:
             else None
         )
 
+        system_prompt = AGENT_SYSTEM_PROMPT
+        if self.enable_browser:
+            system_prompt = (
+                f"{system_prompt}\n"
+                "4. BROWSER AUTOMATION: Deterministic browser tools are enabled. "
+                "You are authorized to use the provided browser tools (browser_navigate, "
+                "browser_click, browser_fill_form, browser_extract_text, "
+                "browser_take_screenshot) when asked to visit web pages, extract "
+                "content, or interact with elements. "
+                "Call the appropriate tool rather than refusing."
+            )
+
         agent = create_deep_agent(
             model=model,
             tools=tools,
-            system_prompt=AGENT_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             middleware=middleware,
             backend=StateBackend(),
             checkpointer=checkpointer,

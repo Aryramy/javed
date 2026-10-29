@@ -307,9 +307,13 @@ flowchart TD
   - Enforced sensitive argument redaction (`redact_browser_tool_args`) across agent event telemetry (`tool_started`, `approval_required`).
   - Implemented comprehensive integration test suite in `tests/test_browser_agent_e2e.py` (8/8 passed).
 
-- **Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)**
-  - Deterministic integration test suite covering navigation, text extraction, form interaction, and screenshot capture.
-  - Strictly bounded live OpenRouter browser test (< $0.05 spend) demonstrating model-driven browser navigation and HITL approval.
+- **Phase 9: Live Multi-Turn Browser Acceptance Suite (Smoke & OpenRouter Bounded)** [COMPLETED]
+  - Authored live OpenRouter browser test suite in `tests/test_live_openrouter_browser.py`:
+    - Scenario 1: Live safe navigation (`browser_navigate`) and text extraction (`browser_extract_text`) on `https://example.com` using `openai/gpt-4o-mini`.
+    - Scenario 2: Multi-turn browser planning scenario verifying state retention across turns in SQLite checkpointer without redundant tool executions.
+    - Scenario 3: Live Human-in-the-Loop (HITL) interrupt on mutating `browser_click`, durable pending approval verification, and successful execution resumption upon approval.
+    - Scenario 4: Cumulative spend tracking and budget reconciliation ensuring total test cost is negligible (< $0.05 USD).
+  - Executed live suite: 4/4 PASSED in 23.22s with zero process leaks and total spend well under budget (< $0.005 USD).
 
 - **Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006**
   - Full project regression test gate: Pytest, Vitest, Ruff, Oxlint, Vite build.
