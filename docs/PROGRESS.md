@@ -1,9 +1,9 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 6.0 (BRICK-001 through BRICK-005 VERIFIED; BRICK-006 Phase 0–1 Preflight Completed)<br/>
+> **Version**: 6.1 (BRICK-001 through BRICK-005 VERIFIED; BRICK-006 Phases 0–10 Completed; READY FOR ACCEPTANCE)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
-> **Last Updated**: 2026-10-28
+> **Last Updated**: 2026-10-29
 
 ---
 
@@ -14,11 +14,11 @@
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 3 / BRICK-006 — Deterministic Playwright Execution & Playwright MCP Evaluation** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
-| **Brick Status** | **`VERIFIED`** | Formally approved and accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
+| **Brick Status** | **`READY FOR ACCEPTANCE`** | Verified across Phases 0–10 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md)) |
 | **Last Verified Milestone** | **BRICK-005: Tool Registry, Validation, Permissions (HITL) & Initial MCP** | Formally accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
-| **Application Code** | **BRICK-005 Phase 9/9B Complete & Verified** (Normal Windows process teardown verified without `os._exit`, 28/28 admin/user mode pytests cleanly pass in 4.03s, 8/8 live OpenRouter acceptance scenarios reconciled with OpenRouter API telemetry ($0.0085 USD total spend vs $0.50 budget), 1/1 real live Chrome Playwright acceptance test in Agent Mode passed in 28.0s through real OpenRouter + Time MCP STDIO server, 62/62 Vitest frontend tests passed across 12 files, 0 Ruff errors, clean Vite production build) | Strict execution boundary |
-| **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-006 IN PROGRESS (Phase 0–1 Preflight & Evaluation Complete; Awaiting Phase 2 Authorization)** | Authoritative Status |
+| **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 222/222 full backend regression pytests passed in 163.89s, 57/57 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
+| **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, playwright 1.58.0, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
+| **Overall Status** | **BRICK-006 READY FOR ACCEPTANCE (Phases 0–10 Complete; Awaiting Project Owner Acceptance)** | Authoritative Status |
 
 
 ---
@@ -33,7 +33,7 @@ stateDiagram-v2
     BRICK_002_FastAPI --> BRICK_003_OpenRouter: VERIFIED (2026-10-22)
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
-    BRICK_005_Tools_HITL --> BRICK_006_Playwright: IN PROGRESS (Phase 0-1)
+    BRICK_005_Tools_HITL --> BRICK_006_Playwright: READY FOR ACCEPTANCE
     BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: Blocked
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
@@ -51,7 +51,8 @@ stateDiagram-v2
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | **`VERIFIED`** | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) | Formally approved and accepted by Project Owner on 2026-10-28. All Phases 0–10 verified (165 deterministic backend pytests, 8 live OpenRouter pytests, 62 vitest, 17 Playwright E2E passed, 0 ruff errors, 0 leak). |
-| **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | `NOT STARTED` | Pending | Next active milestone; awaiting Project Owner Phase 0 preflight authorization. |
+| **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`READY FOR ACCEPTANCE`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Phases 0–10 complete & verified: 222 backend pytests, 57 browser pytests, 4 live OpenRouter tests (< $0.005 USD spend), 74 Vitest tests, 0 leak, clean Vite build. |
+| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 formal owner acceptance. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
 | **BRICK-009** | Persistent Memory & Knowledge Retrieval (RAG) | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. |
@@ -78,9 +79,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-005 Phase 9 complete and verified across live OpenRouter inference, real Chrome Playwright E2E, Vitest, and pytest. Status set to `IN PROGRESS` (Phase 9: READY FOR REVIEW; Phase 10: NOT STARTED).
-2. **Next Authorized Action**: Await explicit Project Owner review and authorization before proceeding to Phase 10 (Final Polish & BRICK-005 Completion).
-3. **Strict Stop Condition**: STOP condition enforced. Phase 9: READY FOR REVIEW, BRICK-005: IN PROGRESS, Phase 10: NOT STARTED. Do not push to master, merge, or begin Phase 10 without explicit authorization.
+1. **Current Action**: BRICK-006 Phases 0 through 10 complete and verified across all deterministic and live browser suites. Status promoted to **`READY FOR ACCEPTANCE`**. Full verification evidence compiled in `docs/reports/REPORT-006.md`.
+2. **Next Authorized Action**: Await explicit Project Owner review and milestone acceptance of BRICK-006 before merging or advancing to BRICK-007.
+3. **Strict Stop Condition**: STOP condition enforced. BRICK-006: READY FOR ACCEPTANCE. Do not push to master, merge, or begin BRICK-007 without explicit Project Owner authorization.
 
 ---
 
@@ -256,6 +257,26 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Full backend deterministic regression suite: 217/217 PASSED.
   - Verified 0 Ruff lint/formatting errors across 73 files.
   - Verified 0 orphaned browser/driver processes on Windows.
+
+- **Phase 10 Implementation & Verification (2026-10-29)**:
+  - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (5 new tests, 13/13 total passed):
+    - Verified exactly-once tool execution across approval resumption with zero replay on duplicate decision attempts.
+    - Verified HITL rejection prevents tool dispatch and duplicate rejection/approval attempts fail-closed.
+    - Verified cross-thread isolation rejecting approval decisions when thread_id does not match the approval record.
+    - Verified cancellation flow preventing mutating browser tool execution.
+    - Verified stale/expired approval rejection preventing mutating browser tool execution.
+  - Performed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation and zero-trust fail-closed host layers.
+  - Full project regression test gate:
+    - 222/222 backend pytests PASSED in 163.89s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
+    - 57/57 browser and Playwright MCP gateway tests PASSED in 27.45s.
+    - 74/74 frontend Vitest tests PASSED across 13 test files in 11.62s.
+    - 0 Ruff lint errors, 73 files formatted.
+    - 0 Oxlint errors across 63 frontend files.
+    - Clean TypeScript/Vite production build in 1.50s (`npm.cmd --prefix frontend run build`).
+  - Subprocess leak audit: verified 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes via `Get-CimInstance Win32_Process`.
+  - Zero `os._exit` calls across codebase.
+  - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
+  - Promoted status to `READY FOR ACCEPTANCE` and enforced mandatory stop condition awaiting Project Owner review.
 
 
 

@@ -1,6 +1,6 @@
-"""Phase 8: Dual-Mode End-to-End Orchestration & LangGraph Agent Binding Tests.
+"""Phase 8 & Phase 10: Dual-Mode End-to-End Orchestration & LangGraph Agent Binding Tests.
 
-Comprehensive integration tests covering all Phase 8 requirements:
+Comprehensive integration tests covering Phase 8 and Phase 10 hardening requirements:
 1. Agent graph initialization with deterministic browser tools inventory bound.
 2. Positive tool allowlist exposure filtering (browser tools visible, privileged tools excluded).
 3. Multi-step browser planning execution (scripted model issuing navigation + text extraction).
@@ -8,12 +8,19 @@ Comprehensive integration tests covering all Phase 8 requirements:
 5. HITL rejection preventing mutating action dispatch (browser_fill_form).
 6. Sensitive input argument redaction in execution telemetry and approval events.
 7. Clean browser session lifecycle and teardown on AgentRuntimeManager.close().
+8. Exactly-once execution and zero replay on duplicate approval resumption.
+9. HITL rejection preventing dispatch and rejecting duplicate decisions.
+10. Cross-thread isolation rejecting approval decisions for mismatched threads.
+11. HITL cancellation flow preventing mutating browser tool execution.
+12. Stale/expired approval rejection preventing mutating browser tool execution.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import aiosqlite
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
@@ -489,5 +496,333 @@ async def test_browser_agent_sensitive_input_redacted_in_telemetry(tmp_path: Any
     # Verify sensitive password value was redacted to '***REDACTED***'
     assert appr_args["value"] == "***REDACTED***"
     assert "super_secret_password_123" not in str(appr_args)
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_exactly_once_and_duplicate_decision_rejection(tmp_path: Any) -> None:
+    """Verify exactly-once tool execution across approval resumption and rejection of replay."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-once-{uuid.uuid4().hex[:6]}"
+    req = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Click the submit button.",
+    )
+
+    # 1. Turn 1: Must pause on approval_required
+    events_turn1 = []
+    async for ev in runtime.stream_agent(req):
+        events_turn1.append(ev)
+
+    approval_events = [e for e in events_turn1 if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    approval_id = approval_events[0].data["approval_id"]
+    mock_session.click.assert_not_awaited()
+
+    # 2. Turn 2: Approve action
+    events_turn2 = []
+    async for ev in runtime.resume_agent(
+        thread_id=thread_id,
+        approval_id=approval_id,
+        decision="approve",
+        reason="Initial authorized operator approval",
+    ):
+        events_turn2.append(ev)
+
+    # Verify tool was executed exactly once
+    assert mock_session.click.await_count == 1
+    assert any(e.event == "tool_completed" for e in events_turn2)
+
+    # 3. Turn 3: Duplicate approval attempt must fail-closed with ValueError
+    with pytest.raises(ValueError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id=approval_id,
+            decision="approve",
+            reason="Duplicate replay attempt",
+        ):
+            pass
+
+    assert "current status is 'approved'" in str(exc_info.value)
+    # Guarantee zero replay: await_count must remain exactly 1
+    assert mock_session.click.await_count == 1
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_rejection_prevents_dispatch_and_duplicate_reject(
+    tmp_path: Any,
+) -> None:
+    """Verify rejection prevents execution and duplicate rejection/approval is blocked."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(
+        tool_name="browser_fill_form",
+        tool_args={"selector": "input#query", "value": "test query"},
+    )
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-retdispatch-{uuid.uuid4().hex[:6]}"
+    req = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Fill the query input.",
+    )
+
+    # 1. Turn 1: Pause on approval_required
+    events_turn1 = []
+    async for ev in runtime.stream_agent(req):
+        events_turn1.append(ev)
+
+    approval_events = [e for e in events_turn1 if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    approval_id = approval_events[0].data["approval_id"]
+
+    # 2. Turn 2: Reject action
+    events_turn2 = []
+    async for ev in runtime.resume_agent(
+        thread_id=thread_id,
+        approval_id=approval_id,
+        decision="reject",
+        reason="Form target is not verified",
+    ):
+        events_turn2.append(ev)
+
+    mock_session.fill_form.assert_not_awaited()
+
+    # 3. Duplicate rejection attempt must fail-closed with ValueError
+    with pytest.raises(ValueError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id=approval_id,
+            decision="reject",
+            reason="Second reject attempt",
+        ):
+            pass
+
+    assert "current status is 'rejected'" in str(exc_info.value)
+    mock_session.fill_form.assert_not_awaited()
+
+    # 4. Attempting to approve an already-rejected approval must also fail-closed
+    with pytest.raises(ValueError) as exc_info_appr:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id=approval_id,
+            decision="approve",
+            reason="Attempt to revive rejected action",
+        ):
+            pass
+
+    assert "current status is 'rejected'" in str(exc_info_appr.value)
+    mock_session.fill_form.assert_not_awaited()
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_wrong_thread_isolation_rejection(tmp_path: Any) -> None:
+    """Verify approval decision is rejected when thread_id does not match the approval record."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id_a = f"test-thread-authoritative-{uuid.uuid4().hex[:6]}"
+    thread_id_b = f"test-thread-attacker-{uuid.uuid4().hex[:6]}"
+
+    req = AgentStreamRequest(
+        thread_id=thread_id_a,
+        message="Click the submit button.",
+    )
+
+    events_turn1 = []
+    async for ev in runtime.stream_agent(req):
+        events_turn1.append(ev)
+
+    approval_events = [e for e in events_turn1 if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    approval_id = approval_events[0].data["approval_id"]
+
+    # Attempting to resume using thread_id_b must fail with Thread mismatch
+    with pytest.raises(ValueError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id_b,
+            approval_id=approval_id,
+            decision="approve",
+            reason="Cross-thread attempt",
+        ):
+            pass
+
+    assert "Thread mismatch" in str(exc_info.value)
+    assert thread_id_a in str(exc_info.value)
+    assert thread_id_b in str(exc_info.value)
+    mock_session.click.assert_not_awaited()
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_cancellation_flow(tmp_path: Any) -> None:
+    """Verify cancelled approval cannot be resumed and mutating tool is never executed."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-cancel-{uuid.uuid4().hex[:6]}"
+    req = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Click the submit button.",
+    )
+
+    events_turn1 = []
+    async for ev in runtime.stream_agent(req):
+        events_turn1.append(ev)
+
+    approval_events = [e for e in events_turn1 if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    approval_id = approval_events[0].data["approval_id"]
+
+    # Explicitly cancel the approval
+    cancelled_record = await runtime.approval_store.cancel_approval(
+        approval_id=approval_id,
+        expected_thread_id=thread_id,
+    )
+    assert cancelled_record.status == "cancelled"
+
+    # Attempting to resume a cancelled approval must fail-closed with ValueError
+    with pytest.raises(ValueError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id=approval_id,
+            decision="approve",
+            reason="Attempt to resume cancelled approval",
+        ):
+            pass
+
+    assert "current status is 'cancelled'" in str(exc_info.value)
+    mock_session.click.assert_not_awaited()
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_hitl_stale_expired_approval_rejection(tmp_path: Any) -> None:
+    """Verify expired approval cannot be decided and tool is never executed."""
+    checkpoint_db = str(tmp_path / "checkpoints.db")
+    approvals_db = str(tmp_path / "approvals.db")
+    settings = Settings(
+        agent_checkpoint_db_path=checkpoint_db,
+        agent_approvals_db_path=approvals_db,
+    )
+    mock_session = _build_mock_browser_session()
+    scripted_model = _ScriptedBrowserMutatingModel(tool_name="browser_click")
+
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=scripted_model,
+        enable_browser=True,
+        browser_session=mock_session,
+        browser_approval_required=True,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-stale-{uuid.uuid4().hex[:6]}"
+    req = AgentStreamRequest(
+        thread_id=thread_id,
+        message="Click the submit button.",
+    )
+
+    events_turn1 = []
+    async for ev in runtime.stream_agent(req):
+        events_turn1.append(ev)
+
+    approval_events = [e for e in events_turn1 if e.event == "approval_required"]
+    assert len(approval_events) == 1
+    approval_id = approval_events[0].data["approval_id"]
+
+    # Artificially expire the approval record in the database
+    past_time = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    async with aiosqlite.connect(approvals_db) as db:
+        await db.execute(
+            "UPDATE pending_approvals SET expires_at = ? WHERE approval_id = ?",
+            (past_time, approval_id),
+        )
+        await db.commit()
+
+    # Attempting to resume an expired approval must fail-closed with ValueError
+    with pytest.raises(ValueError) as exc_info:
+        async for _ in runtime.resume_agent(
+            thread_id=thread_id,
+            approval_id=approval_id,
+            decision="approve",
+            reason="Attempt to resume expired approval",
+        ):
+            pass
+
+    assert "has expired" in str(exc_info.value)
+    mock_session.click.assert_not_awaited()
+
+    # Verify status in database transitioned to 'expired'
+    record = await runtime.approval_store.get_approval(approval_id)
+    assert record is not None
+    assert record.status == "expired"
 
     await runtime.close()

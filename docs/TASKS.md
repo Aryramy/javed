@@ -259,7 +259,7 @@
 ---
 
 ### TASK-060: BRICK-006 Deterministic Playwright Execution & Playwright MCP Evaluation
-- **Status**: **IN PROGRESS** (Phase 0–1 Preflight & Compatibility Evaluation Completed)
+- **Status**: **READY FOR ACCEPTANCE** (Phases 0–10 Complete & Fully Verified)
 - **Anchor Commit**: 1895072 (Verified BRICK-005 synchronized on master)
 - **Working Branch**: feat/brick-006-playwright
 - **Scope & Objectives**:
@@ -279,7 +279,7 @@
     - ALLOWED_READ_ONLY (13 tools): browser_snapshot, browser_take_screenshot, browser_find, browser_console_messages, browser_network_requests, browser_network_request, browser_tabs, browser_wait_for, browser_navigate, browser_navigate_back, browser_resize, browser_emulate_media, browser_hover.
   - Formulated Dual / Hybrid Strategy: in-process Python Playwright for live viewport streaming and deterministic tool execution; @playwright/mcp for standardized MCP interoperability.
   - Authored comprehensive specification: docs/bricks/BRICK-006.md.
-- **Pending Phases**:
+- **Delivered Phases**:
   - **Phase 2 Status**: **COMPLETED** (BrowserEngineManager, ephemeral contexts, 8/8 tests passed in 4.92s, 173/173 full regression passed, 0 leaks)
   - **Phase 3 Status**: **COMPLETED** (BrowserSecurityGuard, SSRF blocker, sensitive field detector, 12/12 security tests passed, 185/185 full regression passed, 0 leaks)
   - **Phase 4 Status**: **COMPLETED** (5 deterministic tools, Pydantic schemas, BrowserSession, argument redaction, 9/9 tests passed in 5.98s, 194/194 full regression passed, 0 leaks)
@@ -288,5 +288,23 @@
   - **Phase 7 Status**: **COMPLETED** (@playwright/mcp server config, 3-tier policy constants, 10/10 gateway unit tests passed, 44/44 combined browser tests passed)
   - **Phase 8 Status**: **COMPLETED** (create_browser_tools_inventory, PositiveToolAllowlistMiddleware & assert_safe_tools browser support, AgentRuntimeManager browser binding & HITL click/fill gating, telemetry redaction, 8/8 tests passed in 3.41s, 52/52 combined browser tests passed)
   - **Phase 9 Status**: **COMPLETED** (Live OpenRouter browser acceptance suite, model-driven navigation & text extraction, multi-turn state retention, HITL interrupt/resume, budget reconciliation < $0.05, 4/4 tests passed in 23.22s)
-  - Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006
-- **Stop Condition**: Phase 9 completed. Await explicit Project Owner authorization before initiating Phase 10.
+  - **Phase 10 Status**: **COMPLETED**:
+    - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (5 new tests, 13/13 total passed):
+      - Exactly-once browser tool execution across approval resumption with zero replay on duplicate decision attempts.
+      - Rejection prevents tool dispatch and duplicate decision attempts fail-closed.
+      - Cross-thread isolation rejecting approval decisions for mismatched thread IDs.
+      - Cancellation flow preventing mutating browser tool execution.
+      - Stale/expired approval rejection preventing mutating browser tool execution.
+    - Completed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation and zero-trust fail-closed host layers.
+    - Full project regression test gate:
+      - 222/222 backend pytests PASSED in 163.89s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
+      - 57/57 browser and Playwright MCP gateway tests PASSED in 27.45s.
+      - 74/74 frontend Vitest tests PASSED across 13 test files in 11.62s.
+      - 0 Ruff lint errors, 73 files formatted.
+      - 0 Oxlint errors across 63 frontend files.
+      - Clean TypeScript/Vite production build in 1.50s (`npm.cmd --prefix frontend run build`).
+    - Subprocess leak audit: verified 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes via `Get-CimInstance Win32_Process`.
+    - Zero `os._exit` calls across codebase.
+    - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
+- **Milestone Status**: **`READY FOR ACCEPTANCE`**
+- **Stop Condition**: BRICK-006 Phases 0–10 complete. Mandatory Stop: Await explicit Project Owner review and milestone acceptance of BRICK-006 before merging or advancing to BRICK-007.

@@ -2,7 +2,7 @@
 
 > **Brick ID**: `BRICK-006`<br/>
 > **Title**: Deterministic Playwright Execution & Playwright MCP Evaluation<br/>
-> **Status**: `IN PROGRESS (Phase 0–1 Preflight & Evaluation)`<br/>
+> **Status**: `READY FOR ACCEPTANCE`<br/>
 > **Author**: Antigravity Full-Stack AI Engineering Team<br/>
 > **Date**: 2026-10-28<br/>
 > **Baseline Anchor**: Commit `1895072` (Verified BRICK-005 synchronized on `master`)<br/>
@@ -315,11 +315,25 @@ flowchart TD
     - Scenario 4: Cumulative spend tracking and budget reconciliation ensuring total test cost is negligible (< $0.05 USD).
   - Executed live suite: 4/4 PASSED in 23.22s with zero process leaks and total spend well under budget (< $0.005 USD).
 
-- **Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006**
-  - Full project regression test gate: Pytest, Vitest, Ruff, Oxlint, Vite build.
-  - Subprocess leak audit: verify 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes.
-  - Author `docs/reports/REPORT-006.md` with complete verification evidence.
-  - Promote status to `READY FOR ACCEPTANCE` and await Project Owner review.
+- **Phase 10: Final Hardening, Windows Teardown Verification, Governance Sync & REPORT-006** [COMPLETED]
+  - Implemented Phase 10 hardening and edge-case test suite in `tests/test_browser_agent_e2e.py` (5 new tests, 13/13 total passed):
+    - Verified exactly-once tool execution across approval resumption with zero replay on duplicate decision attempts.
+    - Verified HITL rejection prevents tool dispatch and duplicate rejection/approval attempts fail-closed.
+    - Verified cross-thread isolation rejecting approval decisions when thread_id does not match the approval record.
+    - Verified cancellation flow preventing mutating browser tool execution.
+    - Verified stale/expired approval rejection preventing mutating browser tool execution.
+  - Performed formal production security audit of `AGENT_SYSTEM_PROMPT` change, verifying instructional vs enforcement separation and zero-trust fail-closed host layers.
+  - Full project regression test gate:
+    - 222/222 backend pytests PASSED in 163.89s with exit code 0 (`pytest --ignore=tests/test_live_openrouter_mcp.py --ignore=tests/test_live_openrouter_browser.py`).
+    - 57/57 browser and Playwright MCP gateway tests PASSED in 27.45s.
+    - 74/74 frontend Vitest tests PASSED across 13 test files in 11.62s.
+    - 0 Ruff lint errors, 73 files formatted.
+    - 0 Oxlint errors across 63 frontend files.
+    - Clean TypeScript/Vite production build in 1.50s (`npm.cmd --prefix frontend run build`).
+  - Subprocess leak audit: verified 0 dangling `chrome.exe`, `node.exe`, or `python.exe` processes via `Get-CimInstance Win32_Process`.
+  - Zero `os._exit` calls across codebase.
+  - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
+  - Promoted status to `READY FOR ACCEPTANCE` and enforced mandatory stop condition awaiting Project Owner review.
 
 ---
 
