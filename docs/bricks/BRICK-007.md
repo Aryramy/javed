@@ -33,11 +33,12 @@ In accordance with **Rule 1 (FOSS-First & Model-Agnostic Foundation)**, **Rule 2
 During Phase 0 preflight, dependency resolution was simulated against the active `.venv` runtime using `uv pip compile`:
 - **Python Version**: Python 3.12.15 (Windows x86_64). Both `crawl4ai` (0.9.5) and `docling` (2.144.0) natively support Python 3.12.
 - **Dependency Resolution**: Resolved 153 packages in 3.75s with zero dependency conflicts against the existing baseline:
-  - `pydantic`: Resolves to Pydantic v2 (v2.12.5 / v2.14.1), fully compatible with `javed` and `langchain`.
+  - `pydantic`: Resolves to Pydantic v2 (v2.12.5 / v2.14.1), Dependency-resolution compatible, pending installation, import, runtime, and teardown verification.
   - `playwright`: Crawl4AI shares `playwright>=1.40.0` (v1.64.1 already verified in BRICK-006).
   - `pypdfium2`: Bundles precompiled PDFium C++ binaries for `win_amd64` (zero external PDF binaries needed).
   - `rapidocr` & `opencv-python-headless`: Provides precompiled Windows wheels for local OCR fallback.
   - `python-docx` & `openpyxl`: Pure-Python parsers for Word and Excel without deep learning overhead.
+  - `torch`: PyTorch 2.15.0 was reported during candidate resolution. Because PyTorch 2.15.0 may originate from a prerelease or test package channel, Phase 1 must audit package indices, reject prereleases, and require verified stable CPU wheels (e.g. PyTorch stable 2.5.x/2.6.x or standard PyPI distribution).
 
 ### 2.2 System & Hardware Resource Profile
 | Subsystem | CPU Impact | Memory Footprint | Disk Storage | Network Behavior |
@@ -50,7 +51,7 @@ During Phase 0 preflight, dependency resolution was simulated against the active
 ### 2.3 Air-Gapped / Offline Resilience Strategy
 - Docling vision models download once from HuggingFace to `%USERPROFILE%/.cache/huggingface/hub`.
 - If network access is disabled or HuggingFace is unreachable:
-  - The pipeline automatically falls back to `SimplePdfPipeline` / `FastPdfPipeline` using `PyPdfiumDocumentBackend`, allowing pure text and simple table extraction without model downloads.
+  - The intended lightweight PDF configuration is `PdfFormatOption` plus `PyPdfiumDocumentBackend` with model-backed OCR, layout, table, formula, and picture stages disabled where supported, allowing lightweight text and table extraction without large model downloads.
   - DOCX, XLSX, and plain text processing remain 100% functional without external network connectivity.
 
 ---
@@ -74,7 +75,7 @@ flowchart TD
         DOCLING["Docling Document Engine<br/>- PDF Layout & TableFormer<br/>- DOCX Section Parser<br/>- XLSX Multi-Sheet Grid Parser"]
     end
 
-    subgraph Normalization ["Normalization & Storage (src/javed/extraction/schema.py & storage.py)"]
+    subgraph Normalization ["Normalization & Storage (Proposed Phase 2/6: schema.py & storage.py)"]
         NORM["NormalizedDocument Pydantic Model<br/>- document_id & source_uri<br/>- content_hash (SHA-256)<br/>- elements: headings, paragraphs, tables<br/>- provenance: page_no, bbox, sheet_name"]
         STORE["Extraction Storage Manager<br/>- data/sources/ (canonical files)<br/>- data/extractions/ (normalized JSON)<br/>- data/tables/ (CSV / JSON tables)<br/>- data/javed.db (SQLite registry)"]
     end
@@ -110,7 +111,7 @@ flowchart TD
 
 ## 4. Normalized Extraction Schema Specification
 
-Every extraction result, regardless of source type, conforms to the canonical `NormalizedDocument` Pydantic model defined in `src/javed/extraction/schema.py`:
+Every extraction result, regardless of source type, will conform to the canonical `NormalizedDocument` Pydantic model (proposed for Phase 2 implementation in `src/javed/extraction/schema.py`):
 
 ```python
 from datetime import datetime
@@ -195,19 +196,20 @@ class NormalizedDocument(BaseModel):
 
 ## 5. Security & Defensive Ingestion Boundaries
 
-| Attack Vector / Failure Mode | Defensive Enforcement Mechanism | Enforcement Layer |
+| Attack Vector / Failure Mode | Defensive Enforcement Mechanism | Status & Enforcement Layer |
 |---|---|---|
-| **Server-Side Request Forgery (SSRF)** | Pre-crawl IP validation via `BrowserSecurityGuard`. Blocks RFC 1918, loopbacks (`127.0.0.1`), link-local metadata (`169.254.169.254`), and numeric encoded IPs. | `src/javed/browser/security.py` |
-| **Zip Bomb / Decompression Attacks** | Strict file type whitelist. Archive formats (`.zip`, `.tar.gz`, `.7z`) are rejected immediately. | `src/javed/extraction/security.py` |
-| **Oversized Document / OOM** | Strict file size cap: **25 MB** default (max 50 MB). Memory check before task acceptance (`psutil.virtual_memory().percent < 90%`). | `src/javed/extraction/security.py` |
-| **Page Count Exhaustion** | Maximum PDF page limit: **200 pages**. Documents exceeding this limit are truncated or rejected. | `src/javed/extraction/security.py` |
-| **Processing Timeout** | Web crawl capped at 30s; document conversion capped at 60s via `asyncio.wait_for`. | Async Worker Gateway |
-| **Path Traversal Attacks** | UUID-based sanitized storage in `data/quarantine/` and `data/sources/`. Blocks `..`, absolute paths, and NTFS stream syntax (`::$DATA`). | `src/javed/extraction/security.py` |
-| **XML External Entity (XXE)** | XML parsers in `python-docx` and `openpyxl` protected via `defusedxml` and strict entity resolution disabling. | Parser Configuration |
-| **Password-Protected Documents** | Fail-closed graceful detection. Returns `ErrorCode.PASSWORD_PROTECTED` with status `FAILED` without worker crash. | `DoclingDocumentExtractor` |
-| **Corrupted / Malformed Files** | Exception containment. Catches parser failures (`PdfiumError`, `BadZipFile`), records diagnostic warning, flags `FAILED`. | Ingestion Pipeline |
-| **Active Code / Embedded Scripts** | PDF embedded JavaScript dictionaries (`/JS`) are ignored. Web extractions strip `<script>`, `<style>`, `<iframe>`, and event attributes. | Parser & Crawler Sanitizer |
-| **Sensitive Content Leaks** | Telemetry and console logging strictly exclude raw document contents. Only document ID, MIME type, page count, and status are logged. | API & Worker Logging |
+| **Server-Side Request Forgery (SSRF)** | Pre-crawl IP validation via `BrowserSecurityGuard`. Blocks RFC 1918, loopbacks (`127.0.0.1`), link-local metadata (`169.254.169.254`), and numeric encoded IPs. | **`Implemented & Verified in BRICK-006`** (`src/javed/browser/security.py`) |
+| **Standalone Archive Ingestion** | Strict file type whitelist. Standalone archive formats (`.zip`, `.tar.gz`, `.7z`) are rejected immediately. | **`Planned for Phase 3`** (`src/javed/extraction/security.py`) |
+| **OOXML Zip Internals & Decompression Bomb** | Bounded inspection of internal ZIP structures in `.docx`, `.xlsx`, `.pptx`: max single entry <= 20 MB, max total uncompressed <= 50 MB, compression ratio < 100:1, max entry count <= 1,000, entry name traversal sanitization (blocking `../`, `..\\`, absolute paths, device names). | **`Planned for Phase 3`** (`src/javed/extraction/security.py`) |
+| **Oversized Document / OOM** | Strict file size cap: **25 MB** default (max 50 MB). Memory check before task acceptance (`psutil.virtual_memory().percent < 90%`). | **`Planned for Phase 3`** (`src/javed/extraction/security.py`) |
+| **Page Count Exhaustion** | Maximum PDF page limit: **200 pages**. Documents exceeding this limit are truncated or rejected. | **`Planned for Phase 3`** (`src/javed/extraction/security.py`) |
+| **Processing Timeout** | Web crawl capped at 30s; document conversion capped at 60s via `asyncio.wait_for`. | **`Planned for Phase 4/5`** (Async Worker Gateway) |
+| **Path Traversal Attacks** | UUID-based sanitized storage in `data/quarantine/` and `data/sources/`. Blocks `..`, absolute paths, and NTFS stream syntax (`::$DATA`). | **`Planned for Phase 3`** (`src/javed/extraction/security.py`) |
+| **XML External Entity (XXE)** | XML parsers in `python-docx` and `openpyxl` protected via `defusedxml` and strict entity resolution disabling. | **`Planned for Phase 3/5`** (Parser Configuration) |
+| **Password-Protected Documents** | Fail-closed graceful detection. Returns `ErrorCode.PASSWORD_PROTECTED` with status `FAILED` without worker crash. | **`Planned for Phase 5`** (`DoclingDocumentExtractor`) |
+| **Corrupted / Malformed Files** | Exception containment. Catches parser failures (`PdfiumError`, `BadZipFile`), records diagnostic warning, flags `FAILED`. | **`Planned for Phase 3/5`** (Ingestion Pipeline) |
+| **Active Code / Embedded Scripts** | PDF embedded JavaScript dictionaries (`/JS`) are ignored. Web extractions strip `<script>`, `<style>`, `<iframe>`, and event attributes. | **`Planned for Phase 4/5`** (Parser & Crawler Sanitizer) |
+| **Sensitive Content Leaks** | Telemetry and console logging strictly exclude raw document contents. Only document ID, MIME type, page count, and status are logged. | **`Planned for Phase 7/8`** (API & Worker Logging) |
 
 ---
 
@@ -266,19 +268,19 @@ To ensure reproducible testing without external network dependencies, a dedicate
 
 ## 9. Phased Execution Plan (Phases 0 through 10)
 
-| Phase | Milestone Phase Description | Key Deliverables & Acceptance Criteria |
-|:---:|---|---|
-| **Phase 0** | **Preflight, Dependency Audit & Architecture Plan** | Author `BRICK-007.md`, evaluate dependencies, design normalized schema, define security boundaries. *(Active)* |
-| **Phase 1** | **Dependency Installation & Hardware Sandbox** | Install `crawl4ai` and `docling` in `pyproject.toml`; verify Windows CPython 3.12 compatibility; verify zero process leaks. |
-| **Phase 2** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. |
-| **Phase 3** | **Security Guard, Quarantine & Whitelist Validator** | Implement `src/javed/extraction/security.py` (`ExtractionSecurityGuard`); file size, page count, MIME magic, XXE, and path traversal guards. |
-| **Phase 4** | **Crawl4AI Web Extraction Subsystem** | Implement `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`); SSRF protection, headless Chromium rendering, markdown generation; deterministic mock HTTP server tests. |
-| **Phase 5** | **Docling Document Extraction Subsystem** | Implement `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`); PDF (layout + table extraction), DOCX, XLSX parsers; provenance tracking; fixture tests. |
-| **Phase 6** | **Storage Manager, Deduplication & Metadata Registry** | Implement `src/javed/extraction/storage.py` (`ExtractionStorageManager`); SQLite `documents` and `extractions` tables; SHA-256 deduplication and versioning. |
-| **Phase 7** | **LangChain Agent Tools & HITL Ingestion Gating** | Implement `src/javed/extraction/tools.py` (`extract_web_page`, `extract_document`, `list_ingested_documents`); bind into LangGraph agent runtime; permission tier enforcement. |
-| **Phase 8** | **REST API & Developer Mode Telemetry** | Implement FastAPI endpoints in `src/javed/api/v1/extraction.py` (`/upload`, `/crawl`, `/documents`); streaming progress events; OpenAPI schemas. |
-| **Phase 9** | **React Document Ingestion UI & Extraction Viewer** | Build `DocumentUploadZone.tsx`, `ExtractionViewer.tsx`, and `TableView.tsx` in `frontend/src/components/extraction/`; Vitest component tests. |
-| **Phase 10** | **Full Regression Gate, Hardening & REPORT-007** | Full test sweep (backend pytest, frontend vitest, ruff, oxlint, build); Windows process leak audit; deliver comprehensive `docs/reports/REPORT-007.md`. |
+| Phase & Task ID | Milestone Phase Description | Key Deliverables & Acceptance Criteria |
+|---|---|---|
+| **Phase 0 (`TASK-070-P0`)** | **Preflight, Dependency Audit & Architecture Plan** | Author `BRICK-007.md`, evaluate dependencies, design normalized schema, define security boundaries. *(Completed)* |
+| **Phase 1 (`TASK-070-P1`)** | **Dependency Installation & Hardware Sandbox** | Install `crawl4ai` and `docling` in `pyproject.toml`; verify Windows CPython 3.12 compatibility; verify zero process leaks. |
+| **Phase 2 (`TASK-070-P2`)** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. |
+| **Phase 3 (`TASK-070-P3`)** | **Security Guard, Quarantine & Whitelist Validator** | Implement `src/javed/extraction/security.py` (`ExtractionSecurityGuard`); file size, page count, MIME magic, OOXML zip inspection, XXE, and path traversal guards. |
+| **Phase 4 (`TASK-070-P4`)** | **Crawl4AI Web Extraction Subsystem** | Implement `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`); SSRF protection, headless Chromium rendering, markdown generation; deterministic mock HTTP server tests. |
+| **Phase 5 (`TASK-070-P5`)** | **Docling Document Extraction Subsystem** | Implement `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`); PDF (layout + table extraction), DOCX, XLSX parsers; provenance tracking; fixture tests. |
+| **Phase 6 (`TASK-070-P6`)** | **Storage Manager, Deduplication & Metadata Registry** | Implement `src/javed/extraction/storage.py` (`ExtractionStorageManager`); SQLite `documents` and `extractions` tables; SHA-256 deduplication and versioning. |
+| **Phase 7 (`TASK-070-P7`)** | **LangChain Agent Tools & HITL Ingestion Gating** | Implement `src/javed/extraction/tools.py` (`extract_web_page`, `extract_document`, `list_ingested_documents`); bind into LangGraph agent runtime; permission tier enforcement. |
+| **Phase 8 (`TASK-070-P8`)** | **REST API & Developer Mode Telemetry** | Implement FastAPI endpoints in `src/javed/api/v1/extraction.py` (`/upload`, `/crawl`, `/documents`); streaming progress events; OpenAPI schemas. |
+| **Phase 9 (`TASK-070-P9`)** | **React Document Ingestion UI & Extraction Viewer** | Build `DocumentUploadZone.tsx`, `ExtractionViewer.tsx`, and `TableView.tsx` in `frontend/src/components/extraction/`; Vitest component tests. |
+| **Phase 10 (`TASK-070-P10`)** | **Full Regression Gate, Hardening & REPORT-007** | Full test sweep (backend pytest, frontend vitest, ruff, oxlint, build); Windows process leak audit; deliver comprehensive `docs/reports/REPORT-007.md`. *(Preserves TASK-080 for BRICK-008)* |
 
 ---
 
@@ -288,3 +290,4 @@ In strict accordance with project rules:
 1. **Phase 0 Stop Point**: Execution halts upon committing the Phase 0 specification and plan. Await explicit Project Owner review and Phase 1 authorization.
 2. **Phase Boundaries**: Advance strictly one phase at a time upon explicit authorization.
 3. **Phase 10 Final Stop Point**: Upon completing Phase 10 verification, deliver `docs/reports/REPORT-007.md` and set status to `READY FOR ACCEPTANCE`. Await explicit Project Owner sign-off before merging into `master`.
+

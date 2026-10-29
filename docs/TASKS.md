@@ -329,21 +329,21 @@
 - **Phase 0 Status**: **COMPLETED** (2026-10-29):
   - Verified clean master baseline at 83cdeea; branched feat/brick-007-extraction.
   - Dependency compatibility evaluation completed via uv pip compile: resolved 153 packages in 3.75s with zero conflicts on Windows 11 Python 3.12.15.
-  - Documented offline fallback strategy (SimplePdfPipeline / PyPdfiumDocumentBackend) when vision models or HuggingFace Hub are unreachable.
-  - Designed canonical NormalizedDocument, ExtractionElement, TableRepresentation, and ElementProvenance Pydantic models.
+  - Documented offline fallback strategy (PdfFormatOption plus PyPdfiumDocumentBackend with model-backed stages disabled) when vision models or HuggingFace Hub are unreachable.
+  - Designed canonical NormalizedDocument, ExtractionElement, TableRepresentation, and ElementProvenance Pydantic models (proposed for Phase 2 implementation in src/javed/extraction/schema.py).
   - Authored comprehensive specification: docs/bricks/BRICK-007.md.
   - Updated docs/decisions/ADR-006.md to ACCEPTED (PHASE 0 EVALUATED).
   - Enforced Phase 0 mandatory stop condition.
 - **Phased Implementation Roadmap**:
-  - **TASK-071 (Phase 1)**: Dependency Installation & Hardware Sandbox
-  - **TASK-072 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
-  - **TASK-073 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator
-  - **TASK-074 (Phase 4)**: Crawl4AI Web Extraction Subsystem
-  - **TASK-075 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX)
-  - **TASK-076 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
-  - **TASK-077 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
-  - **TASK-078 (Phase 8)**: REST API & Developer Mode Telemetry
-  - **TASK-079 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
-  - **TASK-080 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007
+  - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox
+  - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
+  - **TASK-070-P3 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator (Including OOXML ZIP inspection)
+  - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem
+  - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX)
+  - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
+  - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
+  - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
+  - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
+  - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
 - **Milestone Status**: **IN PROGRESS** (Phase 0 Preflight Completed; Awaiting Phase 1 Authorization).
 - **Stop Condition**: Phase 0 preflight and planning complete. Mandatory Stop: Await explicit Project Owner review and Phase 1 authorization before modifying pyproject.toml or installing dependencies.
