@@ -127,6 +127,11 @@ flowchart LR
 - **Frontend Scope**: Browser action timeline in Inspector, interactive takeover button ("Take Control"), step-by-step goal progress bar.
 - **UI Deliverable**: User prompts agent to find a product on an unfamiliar site -> Browser Use autonomously navigates -> live preview streams each step -> stops before checkout with approval modal.
 - **Test Requirements**: Multimodal DOM reasoning test; action timeout and step-limit enforcement test; safety guardrail test.
+- **Mandatory Browser Security Follow-Up Criteria (Inherited from BRICK-006 Architecture Audit)**:
+  - **Redirect Destination Validation**: Deep route-level request interception (`page.route("**/*")`) inspecting and validating HTTP 3xx redirect destination URLs and resolved IPs against RFC 1918 and loopback policies before navigation completes.
+  - **Request-Time Private-Network Validation**: Host-level DNS rebinding and IP inspection on every outbound browser network request before dispatch.
+  - **Subresource and Fetch/XHR Interception**: Comprehensive request routing asserting that third-party scripts, fonts, images, or async fetch/XHR calls cannot probe internal or metadata IP addresses (`169.254.169.254`).
+  - **Page-Created WebSocket Destination Enforcement**: Host interception or termination of page-initiated WebSocket connections targeting internal or untrusted network destinations.
 - **Status**: `NOT STARTED`
 
 ---
@@ -194,6 +199,10 @@ flowchart LR
   - Documentation and verification report finalization (`REPORT-RELEASE.md`).
 - **UI Deliverable**: Zero visual regressions; seamless performance in both User Mode and Developer Mode; production build verification.
 - **Test Requirements**: 100% test pass across unit, contract, integration, E2E, and security test suites.
+- **Mandatory Production Multi-User Browser Criteria (Inherited from BRICK-006 Architecture Audit)**:
+  - **Authenticated Browser-Preview Subscriptions**: Cryptographic user authentication tokens required for WebSocket connection to `/ws/browser` (replacing open origin-only checks).
+  - **Thread and Browser-Session Stream Isolation**: Strict multi-user stream isolation ensuring client A cannot subscribe to, inspect, or intercept viewport frames belonging to thread B or another user.
+  - **Browser-Session Capability Tokens**: Time-bounded, scoped access tokens granting read-only viewport or interactive control to designated client sessions.
 - **Status**: `NOT STARTED`
 
 ---
