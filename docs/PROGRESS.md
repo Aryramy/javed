@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 7.1 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 Phase 1 Completed)<br/>
+> **Version**: 7.2 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 Phase 2 Completed)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
 > **Last Updated**: 2026-10-29
 
@@ -14,11 +14,11 @@
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 4 / BRICK-007 — Crawl4AI & Docling Extraction Pipeline (`IN PROGRESS`)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-007: Crawl4AI & Docling Extraction Pipeline (`IN PROGRESS`)** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
-| **Brick Status** | **`IN PROGRESS`** (Phase 1 Completed; Awaiting Phase 2 Authorization) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
+| **Brick Status** | **`IN PROGRESS`** (Phase 2 Completed; Awaiting Phase 3 Authorization) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
 | **Last Verified Milestone** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | Formally accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
-| **Application Code** | **BRICK-007 Phase 1 Complete** (Pinned `crawl4ai>=0.9.0,<1.0.0`, `docling>=2.140.0,<3.0.0`, `pypdfium2>=5.10.0,<6.0.0` installed via `uv pip sync` with `--torch-backend cpu`; 5/5 extraction smoke tests passed; 229/229 full backend pytests passed in 192.12s; 0 Ruff errors; 0 process/thread leaks) | Strict execution boundary |
+| **Application Code** | **BRICK-007 Phase 2 Complete** (Canonical `NormalizedDocument` intermediate schema & Pydantic models implemented in `src/javed/extraction/schema.py`; zero heavy imports or import side-effects; deterministic canonical JSON hashing without circularity; strict UTC & SHA-256 validation; extra='forbid' fail-closed; 21/21 schema tests passed; 250/250 full regression pytests passed in 229.12s; 0 Ruff errors; 0 process/thread leaks) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.162.0, crawl4ai 0.9.5, docling 2.144.0, pypdfium2 5.14.0, torch 2.15.0+cpu, torchvision 0.29.2+cpu, playwright 1.49.1, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.18, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.4, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-007 IN PROGRESS (Phase 1 Completed; Awaiting Phase 2 Authorization)** | Authoritative Status |
+| **Overall Status** | **BRICK-007 IN PROGRESS (Phase 2 Completed; Awaiting Phase 3 Authorization)** | Authoritative Status |
 
 
 ---
@@ -34,7 +34,7 @@ stateDiagram-v2
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
     BRICK_005_Tools_HITL --> BRICK_006_Playwright: VERIFIED (2026-10-29)
-    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: IN PROGRESS (Phase 1)
+    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: IN PROGRESS (Phase 2)
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
     BRICK_009_Memory_RAG --> BRICK_010_MCP: Blocked
@@ -52,7 +52,7 @@ stateDiagram-v2
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | **`VERIFIED`** | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) | Formally approved and accepted by Project Owner on 2026-10-28. All Phases 0–10 verified (165 deterministic backend pytests, 8 live OpenRouter pytests, 62 vitest, 17 Playwright E2E passed, 0 ruff errors, 0 leak). |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`VERIFIED`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | **`IN PROGRESS`** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) | Phase 1 Completed (dependencies installed via uv, CPU torch, 5/5 extraction smoke tests passed, 229/229 full regression passed, 0 leaks). Awaiting Phase 2 authorization. |
+| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | **`IN PROGRESS`** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) | Phase 2 Completed (canonical NormalizedDocument schema, Pydantic contracts, 21/21 schema tests passed, 250/250 full regression passed, 0 leaks). Awaiting Phase 3 authorization. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
 | **BRICK-009** | Persistent Memory & Knowledge Retrieval (RAG) | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. |
 | **BRICK-010** | Managed Model Context Protocol (MCP) Server Ecosystem | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. |

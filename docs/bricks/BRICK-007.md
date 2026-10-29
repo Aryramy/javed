@@ -272,7 +272,7 @@ To ensure reproducible testing without external network dependencies, a dedicate
 |---|---|---|
 | **Phase 0 (`TASK-070-P0`)** | **Preflight, Dependency Audit & Architecture Plan** | Author `BRICK-007.md`, evaluate dependencies, design normalized schema, define security boundaries. *(Completed)* |
 | **Phase 1 (`TASK-070-P1`)** | **Dependency Installation & Hardware Sandbox** | Install `crawl4ai` and `docling` in `pyproject.toml`; verify Windows CPython 3.12 compatibility; verify zero process leaks. *(Completed & Accepted at `e1ebba9`)* |
-| **Phase 2 (`TASK-070-P2`)** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. |
+| **Phase 2 (`TASK-070-P2`)** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. *(Completed)* |
 | **Phase 3 (`TASK-070-P3`)** | **Security Guard, Quarantine & Whitelist Validator** | Implement `src/javed/extraction/security.py` (`ExtractionSecurityGuard`); file size, page count, MIME magic, OOXML zip inspection, XXE, and path traversal guards. |
 | **Phase 4 (`TASK-070-P4`)** | **Crawl4AI Web Extraction Subsystem** | Implement `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`); SSRF protection, headless Chromium rendering, markdown generation; deterministic mock HTTP server tests. |
 | **Phase 5 (`TASK-070-P5`)** | **Docling Document Extraction Subsystem** | Implement `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`); PDF (layout + table extraction), DOCX, XLSX parsers; provenance tracking; fixture tests. |
@@ -287,6 +287,12 @@ To ensure reproducible testing without external network dependencies, a dedicate
 > 2. Top-level Docling import timing (`import docling`) measures module import, not full converter startup timing.
 > 3. Zero-download verification applies to the lightweight initialization path (`PyPdfiumDocumentBackend` with model-backed stages disabled).
 > 4. Actual extraction performance remains unverified until extractor phases (Phase 4 for Crawl4AI, Phase 5 for Docling).
+
+> [!NOTE] Future OpenCLI Architecture Decision (Roadmap: BRICK-008)
+> - **Candidate Evaluated**: `jackwener/OpenCLI`
+> - **Roadmap Placement**: Formally assigned to **BRICK-008** (Autonomous Web Navigation & Authenticated Sources). Not part of BRICK-007.
+> - **Purpose**: Enable owner-authorized access through a dedicated, logged-in Chrome profile where direct API authorization is unavailable.
+> - **Phase 2 Contract**: `AuthenticatedSourceContext` defines zero-trust metadata contracts (opaque session references, service names, approved domains) strictly excluding secrets, cookies, or profile paths. Zero OpenCLI code, daemons, or extensions installed in BRICK-007.
 
 ---
 
