@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 6.1 (BRICK-001 through BRICK-005 VERIFIED; BRICK-006 Phases 0–10 Completed; READY FOR ACCEPTANCE)<br/>
+> **Version**: 7.0 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 NOT STARTED)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
 > **Last Updated**: 2026-10-29
 
@@ -12,13 +12,13 @@
 | Parameter | Current Value | Authority Reference |
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
-| **Current Stage** | **Stage 3 / BRICK-006 — Deterministic Playwright Execution & Playwright MCP Evaluation** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
-| **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
-| **Brick Status** | **`READY FOR ACCEPTANCE`** | Verified across Phases 0–10 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md)) |
-| **Last Verified Milestone** | **BRICK-005: Tool Registry, Validation, Permissions (HITL) & Initial MCP** | Formally accepted by Project Owner on 2026-10-28 ([REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md)) |
+| **Current Stage** | **Stage 3 / BRICK-006 — Deterministic Playwright Execution & Playwright MCP Evaluation (`VERIFIED`)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
+| **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation (`VERIFIED`)** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
+| **Brick Status** | **`VERIFIED`** | Formally approved and accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
+| **Last Verified Milestone** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | Formally accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
 | **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 224/224 full backend regression pytests passed in 164.86s, 59/59 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, playwright 1.58.0, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-006 READY FOR ACCEPTANCE (Phases 0–10 Complete; Awaiting Project Owner Acceptance)** | Authoritative Status |
+| **Overall Status** | **BRICK-006 VERIFIED & MERGED (Stage 3 Complete; Stage 4 / BRICK-007 NOT STARTED — Awaiting Owner Authorization)** | Authoritative Status |
 
 
 ---
@@ -33,8 +33,8 @@ stateDiagram-v2
     BRICK_002_FastAPI --> BRICK_003_OpenRouter: VERIFIED (2026-10-22)
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
-    BRICK_005_Tools_HITL --> BRICK_006_Playwright: READY FOR ACCEPTANCE
-    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: Blocked
+    BRICK_005_Tools_HITL --> BRICK_006_Playwright: VERIFIED (2026-10-29)
+    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: NOT STARTED
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
     BRICK_009_Memory_RAG --> BRICK_010_MCP: Blocked
@@ -51,7 +51,7 @@ stateDiagram-v2
 | **BRICK-003** | OpenRouter Integration & Live AI Conversations | **`VERIFIED`** | [REPORT-003.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-003.md) | Formally approved by Project Owner on 2026-10-22. Verified: 35 pytest (inc. 5 live smoke tests), 35 vitest, 12 Playwright Chrome E2E, openrouter/auto multi-tier routing, and manual acceptance fixes. |
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | **`VERIFIED`** | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) | Formally approved and accepted by Project Owner on 2026-10-28. All Phases 0–10 verified (165 deterministic backend pytests, 8 live OpenRouter pytests, 62 vitest, 17 Playwright E2E passed, 0 ruff errors, 0 leak). |
-| **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`READY FOR ACCEPTANCE`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Phases 0–10 complete & verified: 222 backend pytests, 57 browser pytests, 4 live OpenRouter tests (< $0.005 USD spend), 74 Vitest tests, 0 leak, clean Vite build. |
+| **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`VERIFIED`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 formal owner acceptance. |
 | **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
 | **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
@@ -79,9 +79,9 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 
 ## 4. Current & Next Authorized Action
 
-1. **Current Action**: BRICK-006 Phases 0 through 10 complete and verified across all deterministic and live browser suites. Status promoted to **`READY FOR ACCEPTANCE`**. Full verification evidence compiled in `docs/reports/REPORT-006.md`.
-2. **Next Authorized Action**: Await explicit Project Owner review and milestone acceptance of BRICK-006 before merging or advancing to BRICK-007.
-3. **Strict Stop Condition**: STOP condition enforced. BRICK-006: READY FOR ACCEPTANCE. Do not push to master, merge, or begin BRICK-007 without explicit Project Owner authorization.
+1. **Current Action**: BRICK-006 formally accepted and merged into `master` at commit `3110d62`. Status promoted to **`VERIFIED`**. Full verification evidence compiled in `docs/reports/REPORT-006.md`.
+2. **Next Authorized Action**: Await explicit Project Owner preflight authorization before initiating Stage 4 / BRICK-007.
+3. **Strict Stop Condition**: STOP condition enforced. Stage 4 / BRICK-007 is NOT STARTED. Do not create branches, install dependencies, or write code for BRICK-007 without explicit Project Owner preflight authorization.
 
 ---
 

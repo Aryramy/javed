@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: BRICK-001, BRICK-002, BRICK-003, BRICK-004, and BRICK-005 are **`VERIFIED`**. The active milestone is **BRICK-006 (Deterministic Playwright Execution & Playwright MCP Evaluation)**, currently in Phase 0–1 preflight and evaluation. Do not write implementation code or install dependencies for Phase 2 until explicitly authorized by the Project Owner.
+- **Strict Stage Boundaries**: BRICK-001, BRICK-002, BRICK-003, BRICK-004, BRICK-005, and BRICK-006 are **`VERIFIED`**. The next milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently `NOT STARTED`. Do not write implementation code or install dependencies for BRICK-007 until explicitly authorized by the Project Owner.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.
