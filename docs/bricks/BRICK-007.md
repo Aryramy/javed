@@ -271,7 +271,7 @@ To ensure reproducible testing without external network dependencies, a dedicate
 | Phase & Task ID | Milestone Phase Description | Key Deliverables & Acceptance Criteria |
 |---|---|---|
 | **Phase 0 (`TASK-070-P0`)** | **Preflight, Dependency Audit & Architecture Plan** | Author `BRICK-007.md`, evaluate dependencies, design normalized schema, define security boundaries. *(Completed)* |
-| **Phase 1 (`TASK-070-P1`)** | **Dependency Installation & Hardware Sandbox** | Install `crawl4ai` and `docling` in `pyproject.toml`; verify Windows CPython 3.12 compatibility; verify zero process leaks. |
+| **Phase 1 (`TASK-070-P1`)** | **Dependency Installation & Hardware Sandbox** | Install `crawl4ai` and `docling` in `pyproject.toml`; verify Windows CPython 3.12 compatibility; verify zero process leaks. *(Completed & Accepted at `e1ebba9`)* |
 | **Phase 2 (`TASK-070-P2`)** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. |
 | **Phase 3 (`TASK-070-P3`)** | **Security Guard, Quarantine & Whitelist Validator** | Implement `src/javed/extraction/security.py` (`ExtractionSecurityGuard`); file size, page count, MIME magic, OOXML zip inspection, XXE, and path traversal guards. |
 | **Phase 4 (`TASK-070-P4`)** | **Crawl4AI Web Extraction Subsystem** | Implement `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`); SSRF protection, headless Chromium rendering, markdown generation; deterministic mock HTTP server tests. |
@@ -281,6 +281,12 @@ To ensure reproducible testing without external network dependencies, a dedicate
 | **Phase 8 (`TASK-070-P8`)** | **REST API & Developer Mode Telemetry** | Implement FastAPI endpoints in `src/javed/api/v1/extraction.py` (`/upload`, `/crawl`, `/documents`); streaming progress events; OpenAPI schemas. |
 | **Phase 9 (`TASK-070-P9`)** | **React Document Ingestion UI & Extraction Viewer** | Build `DocumentUploadZone.tsx`, `ExtractionViewer.tsx`, and `TableView.tsx` in `frontend/src/components/extraction/`; Vitest component tests. |
 | **Phase 10 (`TASK-070-P10`)** | **Full Regression Gate, Hardening & REPORT-007** | Full test sweep (backend pytest, frontend vitest, ruff, oxlint, build); Windows process leak audit; deliver comprehensive `docs/reports/REPORT-007.md`. *(Preserves TASK-080 for BRICK-008)* |
+
+> [!NOTE] Phase 1 Carry-Forward Clarifications (Accepted at commit `e1ebba9`)
+> 1. Direct dependencies are bounded in `pyproject.toml`; exact resolution is recorded by `requirements.lock`.
+> 2. Top-level Docling import timing (`import docling`) measures module import, not full converter startup timing.
+> 3. Zero-download verification applies to the lightweight initialization path (`PyPdfiumDocumentBackend` with model-backed stages disabled).
+> 4. Actual extraction performance remains unverified until extractor phases (Phase 4 for Crawl4AI, Phase 5 for Docling).
 
 ---
 
