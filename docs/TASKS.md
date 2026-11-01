@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3 Security Guard & Quarantine Completed and Hardened (70/70 security tests, 25/25 schema tests, 324/324 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3B Security Guard, Schema Integrity & Defensive Contracts Hardened (74/74 security tests, 25/25 schema tests, 328/328 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -315,7 +315,7 @@
 ---
 
 ### TASK-070: BRICK-007 Crawl4AI & Docling Extraction Pipeline
-- **Status**: **IN PROGRESS** (Phase 3 Security Guard, Quarantine & Defensive Input Validation Completed and Hardened; Awaiting Phase 4 Authorization)
+- **Status**: **IN PROGRESS** (Phase 3B Schema Integrity, Timeout Enforcement & Security Hardening Completed; Awaiting Phase 4 Authorization)
 - **Anchor Commit**: 83cdeea (Verified BRICK-006 synchronized on master)
 - **Working Branch**: feat/brick-007-extraction
 - **Scope & Objectives**:
@@ -367,7 +367,7 @@
   - Verified code quality: 0 Ruff errors, 77 files formatted.
   - Process hygiene verified: 0 dangling Chromium, Node.js, Python, or Docling processes.
   - Enforced Phase 2 stop condition.
-- **Phase 3 Status**: **COMPLETED & HARDENED** (2026-11-01):
+- **Phase 3B Status**: **COMPLETED & HARDENED** (2026-11-01):
   - Implemented extraction security guard and defensive input boundary in `src/javed/extraction/security.py`: `ExtractionSecurityGuard`, `QuarantineManager`, and `SecurityValidationDecision`.
   - Enforced 25 MB default and 50 MB hard ceiling file size validation via streaming consumption (`stage_stream`).
   - Implemented UUID-based isolated quarantine staging (`data/quarantine/`) with safe perms, directory traversal prevention, Windows reserved name sanitization, and atomic no-overwrite creation (`CREATE_NEW`).
@@ -379,19 +379,23 @@
     - Separated `normalized_content_sha256` (pure content/elements) and `extraction_record_sha256` (full extraction record lifecycle digest), with `normalized_output_sha256` alias.
     - Added `__setattr__` on `NormalizedDocument` to clear cached hashes before attribute assignment, completely eliminating stale digests.
     - Hardened `validate_document_contracts` to fail-closed on mismatched explicit hashes.
-  - Hardened asynchronous timeout and cleanup guarantees:
-    - Implemented active file tracking in `QuarantineManager` (`_active_files`, `cleanup_inspection`, `cleanup_all_active`).
-    - Guarded blocking inspections (`pypdfium2`, `zipfile`) with bounded thread executor and timeout in `validate_file`.
+  - Hardened asynchronous timeout, concurrency, and cleanup guarantees:
+    - Implemented active file tracking in `QuarantineManager` (`_active_files`, `cleanup_inspection`, `cleanup_all_active`, `is_inspection_active`).
+    - Managed thread pool executor with bounded timeout in `validate_file`, guaranteeing immediate return without blocking on worker thread termination.
     - Implemented `validate_file_async` executing off event loop with `asyncio.wait_for` and guaranteed quarantine cleanup on timeout or cancellation.
-  - Implemented 70 comprehensive security tests in `tests/test_extraction_security.py` (70/70 passed in 3.30s) and 25 schema tests in `tests/test_extraction_schema.py` (25/25 passed in 0.23s).
-  - Executed full project regression gate: 324/324 backend pytests passed in 191.25s.
+    - Guaranteed semaphore release preventing deadlocks, with worker pool capacity preventing starvation from lingering cancelled tasks.
+    - Enforced late promotion prevention: timed-out or cancelled inspections are verified via `is_inspection_active()` and strictly aborted with unlinking.
+  - Implemented explicit inspection entry points (`validate_bytes`, `validate_stream`, `validate_local_file`, `validate_text`, `validate_html`, and async counterparts) to eliminate ambiguous string inference.
+  - Implemented 74 comprehensive security tests in `tests/test_extraction_security.py` (74/74 passed in 3.55s) and 25 schema tests in `tests/test_extraction_schema.py` (25/25 passed in 0.28s).
+  - Executed full project regression gate: 328/328 backend pytests passed.
   - Verified code quality: 0 Ruff errors, 79 files formatted.
   - Process hygiene verified: 0 dangling Chromium, Node.js, Python, or Docling processes.
-  - Enforced Phase 3 stop condition.
+  - Enforced Phase 3B stop condition.
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox
   - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
   - **TASK-070-P3 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator (Including OOXML ZIP inspection)
+  - **TASK-070-P3B (Phase 3B)**: Schema Hash Integrity, Timeout Enforcement & Defensive Contract Hardening
   - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem
   - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX)
   - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
@@ -399,5 +403,5 @@
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 3 Completed and Hardened; Awaiting Phase 4 Authorization).
-- **Stop Condition**: Phase 3 extraction security guard, quarantine manager, defensive validation, and schema hardening complete. Mandatory Stop: Await explicit Project Owner review and Phase 4 authorization before authoring Crawl4AI web extraction subsystem.
+- **Milestone Status**: **IN PROGRESS** (Phase 3B Completed and Hardened; Awaiting Phase 4 Authorization).
+- **Stop Condition**: Phase 3B extraction security guard, quarantine manager, defensive validation, and schema hardening complete. Mandatory Stop: Await explicit Project Owner review and Phase 4 authorization before authoring Crawl4AI web extraction subsystem.

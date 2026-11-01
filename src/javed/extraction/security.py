@@ -301,6 +301,13 @@ class QuarantineManager:
         if target:
             self.cleanup(target)
 
+    def is_inspection_active(self, inspection_id: str | None) -> bool:
+        """Check if an inspection ID is actively tracked and not cleaned up or aborted."""
+        if not inspection_id:
+            return True
+        with self._lock:
+            return inspection_id in self._active_files
+
     def cleanup_all_active(self) -> int:
         """Purge all currently tracked active quarantine files."""
         with self._lock:
@@ -384,6 +391,231 @@ class ExtractionSecurityGuard:
         self.config = config or SecurityGuardConfig()
         self.quarantine_mgr = QuarantineManager(self.config.quarantine_root)
         self._semaphore = threading.Semaphore(self.config.max_concurrent_inspections)
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(self.config.max_concurrent_inspections * 2, 4),
+            thread_name_prefix="javed-extraction-guard",
+        )
+        self._closed = False
+
+    def close(self) -> None:
+        """Shut down background worker pool."""
+        if not self._closed:
+            self._closed = True
+            self._executor.shutdown(wait=False, cancel_futures=True)
+
+    def __enter__(self) -> ExtractionSecurityGuard:
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    # -------------------------------------------------------------------------
+    # Explicit Inspection Entry Points (Preferred over ambiguous string inputs)
+    # -------------------------------------------------------------------------
+
+    def validate_bytes(
+        self,
+        data: bytes,
+        original_filename: str,
+        declared_mime: str | None = None,
+        inspection_id: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Explicit entry point: validate in-memory byte buffer."""
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError("validate_bytes requires bytes or bytearray input")
+        return self.validate_file(
+            source=bytes(data),
+            original_filename=original_filename,
+            declared_mime=declared_mime,
+            declared_size=len(data),
+            inspection_id=inspection_id,
+        )
+
+    def validate_stream(
+        self,
+        stream: BinaryIO,
+        original_filename: str,
+        declared_mime: str | None = None,
+        declared_size: int | None = None,
+        inspection_id: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Explicit entry point: validate binary stream / file-like object."""
+        if not hasattr(stream, "read"):
+            raise TypeError("validate_stream requires a readable binary stream")
+        return self.validate_file(
+            source=stream,
+            original_filename=original_filename,
+            declared_mime=declared_mime,
+            declared_size=declared_size,
+            inspection_id=inspection_id,
+        )
+
+    def validate_local_file(
+        self,
+        file_path: Path | str,
+        original_filename: str | None = None,
+        declared_mime: str | None = None,
+        inspection_id: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Explicit entry point: validate an existing local file on disk."""
+        p = Path(file_path).resolve()
+        name = original_filename or p.name
+        return self.validate_file(
+            source=p,
+            original_filename=name,
+            declared_mime=declared_mime,
+            inspection_id=inspection_id,
+        )
+
+    def validate_text(
+        self,
+        text: str,
+        original_filename: str = "document.txt",
+        inspection_id: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Explicit entry point: validate plain text content."""
+        if not isinstance(text, str):
+            raise TypeError("validate_text requires str input")
+        name = (
+            original_filename
+            if original_filename.endswith((".txt", ".text", ".md", ".markdown", ".csv"))
+            else f"{original_filename}.txt"
+        )
+        data = text.encode("utf-8")
+        return self.validate_file(
+            source=data,
+            original_filename=name,
+            declared_mime="text/plain",
+            declared_size=len(data),
+            inspection_id=inspection_id,
+        )
+
+    def validate_html(
+        self,
+        html: str,
+        original_filename: str = "document.html",
+        inspection_id: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Explicit entry point: validate raw HTML content.
+
+        Notice: Preflight classification and script pattern detection flag untrusted markers;
+        preflight acceptance does not render HTML trusted or safe for unescaped DOM insertion.
+        """
+        if not isinstance(html, str):
+            raise TypeError("validate_html requires str input")
+        name = (
+            original_filename
+            if original_filename.endswith((".html", ".htm"))
+            else f"{original_filename}.html"
+        )
+        data = html.encode("utf-8")
+        return self.validate_file(
+            source=data,
+            original_filename=name,
+            declared_mime="text/html",
+            declared_size=len(data),
+            inspection_id=inspection_id,
+        )
+
+    # -------------------------------------------------------------------------
+    # Asynchronous Explicit Entry Points
+    # -------------------------------------------------------------------------
+
+    async def validate_bytes_async(
+        self,
+        data: bytes,
+        original_filename: str,
+        declared_mime: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Asynchronously validate in-memory byte buffer without blocking event loop."""
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError("validate_bytes_async requires bytes or bytearray input")
+        return await self.validate_file_async(
+            source=bytes(data),
+            original_filename=original_filename,
+            declared_mime=declared_mime,
+            declared_size=len(data),
+        )
+
+    async def validate_stream_async(
+        self,
+        stream: BinaryIO,
+        original_filename: str,
+        declared_mime: str | None = None,
+        declared_size: int | None = None,
+    ) -> SecurityValidationDecision:
+        """Asynchronously validate binary stream without blocking event loop."""
+        if not hasattr(stream, "read"):
+            raise TypeError("validate_stream_async requires a readable binary stream")
+        return await self.validate_file_async(
+            source=stream,
+            original_filename=original_filename,
+            declared_mime=declared_mime,
+            declared_size=declared_size,
+        )
+
+    async def validate_local_file_async(
+        self,
+        file_path: Path | str,
+        original_filename: str | None = None,
+        declared_mime: str | None = None,
+    ) -> SecurityValidationDecision:
+        """Asynchronously validate an existing local file without blocking event loop."""
+        p = Path(file_path).resolve()
+        name = original_filename or p.name
+        return await self.validate_file_async(
+            source=p,
+            original_filename=name,
+            declared_mime=declared_mime,
+        )
+
+    async def validate_text_async(
+        self,
+        text: str,
+        original_filename: str = "document.txt",
+    ) -> SecurityValidationDecision:
+        """Asynchronously validate plain text without blocking event loop."""
+        if not isinstance(text, str):
+            raise TypeError("validate_text_async requires str input")
+        name = (
+            original_filename
+            if original_filename.endswith((".txt", ".text", ".md", ".markdown", ".csv"))
+            else f"{original_filename}.txt"
+        )
+        data = text.encode("utf-8")
+        return await self.validate_file_async(
+            source=data,
+            original_filename=name,
+            declared_mime="text/plain",
+            declared_size=len(data),
+        )
+
+    async def validate_html_async(
+        self,
+        html: str,
+        original_filename: str = "document.html",
+    ) -> SecurityValidationDecision:
+        """Asynchronously validate raw HTML content without blocking event loop."""
+        if not isinstance(html, str):
+            raise TypeError("validate_html_async requires str input")
+        name = (
+            original_filename
+            if original_filename.endswith((".html", ".htm"))
+            else f"{original_filename}.html"
+        )
+        data = html.encode("utf-8")
+        return await self.validate_file_async(
+            source=data,
+            original_filename=name,
+            declared_mime="text/html",
+            declared_size=len(data),
+        )
 
     def validate_file(
         self,
@@ -396,12 +628,15 @@ class ExtractionSecurityGuard:
         """Execute complete defensive preflight validation on an input source.
 
         Input Typing Notice:
-        Callers must provide explicit source types or declared MIME types when known.
-        Security guard validates inputs fail-closed against magic signatures and
-        structural indicators rather than trusting arbitrary user-supplied extension strings.
+        Callers should prefer explicit entry points (`validate_bytes`, `validate_stream`,
+        `validate_local_file`, `validate_text`, `validate_html`) over passing ambiguous string
+        references to `validate_file`. Security guard validates inputs fail-closed against
+        magic signatures and structural indicators rather than trusting arbitrary user-supplied
+        extension strings.
 
         Guarantees that both concurrency waiting and deep content analysis (PyPDFium2,
-        zip parsing) strictly respect preflight_timeout_seconds and never leak quarantine files.
+        zip parsing) strictly respect preflight_timeout_seconds, release semaphores,
+        prevent late promotion, and never leak quarantine files.
         """
         active_id = inspection_id or str(uuid.uuid4())
         start_time = time.monotonic()
@@ -422,32 +657,32 @@ class ExtractionSecurityGuard:
         remaining_timeout = max(self.config.preflight_timeout_seconds - elapsed, 0.05)
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    self._validate_file_internal,
-                    source=source,
-                    original_filename=original_filename,
-                    declared_mime=declared_mime,
-                    declared_size=declared_size,
-                    inspection_id=active_id,
+            future = self._executor.submit(
+                self._validate_file_internal,
+                source=source,
+                original_filename=original_filename,
+                declared_mime=declared_mime,
+                declared_size=declared_size,
+                inspection_id=active_id,
+            )
+            try:
+                return future.result(timeout=remaining_timeout)
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                self.quarantine_mgr.cleanup_inspection(active_id)
+                return SecurityValidationDecision(
+                    outcome=SecurityDecisionOutcome.INSPECTION_FAILED,
+                    source_type=SourceType.TEXT,
+                    verified_mime_type="application/octet-stream",
+                    byte_count=0,
+                    content_sha256="",
+                    sanitized_display_name="timeout_cancelled",
+                    error_code=ExtractionErrorCode.EXTRACTION_TIMEOUT,
+                    error_message=(
+                        f"Security preflight inspection timed out after "
+                        f"{self.config.preflight_timeout_seconds}s during deep analysis"
+                    ),
                 )
-                try:
-                    return future.result(timeout=remaining_timeout)
-                except concurrent.futures.TimeoutError:
-                    self.quarantine_mgr.cleanup_inspection(active_id)
-                    return SecurityValidationDecision(
-                        outcome=SecurityDecisionOutcome.INSPECTION_FAILED,
-                        source_type=SourceType.TEXT,
-                        verified_mime_type="application/octet-stream",
-                        byte_count=0,
-                        content_sha256="",
-                        sanitized_display_name="timeout_cancelled",
-                        error_code=ExtractionErrorCode.EXTRACTION_TIMEOUT,
-                        error_message=(
-                            f"Security preflight inspection timed out after "
-                            f"{self.config.preflight_timeout_seconds}s during deep analysis"
-                        ),
-                    )
         finally:
             self._semaphore.release()
 
@@ -457,6 +692,7 @@ class ExtractionSecurityGuard:
         original_filename: str,
         declared_mime: str | None = None,
         declared_size: int | None = None,
+        inspection_id: str | None = None,
     ) -> SecurityValidationDecision:
         """Asynchronously execute defensive preflight validation without blocking the event loop.
 
@@ -465,9 +701,10 @@ class ExtractionSecurityGuard:
            execute off the asyncio event loop via thread executor.
         2. Strictly respects preflight_timeout_seconds.
         3. Immediate quarantine cleanup if cancelled or timed out.
+        4. Concurrency semaphore is always released, preventing deadlock.
         """
         loop = asyncio.get_running_loop()
-        active_id = str(uuid.uuid4())
+        active_id = inspection_id or str(uuid.uuid4())
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(
@@ -695,6 +932,7 @@ class ExtractionSecurityGuard:
             )
 
         # 5. Format-Specific Deep Inspection
+        final_decision: SecurityValidationDecision
         # A. PDF
         if header.startswith(MAGIC_PDF):
             if ext != ".pdf":
@@ -731,41 +969,62 @@ class ExtractionSecurityGuard:
             )
             if pdf_decision.outcome != SecurityDecisionOutcome.ACCEPTED:
                 self.quarantine_mgr.cleanup(quarantine_path)
-                return pdf_decision
-            return pdf_decision
+            final_decision = pdf_decision
 
         # B. Office Containers (DOCX, XLSX, PPTX) or Prohibited Standalone ZIP
-        if header.startswith(MAGIC_ZIP):
-            return self._preflight_zip_container(
+        elif header.startswith(MAGIC_ZIP):
+            final_decision = self._preflight_zip_container(
                 quarantine_path, byte_count, content_sha256, sanitized_name, ext, declared_mime
             )
 
         # C. Local HTML
-        if ext in (".html", ".htm"):
-            return self._preflight_html(
+        elif ext in (".html", ".htm"):
+            final_decision = self._preflight_html(
                 quarantine_path, byte_count, content_sha256, sanitized_name, header
             )
 
         # D. Plain Text / Markdown / CSV
-        if ext in (".txt", ".text", ".md", ".markdown", ".csv"):
-            return self._preflight_text(
+        elif ext in (".txt", ".text", ".md", ".markdown", ".csv"):
+            final_decision = self._preflight_text(
                 quarantine_path, byte_count, content_sha256, sanitized_name, ext, header
             )
 
-        # Unrecognized generic binary
-        self.quarantine_mgr.cleanup(quarantine_path)
-        return SecurityValidationDecision(
-            outcome=SecurityDecisionOutcome.REJECTED,
-            source_type=SourceType.TEXT,
-            verified_mime_type="application/octet-stream",
-            byte_count=byte_count,
-            content_sha256=content_sha256,
-            sanitized_display_name=sanitized_name,
-            error_code=ExtractionErrorCode.UNSUPPORTED_FORMAT,
-            error_message=(
-                f"Unsupported format or unrecognized binary structure for extension '{ext}'"
-            ),
-        )
+        else:
+            # Unrecognized generic binary
+            self.quarantine_mgr.cleanup(quarantine_path)
+            return SecurityValidationDecision(
+                outcome=SecurityDecisionOutcome.REJECTED,
+                source_type=SourceType.TEXT,
+                verified_mime_type="application/octet-stream",
+                byte_count=byte_count,
+                content_sha256=content_sha256,
+                sanitized_display_name=sanitized_name,
+                error_code=ExtractionErrorCode.UNSUPPORTED_FORMAT,
+                error_message=(
+                    f"Unsupported format or unrecognized binary structure for extension '{ext}'"
+                ),
+            )
+
+        # Late Promotion Prevention Check:
+        # If this inspection timed out or was cancelled while deep analysis was running,
+        # inspection_id has been removed from quarantine_mgr._active_files and cleaned up.
+        # Under NO circumstances should late execution promote or return an ACCEPTED decision.
+        if final_decision.outcome == SecurityDecisionOutcome.ACCEPTED:
+            if inspection_id and not self.quarantine_mgr.is_inspection_active(inspection_id):
+                if quarantine_path:
+                    self.quarantine_mgr.cleanup(quarantine_path)
+                return SecurityValidationDecision(
+                    outcome=SecurityDecisionOutcome.INSPECTION_FAILED,
+                    source_type=final_decision.source_type,
+                    verified_mime_type=final_decision.verified_mime_type,
+                    byte_count=byte_count,
+                    content_sha256=content_sha256,
+                    sanitized_display_name=sanitized_name,
+                    error_code=ExtractionErrorCode.EXTRACTION_TIMEOUT,
+                    error_message="Inspection was cancelled or timed out during processing",
+                )
+
+        return final_decision
 
     def _preflight_pdf(
         self,

@@ -878,3 +878,187 @@ async def test_async_validation_cancellation_cleanup(temp_quarantine: Path):
     # Semaphore must be released so subsequent calls do not deadlock
     assert custom_guard._semaphore.acquire(timeout=0.1)
     custom_guard._semaphore.release()
+    custom_guard.close()
+
+
+def test_timeout_enforcement_semaphore_release_and_no_late_promotion(temp_quarantine: Path):
+    """Prove synchronous timeout triggers fast, cleans up, and prevents late promotion."""
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=0.1,
+        max_concurrent_inspections=1,
+    )
+    with ExtractionSecurityGuard(config) as custom_guard:
+        pdf_bytes = make_minimal_pdf(pages=1)
+
+        def slow_pdf_preflight(*args, **kwargs):
+            time.sleep(0.35)
+            return SecurityValidationDecision(
+                outcome=SecurityDecisionOutcome.ACCEPTED,
+                source_type=SourceType.PDF,
+                verified_mime_type="application/pdf",
+                byte_count=len(pdf_bytes),
+                content_sha256="",
+                sanitized_display_name="slow.pdf",
+            )
+
+        start = time.monotonic()
+        with patch.object(custom_guard, "_preflight_pdf", side_effect=slow_pdf_preflight):
+            timeout_dec = custom_guard.validate_file(pdf_bytes, "slow.pdf")
+        elapsed = time.monotonic() - start
+
+        # 1. Returned within bounded timeout, not waiting for 0.35s sleep
+        assert elapsed < 0.25
+        assert timeout_dec.outcome == SecurityDecisionOutcome.INSPECTION_FAILED
+        assert timeout_dec.error_code == ExtractionErrorCode.EXTRACTION_TIMEOUT
+
+        # 2. Immediate quarantine cleanup
+        assert list(temp_quarantine.iterdir()) == []
+
+        # 3. Semaphore released and subsequent validation succeeds without deadlock
+        valid_dec = custom_guard.validate_file(pdf_bytes, "normal.pdf")
+        assert valid_dec.outcome == SecurityDecisionOutcome.ACCEPTED
+        custom_guard.quarantine_mgr.cleanup(valid_dec.quarantine_path)
+        assert list(temp_quarantine.iterdir()) == []
+
+        # 4. No late promotion: wait for background worker sleep to elapse
+        time.sleep(0.3)
+        assert list(temp_quarantine.iterdir()) == []
+        assert custom_guard.quarantine_mgr._active_files == {}
+
+
+@pytest.mark.asyncio
+async def test_async_timeout_enforcement_semaphore_and_no_late_promotion(temp_quarantine: Path):
+    """Prove async timeout executes off-loop, cleans up, and prevents late promotion."""
+    import asyncio
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=0.1,
+        max_concurrent_inspections=1,
+    )
+    with ExtractionSecurityGuard(config) as custom_guard:
+        pdf_bytes = make_minimal_pdf(pages=1)
+
+        def slow_pdf_preflight(*args, **kwargs):
+            time.sleep(0.35)
+            return SecurityValidationDecision(
+                outcome=SecurityDecisionOutcome.ACCEPTED,
+                source_type=SourceType.PDF,
+                verified_mime_type="application/pdf",
+                byte_count=len(pdf_bytes),
+                content_sha256="",
+                sanitized_display_name="slow_async.pdf",
+            )
+
+        with patch.object(custom_guard, "_preflight_pdf", side_effect=slow_pdf_preflight):
+            timeout_dec = await custom_guard.validate_file_async(pdf_bytes, "slow_async.pdf")
+
+        assert timeout_dec.outcome == SecurityDecisionOutcome.INSPECTION_FAILED
+        assert timeout_dec.error_code == ExtractionErrorCode.EXTRACTION_TIMEOUT
+        assert list(temp_quarantine.iterdir()) == []
+
+        # Subsequent async call succeeds without deadlock
+        valid_dec = await custom_guard.validate_file_async(pdf_bytes, "normal_async.pdf")
+        assert valid_dec.outcome == SecurityDecisionOutcome.ACCEPTED
+        custom_guard.quarantine_mgr.cleanup(valid_dec.quarantine_path)
+        assert list(temp_quarantine.iterdir()) == []
+
+        # Wait for background thread to complete and verify no late promotion
+        await asyncio.sleep(0.3)
+        assert list(temp_quarantine.iterdir()) == []
+        assert custom_guard.quarantine_mgr._active_files == {}
+
+
+def test_explicit_entry_points_bytes_stream_file_text_html(
+    guard: ExtractionSecurityGuard, temp_quarantine: Path, tmp_path: Path
+):
+    """Prove explicit inspection entry points work without ambiguous string inference."""
+    # 1. validate_bytes
+    pdf_bytes = make_minimal_pdf(pages=1)
+    dec_bytes = guard.validate_bytes(pdf_bytes, "explicit.pdf")
+    assert dec_bytes.outcome == SecurityDecisionOutcome.ACCEPTED
+    assert dec_bytes.source_type == SourceType.PDF
+    guard.quarantine_mgr.cleanup(dec_bytes.quarantine_path)
+
+    with pytest.raises(TypeError):
+        guard.validate_bytes("not bytes", "test.pdf")  # type: ignore[arg-type]
+
+    # 2. validate_stream
+    buf = io.BytesIO(pdf_bytes)
+    dec_stream = guard.validate_stream(buf, "stream.pdf")
+    assert dec_stream.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_stream.quarantine_path)
+
+    with pytest.raises(TypeError):
+        guard.validate_stream(b"raw bytes", "stream.pdf")  # type: ignore[arg-type]
+
+    # 3. validate_local_file
+    disk_file = tmp_path / "on_disk.pdf"
+    disk_file.write_bytes(pdf_bytes)
+    dec_file = guard.validate_local_file(disk_file)
+    assert dec_file.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_file.quarantine_path)
+
+    # 4. validate_text
+    dec_text = guard.validate_text("Javed agent operational log.", "log.txt")
+    assert dec_text.outcome == SecurityDecisionOutcome.ACCEPTED
+    assert dec_text.source_type == SourceType.TEXT
+    guard.quarantine_mgr.cleanup(dec_text.quarantine_path)
+
+    with pytest.raises(TypeError):
+        guard.validate_text(b"bytes", "log.txt")  # type: ignore[arg-type]
+
+    # 5. validate_html
+    html_content = "<!DOCTYPE html><html><body><h1>Header</h1><p>Text</p></body></html>"
+    dec_html = guard.validate_html(html_content, "index.html")
+    assert dec_html.outcome == SecurityDecisionOutcome.ACCEPTED
+    assert dec_html.source_type == SourceType.WEB_PAGE
+    guard.quarantine_mgr.cleanup(dec_html.quarantine_path)
+
+    with pytest.raises(TypeError):
+        guard.validate_html(b"bytes", "index.html")  # type: ignore[arg-type]
+
+    assert list(temp_quarantine.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_async_explicit_entry_points(
+    guard: ExtractionSecurityGuard, temp_quarantine: Path, tmp_path: Path
+):
+    """Prove asynchronous explicit inspection entry points execute cleanly."""
+    pdf_bytes = make_minimal_pdf(pages=1)
+
+    # 1. validate_bytes_async
+    dec_b = await guard.validate_bytes_async(pdf_bytes, "async.pdf")
+    assert dec_b.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_b.quarantine_path)
+
+    # 2. validate_stream_async
+    buf = io.BytesIO(pdf_bytes)
+    dec_s = await guard.validate_stream_async(buf, "async_stream.pdf")
+    assert dec_s.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_s.quarantine_path)
+
+    # 3. validate_local_file_async
+    disk_file = tmp_path / "async_disk.pdf"
+    disk_file.write_bytes(pdf_bytes)
+    dec_f = await guard.validate_local_file_async(disk_file)
+    assert dec_f.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_f.quarantine_path)
+
+    # 4. validate_text_async
+    dec_t = await guard.validate_text_async("Plain text async validation.", "async.txt")
+    assert dec_t.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_t.quarantine_path)
+
+    # 5. validate_html_async
+    html_doc = "<html><body><article><p>Async HTML article</p></article></body></html>"
+    dec_h = await guard.validate_html_async(html_doc, "async.html")
+    assert dec_h.outcome == SecurityDecisionOutcome.ACCEPTED
+    guard.quarantine_mgr.cleanup(dec_h.quarantine_path)
+
+    assert list(temp_quarantine.iterdir()) == []
