@@ -314,6 +314,21 @@ To ensure reproducible testing without external network dependencies, a dedicate
 >     - **Parent Invalidation on Unfinalized Child Models**: In unfinalized documents, child models hold weak backreferences (`_root_doc_ref`). Mutating any nested model automatically notifies the parent document to clear all cached hash fields (`normalized_content_sha256`, `extraction_record_sha256`, `normalized_output_sha256`).
 >     - **Mandatory Hash Reverification before Trust Boundaries**: `verify_trust_boundary(doc)` and `assert_hash_integrity()` recompute cryptographic digests from scratch against the live object graph. Even if low-level reflection (`object.__setattr__`) bypasses `__setattr__`, any stale or drifted digest is immediately caught and rejected with `HashIntegrityError`. Unfinalized documents are strictly rejected at trust boundaries.
 
+> [!NOTE] Phase 3C Finalization & Nested Mutation Integrity Contract
+> 1. **Nested Mutation Analysis & Bypass Findings**:
+>    - In unfinalized draft documents, in-place list mutations (`document.elements.append(...)`, `document.warnings.append(...)`) modify collections directly and bypass `NormalizedDocument.__setattr__`. Stored hashes are therefore explicitly unauthoritative during drafting.
+>    - Live cryptographic verification (`verify_hashes()` / `verify_hash_integrity()`) recomputes normalized-content and extraction-record digests from the live object graph without trusting stored fields, immediately catching any nested list or collection mutation fail-closed.
+>    - Direct nested model attribute mutations (`document.metadata.title = ...`, `document.elements[0].text = ...`, `document.elements[0].table.rows[0][0].value = ...`) notify the root document via recursive weak backreferences (`_root_doc_ref`) and immediately invalidate cached digests to `None`.
+> 2. **Adopted Integrity Model (Preferred Model)**:
+>    - **Draft Phase**: `NormalizedDocument` is mutable during pipeline assembly (`is_finalized == False`). Collections (`elements`, `warnings`, `errors`, `table.rows`, `custom_attributes`) are standard mutable Python `list` and `dict` instances for straightforward extraction builder assembly.
+>    - **Explicit Finalization**: Calling `doc.finalize()` validates all document contracts, freshly computes canonical digests from the live content and record, and deeply freezes the entire document hierarchy into immutable representations (`ReadOnlyList`, `ReadOnlyDict`).
+>    - **Finalized Immutability**: Finalized documents reject all direct field mutations, nested model mutations, collection appends/modifications, and attribute deletions with `TypeError`.
+>    - **Trust Boundary Enforcement**: `verify_trust_boundary(doc, require_finalized=True)` requires `doc.is_finalized is True` and asserts live hash integrity (`assert_hash_integrity()`), failing closed with `HashIntegrityError` on any drift or unfinalized state.
+> 3. **Compatibility-Alias Disposition**:
+>    - `ImmutableExtractionBase` is formally deprecated as a compatibility alias for `ExtractionBaseModel`. Unfinalized models are explicitly documented as mutable drafts, not immutable instances.
+> 4. **Table Cell Property**:
+>    - `TableCell.value` property alias (`@property def value`, `@value.setter def value`) allows cell text access and mutation, cascading hash invalidation up to the parent document during drafting, and rejecting mutation after finalization.
+
 ### Hash Field Inclusion Rules
 
 | Field Name | Digest Purpose | Included Fields | Excluded Fields |

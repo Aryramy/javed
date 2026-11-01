@@ -3,12 +3,36 @@
 Defines the zero-trust, strongly typed intermediate contracts for content
 extraction across web pages (Crawl4AI) and local documents (Docling).
 
+Finalization & Integrity Model:
+1. Mutable Draft Phase:
+   - During pipeline assembly and extraction, instances are mutable drafts
+     with `validate_assignment=True` and `extra="forbid"`.
+   - Nested collections (`elements`, `warnings`, `errors`, `table.rows`,
+     `custom_attributes`) are standard mutable Python `list` and `dict` instances.
+   - Draft documents are unfinalized (`is_finalized == False`) and NOT TRUSTED
+     at downstream trust boundaries.
+2. Explicit Finalization:
+   - Calling `doc.finalize()` validates document contracts, computes cryptographic
+     digests from the live object graph, and deeply freezes all models, lists,
+     and dicts into immutable representations (`ReadOnlyList`, `ReadOnlyDict`).
+   - Finalized documents reject all direct and nested mutations with `TypeError`.
+3. Hash Lifecycle:
+   - Computed: Generated as part of `doc.finalize()` or `doc.with_computed_hashes()`.
+   - Invalidated: Direct attribute assignment or deletion on the document or any
+     nested child model immediately resets cached hashes to `None`.
+   - Verified: `doc.verify_hashes()` / `doc.verify_hash_integrity()` recomputes
+     digests from the live graph without relying on cached values.
+   - Trusted: Digests are ONLY trusted when `doc.is_finalized == True` and
+     fresh hash reverification succeeds at the trust boundary (`verify_trust_boundary`).
+4. Backward Compatibility:
+   - `ImmutableExtractionBase` is retained as a deprecated alias for `ExtractionBaseModel`.
+
 Strict Invariants:
 1. Zero heavy runtime imports (no crawl4ai, docling, torch, ocr, playwright, db).
 2. Zero import side-effects (no network, disk writes, threads, or model downloads).
 3. All models enforce `extra="forbid"` to reject unexpected/untrusted fields.
 4. Cryptographic separation: document_id, version_id, ingestion_id, source_sha256,
-   normalized_output_sha256, and extractor_config_sha256.
+   normalized_content_sha256, extraction_record_sha256, and normalized_output_sha256.
 5. All timestamps are strictly UTC-aware.
 6. Absolute secrets prohibition in AuthenticatedSourceContext and element payloads.
 """
@@ -249,36 +273,27 @@ class ReadOnlyDict(dict):
         raise TypeError("Cannot modify immutable dict in finalized extraction model")
 
 
+def _deep_freeze_any(val: Any) -> Any:
+    """Recursively freeze all models, lists, and dicts into immutable representations."""
+    if isinstance(val, ExtractionBaseModel):
+        if not getattr(val, "_is_finalized", False):
+            object.__setattr__(val, "_is_finalized", True)
+            for field_name in val.__class__.model_fields:
+                field_val = getattr(val, field_name, None)
+                if field_val is not None:
+                    frozen_val = _deep_freeze_any(field_val)
+                    object.__setattr__(val, field_name, frozen_val)
+        return val
+    if isinstance(val, list):
+        return ReadOnlyList([_deep_freeze_any(item) for item in val])
+    if isinstance(val, dict):
+        return ReadOnlyDict({k: _deep_freeze_any(v) for k, v in val.items()})
+    return val
+
+
 def _deep_freeze_model(model: ExtractionBaseModel) -> None:
     """Recursively freeze all child models, lists, and dicts in an extraction model graph."""
-    object.__setattr__(model, "_is_finalized", True)
-    for field_name in model.__class__.model_fields:
-        val = getattr(model, field_name, None)
-        if val is None:
-            continue
-        if isinstance(val, ExtractionBaseModel):
-            _deep_freeze_model(val)
-        elif isinstance(val, list):
-            frozen_items = []
-            for item in val:
-                if isinstance(item, ExtractionBaseModel):
-                    _deep_freeze_model(item)
-                elif isinstance(item, list):
-                    frozen_subitems = []
-                    for sub in item:
-                        if isinstance(sub, ExtractionBaseModel):
-                            _deep_freeze_model(sub)
-                        frozen_subitems.append(sub)
-                    item = ReadOnlyList(frozen_subitems)
-                frozen_items.append(item)
-            object.__setattr__(model, field_name, ReadOnlyList(frozen_items))
-        elif isinstance(val, dict):
-            frozen_dict = {}
-            for k, v in val.items():
-                if isinstance(v, ExtractionBaseModel):
-                    _deep_freeze_model(v)
-                frozen_dict[k] = v
-            object.__setattr__(model, field_name, ReadOnlyDict(frozen_dict))
+    _deep_freeze_any(model)
 
 
 # -----------------------------------------------------------------------------
@@ -290,10 +305,10 @@ class ExtractionBaseModel(BaseModel):
     """Base model enforcing strict unknown-field rejection and assignment validation.
 
     Lifecycle Semantics:
-    1. During construction, instances are mutable with `validate_assignment=True` and
-       `extra='forbid'`, enabling staged pipeline assembly.
-    2. Any mutation on an unfinalized child model automatically notifies the root
-       NormalizedDocument to invalidate populated hashes.
+    1. During construction and extraction pipeline assembly, instances are mutable
+       drafts with `validate_assignment=True` and `extra='forbid'`.
+    2. Any field mutation on an unfinalized child model automatically notifies the
+       root NormalizedDocument to invalidate populated cryptographic digests.
     3. Once finalized via `doc.finalize()`, all models, lists, and dictionaries in
        the object graph become deeply immutable; any attempt to mutate attributes,
        list items, or dictionary entries raises TypeError.
@@ -332,7 +347,13 @@ class ExtractionBaseModel(BaseModel):
                 root.invalidate_hashes()
 
 
-# Backwards-compatibility alias for previous naming
+# -----------------------------------------------------------------------------
+# Deprecated Compatibility Alias
+# -----------------------------------------------------------------------------
+
+# ImmutableExtractionBase is deprecated; use ExtractionBaseModel instead.
+# ExtractionBaseModel instances are mutable drafts during pipeline construction
+# and become deeply immutable only after NormalizedDocument.finalize() is invoked.
 ImmutableExtractionBase = ExtractionBaseModel
 
 
@@ -477,12 +498,21 @@ class TableCell(ExtractionBaseModel):
     is_header: bool = False
     merged_cell: MergedCell | None = None
 
+    @property
+    def value(self) -> str:
+        """Alias for cell text content."""
+        return self.text
+
+    @value.setter
+    def value(self, v: str) -> None:
+        self.text = v
+
 
 class TableRepresentation(ExtractionBaseModel):
     """Structured table representation attached directly to an ExtractionElement."""
 
     headers: list[str] = Field(default_factory=list)
-    rows: list[list[str]] = Field(default_factory=list)
+    rows: list[list[str | TableCell]] = Field(default_factory=list)
     row_count: int = Field(ge=0)
     column_count: int = Field(ge=0)
     sheet_name: str | None = None
@@ -899,24 +929,25 @@ class NormalizedDocument(ExtractionBaseModel):
         self._bind_child_models()
 
     def _bind_child_models(self) -> None:
-        """Bind weak backreference to root document on all nested child models."""
+        """Bind weak backreference to root document on all nested child models recursively."""
         ref = weakref.ref(self)
-        for field_name in self.__class__.model_fields:
-            val = getattr(self, field_name, None)
+
+        def _bind(val: Any) -> None:
             if isinstance(val, ExtractionBaseModel):
-                object.__setattr__(val, "_root_doc_ref", ref)
-                for sub_field in val.__class__.model_fields:
-                    sub_val = getattr(val, sub_field, None)
-                    if isinstance(sub_val, ExtractionBaseModel):
-                        object.__setattr__(sub_val, "_root_doc_ref", ref)
+                if getattr(val, "_root_doc_ref", None) is not ref:
+                    object.__setattr__(val, "_root_doc_ref", ref)
+                for f in val.__class__.model_fields:
+                    f_val = getattr(val, f, None)
+                    if f_val is not None:
+                        _bind(f_val)
             elif isinstance(val, list):
                 for item in val:
-                    if isinstance(item, ExtractionBaseModel):
-                        object.__setattr__(item, "_root_doc_ref", ref)
-                        for sub_field in item.__class__.model_fields:
-                            sub_val = getattr(item, sub_field, None)
-                            if isinstance(sub_val, ExtractionBaseModel):
-                                object.__setattr__(sub_val, "_root_doc_ref", ref)
+                    _bind(item)
+            elif isinstance(val, dict):
+                for item in val.values():
+                    _bind(item)
+
+        _bind(self)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Mutate attribute while automatically invalidating cached digests.
@@ -1174,6 +1205,15 @@ class NormalizedDocument(ExtractionBaseModel):
                 return False
 
         return True
+
+    def verify_hashes(self) -> bool:
+        """Verify that populated cryptographic digests strictly match freshly recomputed hashes.
+
+        Recomputes normalized-content and extraction-record digests from the live
+        object graph. Returns True only if hashes are populated AND match actual
+        live content and record exactly.
+        """
+        return self.verify_hash_integrity()
 
     def assert_hash_integrity(self) -> None:
         """Assert hash integrity against live state, failing closed on discrepancy."""
