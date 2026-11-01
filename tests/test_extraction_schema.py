@@ -851,3 +851,36 @@ def test_secrets_rejection_matrix() -> None:
                 opaque_browser_session_reference="sess_12345678",
                 **{field_name: value},
             )
+
+
+def test_immutable_base_assignment_behavior() -> None:
+    """Verify assignment behavior, assignment validation, and unknown-field forbidding."""
+    from javed.extraction.schema import ImmutableExtractionBase
+
+    # 1. Base model is deliberately not frozen at Pydantic instance level
+    assert not ImmutableExtractionBase.model_config.get("frozen", False)
+    assert ImmutableExtractionBase.model_config.get("validate_assignment") is True
+    assert ImmutableExtractionBase.model_config.get("extra") == "forbid"
+
+    doc = NormalizedDocument(
+        document_id="doc-test",
+        version_id="ver-test",
+        ingestion_id="ing-test",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(element_count=0, table_count=0),
+        extracted_at=datetime.now(UTC),
+    )
+
+    # 2. Valid assignment updates the model
+    doc.status = ExtractionStatus.IN_PROGRESS
+    assert doc.status == ExtractionStatus.IN_PROGRESS
+
+    # 3. Invalid assignment is caught by validate_assignment=True
+    with pytest.raises(ValidationError):
+        doc.status = "not_a_valid_status"  # type: ignore[assignment]
+
+    # 4. Unknown attribute assignment is forbidden by extra='forbid'
+    with pytest.raises(ValidationError, match="no_such_attribute|has no attribute"):
+        doc.unexpected_injected_attr = 123  # type: ignore[attr-defined]

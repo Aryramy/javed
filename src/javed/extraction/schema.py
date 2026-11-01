@@ -192,7 +192,16 @@ class CoordinateSpace(StrEnum):
 
 
 class ImmutableExtractionBase(BaseModel):
-    """Base class enforcing strict unknown-field rejection and validation."""
+    """Base model enforcing strict unknown-field rejection and assignment validation.
+
+    Note on Immutability:
+    Instances are deliberately configured with `frozen=False` (allowing mutable assignment
+    during staged extraction pipelines, e.g. attaching metadata or elements before finalization),
+    paired with `validate_assignment=True` (ensuring every mutation is type-checked and
+    satisfies all field constraints) and `extra='forbid'` (rejecting unknown fields).
+    Cryptographic and canonical immutability is achieved at output time via
+    `NormalizedDocument.with_computed_output_hash()` and content-addressed SHA-256 serialization.
+    """
 
     model_config = ConfigDict(
         extra="forbid",
@@ -811,8 +820,33 @@ class NormalizedDocument(ImmutableExtractionBase):
     def to_canonical_dict(self) -> dict[str, Any]:
         """Produce a canonical dictionary representation for hashing.
 
-        Excludes `normalized_output_sha256` to prevent circular hash dependencies.
-        Excludes transient runtime properties while preserving all deterministic content.
+        Identity Distinction:
+        - Normalized-Content Identity (`normalized_output_sha256`): Cryptographic hash
+          of the exact extracted content and structure produced by this method.
+        - Full Extraction-Record Identity: Composed of `document_id` (stable logical asset
+          identity), `version_id` (revision identifier), `ingestion_id` (attempt UUID),
+          `source_sha256` (raw source bytes), and `extractor_config_sha256`.
+
+        Exact Fields Included in Canonical Payload:
+        - `schema_version`: String schema version.
+        - `document_id`: Logical asset identifier.
+        - `version_id`: Revision identifier.
+        - `ingestion_id`: Attempt identifier.
+        - `source_sha256`: Hash of unparsed input bytes.
+        - `source`: Complete `SourceDescriptor` model.
+        - `authenticated_context`: `AuthenticatedSourceContext` or None.
+        - `extractor`: `ExtractorDescriptor` (engine, version, config, config hash).
+        - `metadata`: `DocumentMetadata` (counts, author, language, etc.).
+        - `elements`: Ordered array of `ExtractionElement` instances (including tables).
+        - `full_text`: Optional concatenated plain text.
+        - `full_markdown`: Optional concatenated markdown.
+        - `status`: ExtractionStatus enum value.
+        - `warnings`: Array of `ExtractionWarning` models.
+        - `errors`: Array of `ExtractionError` models.
+        - `extracted_at`: UTC timestamp string.
+
+        Excluded Fields:
+        - `normalized_output_sha256`: Strictly excluded to prevent circular hash dependency.
         """
         data = self.model_dump(
             mode="json",

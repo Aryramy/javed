@@ -1,7 +1,7 @@
 """Javed Content Extraction Pipeline.
 
-Defines the normalized extraction data contracts, schemas, and metadata models
-conforming to BRICK-007 Phase 2 specifications.
+Defines normalized extraction data contracts, schemas, security guards, quarantine
+management, and metadata models conforming to BRICK-007 specifications.
 """
 
 from __future__ import annotations
@@ -30,6 +30,14 @@ from javed.extraction.schema import (
     TableCell,
     TableRepresentation,
 )
+from javed.extraction.security import (
+    ExtractionSecurityGuard,
+    QuarantineManager,
+    SecurityDecisionOutcome,
+    SecurityGuardConfig,
+    SecurityValidationDecision,
+    sanitize_and_validate_display_name,
+)
 
 __all__ = [
     "AccessMethod",
@@ -41,17 +49,23 @@ __all__ = [
     "DocumentMetadata",
     "ElementProvenance",
     "ExtractionElement",
+    "ExtractionElementType",
+    "ExtractionError",
     "ExtractionErrorCode",
+    "ExtractionSecurityGuard",
     "ExtractionStatus",
     "ExtractionWarning",
-    "ExtractionError",
-    "ExtractionElementType",
     "ExtractorDescriptor",
     "MergedCell",
     "NormalizedDocument",
+    "QuarantineManager",
     "SectionReference",
+    "SecurityDecisionOutcome",
+    "SecurityGuardConfig",
+    "SecurityValidationDecision",
     "SourceDescriptor",
     "SourceType",
     "TableCell",
     "TableRepresentation",
+    "sanitize_and_validate_display_name",
 ]
