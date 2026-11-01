@@ -36,6 +36,7 @@ from javed.extraction.security import (
     QuarantineManager,
     SecurityDecisionOutcome,
     SecurityGuardConfig,
+    SecurityValidationDecision,
     sanitize_and_validate_display_name,
 )
 
@@ -740,3 +741,140 @@ def test_concurrency_semaphore_timeout(temp_quarantine: Path):
     finally:
         release_permit.set()
         t.join()
+
+
+def test_blocking_pdf_inspection_timeout_and_cleanup(temp_quarantine: Path):
+    """Prove that a blocking PDF preflight inspection triggers timeout and cleans up."""
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=0.1,
+    )
+    custom_guard = ExtractionSecurityGuard(config)
+    pdf_bytes = make_minimal_pdf(pages=1)
+
+    def slow_preflight(*args, **kwargs):
+        time.sleep(0.3)
+        return SecurityValidationDecision(
+            outcome=SecurityDecisionOutcome.ACCEPTED,
+            source_type=SourceType.PDF,
+            verified_mime_type="application/pdf",
+            byte_count=len(pdf_bytes),
+            content_sha256="",
+            sanitized_display_name="slow.pdf",
+        )
+
+    with patch.object(custom_guard, "_preflight_pdf", side_effect=slow_preflight):
+        decision = custom_guard.validate_file(pdf_bytes, "slow.pdf")
+
+    assert decision.outcome == SecurityDecisionOutcome.INSPECTION_FAILED
+    assert decision.error_code == ExtractionErrorCode.EXTRACTION_TIMEOUT
+    assert "timed out" in decision.error_message
+    # Proves no quarantined file is leaked on disk when an inspection blocks
+    assert list(temp_quarantine.iterdir()) == []
+
+
+def test_blocking_zip_inspection_timeout_and_cleanup(temp_quarantine: Path):
+    """Prove that a blocking Office ZIP preflight inspection triggers timeout and cleans up."""
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=0.1,
+    )
+    custom_guard = ExtractionSecurityGuard(config)
+    docx_bytes = make_office_zip("word")
+
+    def slow_zip_preflight(*args, **kwargs):
+        time.sleep(0.3)
+        return SecurityValidationDecision(
+            outcome=SecurityDecisionOutcome.ACCEPTED,
+            source_type=SourceType.DOCX,
+            verified_mime_type="application/zip",
+            byte_count=len(docx_bytes),
+            content_sha256="",
+            sanitized_display_name="slow.docx",
+        )
+
+    with patch.object(custom_guard, "_preflight_zip_container", side_effect=slow_zip_preflight):
+        decision = custom_guard.validate_file(docx_bytes, "slow.docx")
+
+    assert decision.outcome == SecurityDecisionOutcome.INSPECTION_FAILED
+    assert decision.error_code == ExtractionErrorCode.EXTRACTION_TIMEOUT
+    assert "timed out" in decision.error_message
+    assert list(temp_quarantine.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_async_validation_success_and_timeout(temp_quarantine: Path):
+    """Prove that validate_file_async executes off-thread and honors timeout & cleanup."""
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=0.2,
+    )
+    custom_guard = ExtractionSecurityGuard(config)
+    pdf_bytes = make_minimal_pdf(pages=1)
+
+    # 1. Successful async execution
+    decision = await custom_guard.validate_file_async(pdf_bytes, "report.pdf")
+    assert decision.outcome == SecurityDecisionOutcome.ACCEPTED
+    assert decision.source_type == SourceType.PDF
+    custom_guard.quarantine_mgr.cleanup(decision.quarantine_path)
+    assert list(temp_quarantine.iterdir()) == []
+
+    # 2. Blocking async inspection triggers timeout and cleans up
+    def blocking_inspection(*args, **kwargs):
+        time.sleep(0.4)
+        return decision
+
+    with patch.object(custom_guard, "_preflight_pdf", side_effect=blocking_inspection):
+        timeout_dec = await custom_guard.validate_file_async(pdf_bytes, "slow_async.pdf")
+
+    assert timeout_dec.outcome == SecurityDecisionOutcome.INSPECTION_FAILED
+    assert timeout_dec.error_code == ExtractionErrorCode.EXTRACTION_TIMEOUT
+    assert list(temp_quarantine.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_async_validation_cancellation_cleanup(temp_quarantine: Path):
+    """Prove that cancelling an async validation task immediately cleans up quarantine files."""
+    import asyncio
+    import time
+
+    config = SecurityGuardConfig(
+        quarantine_root=str(temp_quarantine),
+        preflight_timeout_seconds=5.0,
+    )
+    custom_guard = ExtractionSecurityGuard(config)
+    pdf_bytes = make_minimal_pdf(pages=1)
+
+    started_event = asyncio.Event()
+
+    def sleeping_preflight(*args, **kwargs):
+        started_event.set()
+        time.sleep(1.0)
+        return SecurityValidationDecision(
+            outcome=SecurityDecisionOutcome.ACCEPTED,
+            source_type=SourceType.PDF,
+            verified_mime_type="application/pdf",
+            byte_count=len(pdf_bytes),
+            content_sha256="",
+            sanitized_display_name="cancelled.pdf",
+        )
+
+    with patch.object(custom_guard, "_preflight_pdf", side_effect=sleeping_preflight):
+        task = asyncio.create_task(custom_guard.validate_file_async(pdf_bytes, "cancelled.pdf"))
+        await started_event.wait()
+        # Cancel the active task while inspection is running
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    # Cleanup must be guaranteed even after task cancellation
+    assert list(temp_quarantine.iterdir()) == []
+    # Semaphore must be released so subsequent calls do not deadlock
+    assert custom_guard._semaphore.acquire(timeout=0.1)
+    custom_guard._semaphore.release()

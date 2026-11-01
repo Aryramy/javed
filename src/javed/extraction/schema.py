@@ -191,16 +191,17 @@ class CoordinateSpace(StrEnum):
 # -----------------------------------------------------------------------------
 
 
-class ImmutableExtractionBase(BaseModel):
+class ExtractionBaseModel(BaseModel):
     """Base model enforcing strict unknown-field rejection and assignment validation.
 
-    Note on Immutability:
-    Instances are deliberately configured with `frozen=False` (allowing mutable assignment
-    during staged extraction pipelines, e.g. attaching metadata or elements before finalization),
-    paired with `validate_assignment=True` (ensuring every mutation is type-checked and
-    satisfies all field constraints) and `extra='forbid'` (rejecting unknown fields).
-    Cryptographic and canonical immutability is achieved at output time via
-    `NormalizedDocument.with_computed_output_hash()` and content-addressed SHA-256 serialization.
+    Design & Lifecycle Notes:
+    Instances are deliberately configured with `validate_assignment=True` (ensuring every
+    mutation is type-checked against Pydantic validators) and `extra='forbid'` (rejecting
+    unknown or undeclared fields). Instances are intentionally not frozen (`frozen=False`),
+    which allows controlled, validated in-memory staging across extraction phases.
+    Instances are therefore NOT immutable at the Python object level.
+    Cryptographic content and record immutability is established via content-addressed
+    canonical SHA-256 digests (`compute_content_sha256()`, `compute_record_sha256()`).
     """
 
     model_config = ConfigDict(
@@ -210,12 +211,16 @@ class ImmutableExtractionBase(BaseModel):
     )
 
 
+# Backwards-compatibility alias for previous naming
+ImmutableExtractionBase = ExtractionBaseModel
+
+
 # -----------------------------------------------------------------------------
 # Spatial Coordinates & Provenance Models
 # -----------------------------------------------------------------------------
 
 
-class BoundingBox(ImmutableExtractionBase):
+class BoundingBox(ExtractionBaseModel):
     """Spatial bounding box with declared coordinate system and orientation."""
 
     left: float
@@ -282,7 +287,7 @@ class BoundingBox(ImmutableExtractionBase):
         return self
 
 
-class ElementProvenance(ImmutableExtractionBase):
+class ElementProvenance(ExtractionBaseModel):
     """Source-level provenance mapping an element back to its exact origin."""
 
     page_number: int | None = Field(default=None, ge=1)
@@ -321,7 +326,7 @@ class ElementProvenance(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class MergedCell(ImmutableExtractionBase):
+class MergedCell(ExtractionBaseModel):
     """Defines a merged cell region within a structured table."""
 
     start_row: int = Field(ge=0)
@@ -342,7 +347,7 @@ class MergedCell(ImmutableExtractionBase):
         return self
 
 
-class TableCell(ImmutableExtractionBase):
+class TableCell(ExtractionBaseModel):
     """Individual cell representation with optional merged cell reference."""
 
     row: int = Field(ge=0)
@@ -352,7 +357,7 @@ class TableCell(ImmutableExtractionBase):
     merged_cell: MergedCell | None = None
 
 
-class TableRepresentation(ImmutableExtractionBase):
+class TableRepresentation(ExtractionBaseModel):
     """Structured table representation attached directly to an ExtractionElement."""
 
     headers: list[str] = Field(default_factory=list)
@@ -439,7 +444,7 @@ class TableRepresentation(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class SectionReference(ImmutableExtractionBase):
+class SectionReference(ExtractionBaseModel):
     """Hierarchical section reference indicating document structure."""
 
     title: str = Field(min_length=1)
@@ -453,7 +458,7 @@ class SectionReference(ImmutableExtractionBase):
         return v
 
 
-class ExtractionElement(ImmutableExtractionBase):
+class ExtractionElement(ExtractionBaseModel):
     """Atomic structural element extracted from a document or web page."""
 
     element_id: str = Field(min_length=1)
@@ -501,7 +506,7 @@ class ExtractionElement(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class SourceDescriptor(ImmutableExtractionBase):
+class SourceDescriptor(ExtractionBaseModel):
     """Authoritative descriptor of the source content being extracted."""
 
     source_type: SourceType
@@ -584,7 +589,7 @@ class SourceDescriptor(ImmutableExtractionBase):
         return self
 
 
-class AuthenticatedSourceContext(ImmutableExtractionBase):
+class AuthenticatedSourceContext(ExtractionBaseModel):
     """Metadata-only descriptor for future owner-authorized authenticated sources.
 
     Strict Invariant:
@@ -645,7 +650,7 @@ class AuthenticatedSourceContext(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class ExtractionWarning(ImmutableExtractionBase):
+class ExtractionWarning(ExtractionBaseModel):
     """Structured diagnostic warning during extraction."""
 
     code: str = Field(min_length=1)
@@ -659,7 +664,7 @@ class ExtractionWarning(ImmutableExtractionBase):
         return _reject_control_chars(v, "ExtractionWarning field")
 
 
-class ExtractionError(ImmutableExtractionBase):
+class ExtractionError(ExtractionBaseModel):
     """Structured failure description."""
 
     code: ExtractionErrorCode
@@ -684,7 +689,7 @@ class ExtractionError(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class ExtractorDescriptor(ImmutableExtractionBase):
+class ExtractorDescriptor(ExtractionBaseModel):
     """Descriptor capturing the exact extraction engine, version, and configuration."""
 
     engine_name: str = Field(min_length=1)
@@ -704,7 +709,7 @@ class ExtractorDescriptor(ImmutableExtractionBase):
         return v
 
 
-class DocumentMetadata(ImmutableExtractionBase):
+class DocumentMetadata(ExtractionBaseModel):
     """Normalized document-level metadata."""
 
     title: str | None = None
@@ -735,7 +740,7 @@ class DocumentMetadata(ImmutableExtractionBase):
 # -----------------------------------------------------------------------------
 
 
-class NormalizedDocument(ImmutableExtractionBase):
+class NormalizedDocument(ExtractionBaseModel):
     """The canonical root contract for all extracted content in Javed.
 
     Provides strict cryptographic identity separation, deterministic canonical
@@ -747,6 +752,12 @@ class NormalizedDocument(ImmutableExtractionBase):
     version_id: str = Field(min_length=1)
     ingestion_id: str = Field(min_length=1)
     source_sha256: str
+    # Cryptographic Identity Separation:
+    # 1. normalized_content_sha256: Digest of pure extracted content and structure
+    # 2. extraction_record_sha256: Digest of the entire extraction execution record
+    # 3. normalized_output_sha256: Backward-compatible alias for extraction_record_sha256
+    normalized_content_sha256: str | None = None
+    extraction_record_sha256: str | None = None
     normalized_output_sha256: str | None = None
 
     source: SourceDescriptor
@@ -762,12 +773,33 @@ class NormalizedDocument(ImmutableExtractionBase):
     errors: list[ExtractionError] = Field(default_factory=list)
     extracted_at: datetime
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Mutate attribute while automatically invalidating cached digests.
+
+        Prevents stale hashes after in-memory model mutations.
+        """
+        hash_fields = {
+            "normalized_content_sha256",
+            "extraction_record_sha256",
+            "normalized_output_sha256",
+        }
+        if name not in hash_fields:
+            for hf in hash_fields:
+                if getattr(self, hf, None) is not None:
+                    object.__setattr__(self, hf, None)
+        super().__setattr__(name, value)
+
     @field_validator("extracted_at")
     @classmethod
     def validate_timestamp(cls, v: datetime) -> datetime:
         return _validate_utc(v)  # type: ignore[return-value]
 
-    @field_validator("source_sha256", "normalized_output_sha256")
+    @field_validator(
+        "source_sha256",
+        "normalized_content_sha256",
+        "extraction_record_sha256",
+        "normalized_output_sha256",
+    )
     @classmethod
     def validate_hashes(cls, v: str | None) -> str | None:
         return _validate_sha256_hex(v, "SHA-256 hash")
@@ -815,65 +847,123 @@ class NormalizedDocument(ImmutableExtractionBase):
                     "PARTIAL_SUCCESS status document requires at least one warning or error signal"
                 )
 
+        # Stale Hash Rejection: Verify provided hashes match computed values if explicitly set
+        if self.normalized_content_sha256 is not None:
+            expected_content = self.compute_content_sha256()
+            if self.normalized_content_sha256 != expected_content:
+                raise ValueError(
+                    f"Stale or mismatched normalized_content_sha256: "
+                    f"expected {expected_content}, got {self.normalized_content_sha256}"
+                )
+
+        if self.extraction_record_sha256 is not None:
+            expected_record = self.compute_record_sha256()
+            if self.extraction_record_sha256 != expected_record:
+                raise ValueError(
+                    f"Stale or mismatched extraction_record_sha256: "
+                    f"expected {expected_record}, got {self.extraction_record_sha256}"
+                )
+
+        if self.normalized_output_sha256 is not None:
+            expected_output = self.compute_record_sha256()
+            if self.normalized_output_sha256 != expected_output:
+                raise ValueError(
+                    f"Stale or mismatched normalized_output_sha256: "
+                    f"expected {expected_output}, got {self.normalized_output_sha256}"
+                )
+
         return self
 
-    def to_canonical_dict(self) -> dict[str, Any]:
-        """Produce a canonical dictionary representation for hashing.
+    def to_content_canonical_dict(self) -> dict[str, Any]:
+        """Produce canonical dictionary representing purely normalized content and structure.
 
-        Identity Distinction:
-        - Normalized-Content Identity (`normalized_output_sha256`): Cryptographic hash
-          of the exact extracted content and structure produced by this method.
-        - Full Extraction-Record Identity: Composed of `document_id` (stable logical asset
-          identity), `version_id` (revision identifier), `ingestion_id` (attempt UUID),
-          `source_sha256` (raw source bytes), and `extractor_config_sha256`.
-
-        Exact Fields Included in Canonical Payload:
-        - `schema_version`: String schema version.
-        - `document_id`: Logical asset identifier.
-        - `version_id`: Revision identifier.
-        - `ingestion_id`: Attempt identifier.
-        - `source_sha256`: Hash of unparsed input bytes.
-        - `source`: Complete `SourceDescriptor` model.
-        - `authenticated_context`: `AuthenticatedSourceContext` or None.
-        - `extractor`: `ExtractorDescriptor` (engine, version, config, config hash).
-        - `metadata`: `DocumentMetadata` (counts, author, language, etc.).
-        - `elements`: Ordered array of `ExtractionElement` instances (including tables).
-        - `full_text`: Optional concatenated plain text.
-        - `full_markdown`: Optional concatenated markdown.
-        - `status`: ExtractionStatus enum value.
-        - `warnings`: Array of `ExtractionWarning` models.
-        - `errors`: Array of `ExtractionError` models.
-        - `extracted_at`: UTC timestamp string.
-
-        Excluded Fields:
-        - `normalized_output_sha256`: Strictly excluded to prevent circular hash dependency.
+        Separates normalized content identity from execution attempt identity.
+        Includes:
+        - metadata: DocumentMetadata
+        - elements: list of ExtractionElement (including table structures)
+        - full_text: Optional plain text
+        - full_markdown: Optional markdown
+        Excludes:
+        - document_id, version_id, ingestion_id (lifecycle identities)
+        - source, authenticated_context (acquisition channel)
+        - extractor (engine metadata)
+        - extracted_at, status, warnings, errors (execution telemetry)
+        - all hash fields (prevents circularity)
         """
-        data = self.model_dump(
-            mode="json",
-            exclude={"normalized_output_sha256"},
-            exclude_none=False,
-        )
-        return data
+        return {
+            "metadata": self.metadata.model_dump(mode="json"),
+            "elements": [elem.model_dump(mode="json") for elem in self.elements],
+            "full_text": self.full_text,
+            "full_markdown": self.full_markdown,
+        }
 
-    def to_canonical_json(self) -> str:
-        """Serialize the canonical payload deterministically.
-
-        Ensures lexicographical key ordering, uniform separators, and UTF-8 encoding.
-        """
-        canonical_dict = self.to_canonical_dict()
+    def to_content_canonical_json(self) -> str:
+        """Serialize normalized content payload deterministically."""
         return json.dumps(
-            canonical_dict,
+            self.to_content_canonical_dict(),
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=True,
         )
 
+    def compute_content_sha256(self) -> str:
+        """Compute SHA-256 digest of purely normalized content and structure."""
+        return hashlib.sha256(self.to_content_canonical_json().encode("utf-8")).hexdigest()
+
+    def to_record_canonical_dict(self) -> dict[str, Any]:
+        """Produce canonical dictionary of the full extraction execution record.
+
+        Includes all record fields (lifecycle IDs, source, extractor, metadata,
+        elements, text, status, errors, timestamps).
+        Strictly excludes all computed hash fields to prevent circularity.
+        """
+        return self.model_dump(
+            mode="json",
+            exclude={
+                "normalized_output_sha256",
+                "normalized_content_sha256",
+                "extraction_record_sha256",
+            },
+            exclude_none=False,
+        )
+
+    def to_record_canonical_json(self) -> str:
+        """Serialize the full extraction execution record deterministically."""
+        return json.dumps(
+            self.to_record_canonical_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+
+    def compute_record_sha256(self) -> str:
+        """Compute SHA-256 digest of the entire extraction execution record."""
+        return hashlib.sha256(self.to_record_canonical_json().encode("utf-8")).hexdigest()
+
+    def to_canonical_dict(self) -> dict[str, Any]:
+        """Legacy alias for to_record_canonical_dict()."""
+        return self.to_record_canonical_dict()
+
+    def to_canonical_json(self) -> str:
+        """Legacy alias for to_record_canonical_json()."""
+        return self.to_record_canonical_json()
+
     def compute_canonical_sha256(self) -> str:
-        """Compute the SHA-256 digest of the canonical normalized content."""
-        canonical_json = self.to_canonical_json()
-        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+        """Legacy alias for compute_record_sha256()."""
+        return self.compute_record_sha256()
+
+    def with_computed_hashes(self) -> NormalizedDocument:
+        """Return a copy of the document with all hash fields computed and populated."""
+        content_hash = self.compute_content_sha256()
+        record_hash = self.compute_record_sha256()
+        return self.model_copy(
+            update={
+                "normalized_content_sha256": content_hash,
+                "extraction_record_sha256": record_hash,
+                "normalized_output_sha256": record_hash,
+            }
+        )
 
     def with_computed_output_hash(self) -> NormalizedDocument:
-        """Return a copy of the document with `normalized_output_sha256` populated."""
-        computed_hash = self.compute_canonical_sha256()
-        return self.model_copy(update={"normalized_output_sha256": computed_hash})
+        """Legacy alias for with_computed_hashes()."""
+        return self.with_computed_hashes()

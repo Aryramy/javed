@@ -855,12 +855,13 @@ def test_secrets_rejection_matrix() -> None:
 
 def test_immutable_base_assignment_behavior() -> None:
     """Verify assignment behavior, assignment validation, and unknown-field forbidding."""
-    from javed.extraction.schema import ImmutableExtractionBase
+    from javed.extraction.schema import ExtractionBaseModel, ImmutableExtractionBase
 
-    # 1. Base model is deliberately not frozen at Pydantic instance level
-    assert not ImmutableExtractionBase.model_config.get("frozen", False)
-    assert ImmutableExtractionBase.model_config.get("validate_assignment") is True
-    assert ImmutableExtractionBase.model_config.get("extra") == "forbid"
+    # 1. Base model is ExtractionBaseModel; ImmutableExtractionBase is backwards-compat alias
+    assert ExtractionBaseModel is ImmutableExtractionBase
+    assert not ExtractionBaseModel.model_config.get("frozen", False)
+    assert ExtractionBaseModel.model_config.get("validate_assignment") is True
+    assert ExtractionBaseModel.model_config.get("extra") == "forbid"
 
     doc = NormalizedDocument(
         document_id="doc-test",
@@ -884,3 +885,133 @@ def test_immutable_base_assignment_behavior() -> None:
     # 4. Unknown attribute assignment is forbidden by extra='forbid'
     with pytest.raises(ValidationError, match="no_such_attribute|has no attribute"):
         doc.unexpected_injected_attr = 123  # type: ignore[attr-defined]
+
+
+def test_stale_hash_invalidation_on_mutation() -> None:
+    """Verify that model mutations automatically clear cached hashes to prevent stale digests."""
+    doc = NormalizedDocument(
+        document_id="doc-hash-test",
+        version_id="ver-1",
+        ingestion_id="ing-1",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(element_count=0, table_count=0),
+        extracted_at=datetime.now(UTC),
+    )
+
+    hashed = doc.with_computed_hashes()
+    assert hashed.normalized_content_sha256 is not None
+    assert hashed.extraction_record_sha256 is not None
+    assert hashed.normalized_output_sha256 is not None
+
+    # Mutating any content field must immediately invalidate all cached hashes
+    hashed.full_text = "newly updated text"
+    assert hashed.normalized_content_sha256 is None
+    assert hashed.extraction_record_sha256 is None
+    assert hashed.normalized_output_sha256 is None
+
+    # Re-computing hashes updates to the new valid digests
+    rehashed = hashed.with_computed_hashes()
+    assert rehashed.normalized_content_sha256 is not None
+    assert rehashed.extraction_record_sha256 is not None
+
+    # Mutating status must also clear hashes
+    rehashed.status = ExtractionStatus.IN_PROGRESS
+    assert rehashed.normalized_content_sha256 is None
+    assert rehashed.extraction_record_sha256 is None
+    assert rehashed.normalized_output_sha256 is None
+
+
+def test_stale_hash_rejection_in_validator() -> None:
+    """Verify that constructing or validating a model with mismatched hashes raises fail-closed."""
+    doc = NormalizedDocument(
+        document_id="doc-stale-test",
+        version_id="ver-1",
+        ingestion_id="ing-1",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(element_count=0, table_count=0),
+        extracted_at=datetime.now(UTC),
+    )
+    fake_stale_hash = "a" * 64
+
+    # Stale content hash rejected
+    with pytest.raises(ValidationError, match="Stale or mismatched normalized_content_sha256"):
+        NormalizedDocument(
+            document_id="doc-stale-test",
+            version_id="ver-1",
+            ingestion_id="ing-1",
+            source_sha256=_sample_sha256("1"),
+            source=_make_minimal_source(),
+            extractor=_make_minimal_extractor(),
+            metadata=DocumentMetadata(element_count=0, table_count=0),
+            extracted_at=doc.extracted_at,
+            normalized_content_sha256=fake_stale_hash,
+        )
+
+    # Stale record hash rejected
+    with pytest.raises(ValidationError, match="Stale or mismatched extraction_record_sha256"):
+        NormalizedDocument(
+            document_id="doc-stale-test",
+            version_id="ver-1",
+            ingestion_id="ing-1",
+            source_sha256=_sample_sha256("1"),
+            source=_make_minimal_source(),
+            extractor=_make_minimal_extractor(),
+            metadata=DocumentMetadata(element_count=0, table_count=0),
+            extracted_at=doc.extracted_at,
+            extraction_record_sha256=fake_stale_hash,
+        )
+
+
+def test_content_hash_vs_record_hash_separation() -> None:
+    """Verify normalized-content hash is identical across runs while record hash differs."""
+    elem = ExtractionElement(
+        element_id="elem-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Content paragraph",
+    )
+
+    # Document from Run 1
+    doc_run1 = NormalizedDocument(
+        document_id="doc-asset-42",
+        version_id="ver-1",
+        ingestion_id="ingestion-attempt-001",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(title="Quarterly Review", element_count=1, table_count=0),
+        elements=[elem],
+        full_text="Content paragraph",
+        extracted_at=datetime(2026, 11, 1, 10, 0, 0, tzinfo=UTC),
+    )
+
+    # Document from Run 2 (same asset, same content, but different ingestion attempt and timestamp)
+    doc_run2 = NormalizedDocument(
+        document_id="doc-asset-42",
+        version_id="ver-1",
+        ingestion_id="ingestion-attempt-002",  # Different run ID
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(title="Quarterly Review", element_count=1, table_count=0),
+        elements=[elem],
+        full_text="Content paragraph",
+        extracted_at=datetime(2026, 11, 1, 11, 30, 0, tzinfo=UTC),  # Different timestamp
+    )
+
+    # Content-only canonical payload must be identical
+    assert doc_run1.to_content_canonical_dict() == doc_run2.to_content_canonical_dict()
+
+    # Content SHA-256 must be IDENTICAL across runs
+    content_hash1 = doc_run1.compute_content_sha256()
+    content_hash2 = doc_run2.compute_content_sha256()
+    assert content_hash1 == content_hash2
+
+    # Record-level canonical payload and hash must DIFFER due to run telemetry
+    record_hash1 = doc_run1.compute_record_sha256()
+    record_hash2 = doc_run2.compute_record_sha256()
+    assert record_hash1 != record_hash2

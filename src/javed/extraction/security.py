@@ -13,11 +13,14 @@ Implements the zero-trust defensive ingestion boundary for BRICK-007 Phase 3:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import hashlib
 import io
 import logging
 import re
 import threading
+import time
 import uuid
 import zipfile
 from enum import StrEnum
@@ -27,8 +30,8 @@ from typing import Any, BinaryIO
 import pypdfium2
 
 from javed.extraction.schema import (
+    ExtractionBaseModel,
     ExtractionErrorCode,
-    ImmutableExtractionBase,
     SourceType,
 )
 
@@ -121,7 +124,7 @@ class SecurityDecisionOutcome(StrEnum):
     INSPECTION_FAILED = "inspection_failed"
 
 
-class SecurityGuardConfig(ImmutableExtractionBase):
+class SecurityGuardConfig(ExtractionBaseModel):
     """Configuration contracts for ExtractionSecurityGuard."""
 
     max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES
@@ -149,7 +152,7 @@ class SecurityGuardConfig(ImmutableExtractionBase):
             raise ValueError("max_office_compression_ratio must be at least 1.0")
 
 
-class SecurityValidationDecision(ImmutableExtractionBase):
+class SecurityValidationDecision(ExtractionBaseModel):
     """Structured security validation decision returned by the guard."""
 
     outcome: SecurityDecisionOutcome
@@ -192,6 +195,8 @@ class QuarantineManager:
     def __init__(self, quarantine_root: str | Path = "data/quarantine") -> None:
         self.root = Path(quarantine_root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._active_files: dict[str, Path] = {}
+        self._lock = threading.Lock()
 
     def generate_quarantine_path(self, safe_extension: str) -> Path:
         """Generate a UUID-based quarantine path verified for strict directory containment."""
@@ -207,6 +212,7 @@ class QuarantineManager:
         stream: BinaryIO,
         safe_extension: str,
         max_bytes: int,
+        inspection_id: str | None = None,
     ) -> tuple[Path, int, str]:
         """Atomically stage a stream into quarantine with streaming SHA-256 and size checks.
 
@@ -214,6 +220,10 @@ class QuarantineManager:
         Cleans up immediately if max_bytes is exceeded or an exception occurs.
         """
         target_path = self.generate_quarantine_path(safe_extension)
+        if inspection_id:
+            with self._lock:
+                self._active_files[inspection_id] = target_path
+
         bytes_written = 0
         hasher = hashlib.sha256()
 
@@ -250,6 +260,7 @@ class QuarantineManager:
         data: bytes,
         safe_extension: str,
         max_bytes: int,
+        inspection_id: str | None = None,
     ) -> tuple[Path, int, str]:
         """Atomically stage in-memory bytes into quarantine with bounded checks."""
         if len(data) > max_bytes:
@@ -259,18 +270,51 @@ class QuarantineManager:
         if len(data) == 0:
             raise ValueError("Input bytes are empty (0 bytes)")
 
-        return self.stage_stream(io.BytesIO(data), safe_extension, max_bytes)
+        return self.stage_stream(
+            io.BytesIO(data),
+            safe_extension,
+            max_bytes,
+            inspection_id=inspection_id,
+        )
 
     def cleanup(self, path: Path | str | None) -> None:
         """Safely delete a quarantined file ensuring containment within quarantine root."""
         if not path:
             return
         p = Path(path).resolve()
+        with self._lock:
+            for k, v in list(self._active_files.items()):
+                if v == p:
+                    self._active_files.pop(k, None)
         try:
             if p.is_relative_to(self.root) and p.is_file():
                 p.unlink(missing_ok=True)
         except Exception as e:
             logger.warning("Failed to clean up quarantine path: %s", type(e).__name__)
+
+    def cleanup_inspection(self, inspection_id: str | None) -> None:
+        """Safely clean up any quarantined file associated with an inspection ID."""
+        if not inspection_id:
+            return
+        with self._lock:
+            target = self._active_files.pop(inspection_id, None)
+        if target:
+            self.cleanup(target)
+
+    def cleanup_all_active(self) -> int:
+        """Purge all currently tracked active quarantine files."""
+        with self._lock:
+            targets = list(self._active_files.values())
+            self._active_files.clear()
+        count = 0
+        for target in targets:
+            try:
+                if target.is_relative_to(self.root) and target.is_file():
+                    target.unlink(missing_ok=True)
+                    count += 1
+            except Exception:
+                pass
+        return count
 
 
 # -----------------------------------------------------------------------------
@@ -347,8 +391,20 @@ class ExtractionSecurityGuard:
         original_filename: str,
         declared_mime: str | None = None,
         declared_size: int | None = None,
+        inspection_id: str | None = None,
     ) -> SecurityValidationDecision:
-        """Execute complete defensive preflight validation on an input source."""
+        """Execute complete defensive preflight validation on an input source.
+
+        Input Typing Notice:
+        Callers must provide explicit source types or declared MIME types when known.
+        Security guard validates inputs fail-closed against magic signatures and
+        structural indicators rather than trusting arbitrary user-supplied extension strings.
+
+        Guarantees that both concurrency waiting and deep content analysis (PyPDFium2,
+        zip parsing) strictly respect preflight_timeout_seconds and never leak quarantine files.
+        """
+        active_id = inspection_id or str(uuid.uuid4())
+        start_time = time.monotonic()
         acquired = self._semaphore.acquire(timeout=self.config.preflight_timeout_seconds)
         if not acquired:
             return SecurityValidationDecision(
@@ -362,15 +418,87 @@ class ExtractionSecurityGuard:
                 error_message="Security inspection timed out waiting for concurrency slot",
             )
 
+        elapsed = time.monotonic() - start_time
+        remaining_timeout = max(self.config.preflight_timeout_seconds - elapsed, 0.05)
+
         try:
-            return self._validate_file_internal(
-                source=source,
-                original_filename=original_filename,
-                declared_mime=declared_mime,
-                declared_size=declared_size,
-            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    self._validate_file_internal,
+                    source=source,
+                    original_filename=original_filename,
+                    declared_mime=declared_mime,
+                    declared_size=declared_size,
+                    inspection_id=active_id,
+                )
+                try:
+                    return future.result(timeout=remaining_timeout)
+                except concurrent.futures.TimeoutError:
+                    self.quarantine_mgr.cleanup_inspection(active_id)
+                    return SecurityValidationDecision(
+                        outcome=SecurityDecisionOutcome.INSPECTION_FAILED,
+                        source_type=SourceType.TEXT,
+                        verified_mime_type="application/octet-stream",
+                        byte_count=0,
+                        content_sha256="",
+                        sanitized_display_name="timeout_cancelled",
+                        error_code=ExtractionErrorCode.EXTRACTION_TIMEOUT,
+                        error_message=(
+                            f"Security preflight inspection timed out after "
+                            f"{self.config.preflight_timeout_seconds}s during deep analysis"
+                        ),
+                    )
         finally:
             self._semaphore.release()
+
+    async def validate_file_async(
+        self,
+        source: bytes | BinaryIO | Path | str,
+        original_filename: str,
+        declared_mime: str | None = None,
+        declared_size: int | None = None,
+    ) -> SecurityValidationDecision:
+        """Asynchronously execute defensive preflight validation without blocking the event loop.
+
+        Guarantees:
+        1. CPU-intensive operations (PyPDFium2, zip expansion inspection, hashing)
+           execute off the asyncio event loop via thread executor.
+        2. Strictly respects preflight_timeout_seconds.
+        3. Immediate quarantine cleanup if cancelled or timed out.
+        """
+        loop = asyncio.get_running_loop()
+        active_id = str(uuid.uuid4())
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    self.validate_file,
+                    source,
+                    original_filename,
+                    declared_mime,
+                    declared_size,
+                    active_id,
+                ),
+                timeout=self.config.preflight_timeout_seconds + 0.5,
+            )
+        except TimeoutError:
+            self.quarantine_mgr.cleanup_inspection(active_id)
+            return SecurityValidationDecision(
+                outcome=SecurityDecisionOutcome.INSPECTION_FAILED,
+                source_type=SourceType.TEXT,
+                verified_mime_type="application/octet-stream",
+                byte_count=0,
+                content_sha256="",
+                sanitized_display_name="async_timeout",
+                error_code=ExtractionErrorCode.EXTRACTION_TIMEOUT,
+                error_message=(
+                    f"Asynchronous inspection timed out after "
+                    f"{self.config.preflight_timeout_seconds}s"
+                ),
+            )
+        except asyncio.CancelledError:
+            self.quarantine_mgr.cleanup_inspection(active_id)
+            raise
 
     def _validate_file_internal(
         self,
@@ -378,6 +506,7 @@ class ExtractionSecurityGuard:
         original_filename: str,
         declared_mime: str | None = None,
         declared_size: int | None = None,
+        inspection_id: str | None = None,
     ) -> SecurityValidationDecision:
         # 1. Filename validation
         try:
@@ -448,16 +577,25 @@ class ExtractionSecurityGuard:
         try:
             if isinstance(source, bytes):
                 quarantine_path, byte_count, content_sha256 = self.quarantine_mgr.stage_bytes(
-                    source, safe_quarantine_ext, self.config.max_file_size_bytes
+                    source,
+                    safe_quarantine_ext,
+                    self.config.max_file_size_bytes,
+                    inspection_id=inspection_id,
                 )
             elif isinstance(source, (Path, str)):
                 with open(source, "rb") as f:
                     quarantine_path, byte_count, content_sha256 = self.quarantine_mgr.stage_stream(
-                        f, safe_quarantine_ext, self.config.max_file_size_bytes
+                        f,
+                        safe_quarantine_ext,
+                        self.config.max_file_size_bytes,
+                        inspection_id=inspection_id,
                     )
             else:
                 quarantine_path, byte_count, content_sha256 = self.quarantine_mgr.stage_stream(
-                    source, safe_quarantine_ext, self.config.max_file_size_bytes
+                    source,
+                    safe_quarantine_ext,
+                    self.config.max_file_size_bytes,
+                    inspection_id=inspection_id,
                 )
         except ValueError as e:
             err_msg = str(e)
@@ -636,7 +774,15 @@ class ExtractionSecurityGuard:
         content_sha256: str,
         sanitized_name: str,
     ) -> SecurityValidationDecision:
-        """Execute lightweight PDF preflight using PyPDFium2."""
+        """Execute lightweight PDF preflight using PyPDFium2.
+
+        Security Boundary & Heuristic Notice:
+        Raw byte scanning for active markers (/JS, /JavaScript, /Launch, /EmbeddedFiles)
+        is a defense-in-depth heuristic check on uncompressed tokens in the document stream.
+        Because PDF object streams may be compressed using FlateDecode or encrypted,
+        raw token scanning does NOT guarantee detection of all embedded scripts.
+        Deep sandboxed extraction in Docling/PyPDFium remains mandatory.
+        """
         warnings: list[str] = []
 
         # Scan for active content markers in raw PDF stream
@@ -1081,7 +1227,14 @@ class ExtractionSecurityGuard:
         sanitized_name: str,
         header: bytes,
     ) -> SecurityValidationDecision:
-        """Inspect local HTML input and scan for active script content."""
+        """Inspect local HTML input and scan for active script content.
+
+        Security Boundary Notice:
+        HTML preflight classifies the MIME type and flags active script tags as warnings.
+        Preflight acceptance does NOT make the HTML content trusted or safe for arbitrary
+        DOM insertion. All web content must undergo strict sandboxing, SSRF guards,
+        and CSP filtering in Crawl4AI.
+        """
         warnings: list[str] = []
 
         # Read full sample to scan for active content
