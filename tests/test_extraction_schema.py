@@ -41,12 +41,14 @@ from javed.extraction.schema import (
     ExtractionErrorCode,
     ExtractionStatus,
     ExtractorDescriptor,
+    HashIntegrityError,
     MergedCell,
     NormalizedDocument,
     SectionReference,
     SourceDescriptor,
     SourceType,
     TableRepresentation,
+    verify_trust_boundary,
 )
 
 # -----------------------------------------------------------------------------
@@ -1015,3 +1017,191 @@ def test_content_hash_vs_record_hash_separation() -> None:
     record_hash1 = doc_run1.compute_record_sha256()
     record_hash2 = doc_run2.compute_record_sha256()
     assert record_hash1 != record_hash2
+
+
+def test_unfinalized_nested_mutation_invalidates_parent_hash() -> None:
+    """Prove mutating nested models on an unfinalized doc invalidates parent digests."""
+    elem = ExtractionElement(
+        element_id="elem-nested-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Original nested text",
+    )
+    doc = NormalizedDocument(
+        document_id="doc-nested-test",
+        version_id="ver-1",
+        ingestion_id="ing-nested-01",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Initial Title",
+            element_count=1,
+            table_count=0,
+            custom_attributes={"dept": "engineering"},
+        ),
+        elements=[elem],
+        full_text="Original nested text",
+        extracted_at=datetime.now(UTC),
+    )
+
+    # Populate hashes on the unfinalized document
+    hashed = doc.with_computed_hashes()
+    assert hashed.normalized_content_sha256 is not None
+    assert hashed.extraction_record_sha256 is not None
+    assert hashed.normalized_output_sha256 is not None
+
+    # 1. Mutate nested DocumentMetadata attribute -> must invalidate parent hashes
+    hashed.metadata.title = "Mutated Title"
+    assert hashed.normalized_content_sha256 is None
+    assert hashed.extraction_record_sha256 is None
+    assert hashed.normalized_output_sha256 is None
+
+    # Re-compute hashes
+    rehashed = hashed.with_computed_hashes()
+    assert rehashed.normalized_content_sha256 is not None
+
+    # 2. Mutate nested ExtractionElement attribute -> must invalidate parent hashes
+    rehashed.elements[0].text = "Mutated element text"
+    assert rehashed.normalized_content_sha256 is None
+    assert rehashed.extraction_record_sha256 is None
+    assert rehashed.normalized_output_sha256 is None
+
+
+def test_finalized_document_deep_immutability() -> None:
+    """Prove finalize() makes the document, nested models, lists, and dicts deeply immutable."""
+    table = TableRepresentation(
+        headers=["Col1", "Col2"],
+        rows=[["A", "B"], ["C", "D"]],
+        row_count=2,
+        column_count=2,
+    )
+    elem = ExtractionElement(
+        element_id="elem-freeze-1",
+        element_type=ExtractionElementType.TABLE,
+        ordinal=0,
+        text="Table text",
+        table=table,
+    )
+    doc = NormalizedDocument(
+        document_id="doc-freeze-test",
+        version_id="ver-1",
+        ingestion_id="ing-freeze-01",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Frozen Title",
+            element_count=1,
+            table_count=1,
+            custom_attributes={"env": "production"},
+        ),
+        elements=[elem],
+        full_text="Table text",
+        extracted_at=datetime.now(UTC),
+    )
+
+    assert not doc.is_finalized
+    doc.finalize()
+    assert doc.is_finalized
+    assert doc.normalized_content_sha256 is not None
+    assert doc.extraction_record_sha256 is not None
+
+    # finalize() is idempotent
+    doc.finalize()
+    assert doc.is_finalized
+
+    # 1. Top-level model mutation must raise TypeError
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.full_text = "new text"
+
+    # 2. Nested DocumentMetadata mutation must raise TypeError
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.metadata.title = "hacked title"
+
+    # 3. Nested ExtractionElement mutation must raise TypeError
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.elements[0].text = "hacked element text"
+
+    # 4. Nested SourceDescriptor mutation must raise TypeError
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.source.original_display_name = "hacked_name.pdf"
+
+    # 5. List append / assignment on elements must raise TypeError
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements.append(elem)
+
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements[0] = elem
+
+    # 6. Table nested lists (headers, rows, inner rows) must raise TypeError
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements[0].table.headers.append("Col3")  # type: ignore[union-attr]
+
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements[0].table.rows[0].append("Z")  # type: ignore[union-attr]
+
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements[0].table.rows[0][0] = "MUTATED"  # type: ignore[union-attr]
+
+    # 7. Dict item assignment / modification on custom_attributes must raise TypeError
+    with pytest.raises(TypeError, match="Cannot modify immutable dict"):
+        doc.metadata.custom_attributes["new_key"] = "val"
+
+    with pytest.raises(TypeError, match="Cannot modify immutable dict"):
+        doc.metadata.custom_attributes.update({"env": "compromised"})
+
+    # 8. Attribute deletion must raise TypeError
+    with pytest.raises(TypeError, match="Cannot delete attribute"):
+        del doc.full_text
+
+    with pytest.raises(TypeError, match="Cannot delete attribute"):
+        del doc.metadata.title
+
+
+def test_hash_reverification_and_trust_boundary_enforcement() -> None:
+    """Prove verify_hash_integrity, assert_hash_integrity, and verify_trust_boundary fail closed."""
+    elem = ExtractionElement(
+        element_id="elem-trust-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Trusted content text",
+    )
+    doc = NormalizedDocument(
+        document_id="doc-trust-01",
+        version_id="ver-1",
+        ingestion_id="ing-trust-01",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Trusted Title",
+            element_count=1,
+            table_count=0,
+            custom_attributes={"level": "high"},
+        ),
+        elements=[elem],
+        full_text="Trusted content text",
+        extracted_at=datetime.now(UTC),
+    )
+
+    # 1. Unfinalized document fails trust boundary when require_finalized=True
+    with pytest.raises(HashIntegrityError, match="not finalized"):
+        verify_trust_boundary(doc, require_finalized=True)
+
+    # 2. Finalized document passes trust boundary verification cleanly
+    doc.finalize()
+    assert doc.verify_hash_integrity() is True
+    doc.assert_hash_integrity()  # Must not raise
+    verified = verify_trust_boundary(doc, require_finalized=True)
+    assert verified is doc
+
+    # 3. Low-level internal attribute tampering bypasses __setattr__ but is CAUGHT by verification
+    object.__setattr__(doc.metadata, "title", "Tampered Title Behind Verification")
+    assert doc.verify_hash_integrity() is False
+
+    with pytest.raises(HashIntegrityError, match="Stale or mismatched normalized_content_sha256"):
+        doc.assert_hash_integrity()
+
+    with pytest.raises(HashIntegrityError, match="Stale or mismatched normalized_content_sha256"):
+        verify_trust_boundary(doc, require_finalized=True)

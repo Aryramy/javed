@@ -20,6 +20,7 @@ import json
 import math
 import os
 import re
+import weakref
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
@@ -187,6 +188,100 @@ class CoordinateSpace(StrEnum):
 
 
 # -----------------------------------------------------------------------------
+# Hash Integrity Error & Immutable Collections
+# -----------------------------------------------------------------------------
+
+
+class HashIntegrityError(ValueError):
+    """Raised when document content or record hash verification fails at a trust boundary."""
+
+
+class ReadOnlyList(list):
+    """Immutable list view preventing mutations on finalized extraction models."""
+
+    def append(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def extend(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def insert(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def pop(self, *args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def remove(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def clear(self) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def __setitem__(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def __delitem__(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+
+class ReadOnlyDict(dict):
+    """Immutable dict view preventing mutations on finalized extraction models."""
+
+    def __setitem__(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def __delitem__(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def pop(self, *args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def popitem(self) -> tuple[Any, Any]:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def clear(self) -> None:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def setdefault(self, *args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+
+def _deep_freeze_model(model: ExtractionBaseModel) -> None:
+    """Recursively freeze all child models, lists, and dicts in an extraction model graph."""
+    object.__setattr__(model, "_is_finalized", True)
+    for field_name in model.__class__.model_fields:
+        val = getattr(model, field_name, None)
+        if val is None:
+            continue
+        if isinstance(val, ExtractionBaseModel):
+            _deep_freeze_model(val)
+        elif isinstance(val, list):
+            frozen_items = []
+            for item in val:
+                if isinstance(item, ExtractionBaseModel):
+                    _deep_freeze_model(item)
+                elif isinstance(item, list):
+                    frozen_subitems = []
+                    for sub in item:
+                        if isinstance(sub, ExtractionBaseModel):
+                            _deep_freeze_model(sub)
+                        frozen_subitems.append(sub)
+                    item = ReadOnlyList(frozen_subitems)
+                frozen_items.append(item)
+            object.__setattr__(model, field_name, ReadOnlyList(frozen_items))
+        elif isinstance(val, dict):
+            frozen_dict = {}
+            for k, v in val.items():
+                if isinstance(v, ExtractionBaseModel):
+                    _deep_freeze_model(v)
+                frozen_dict[k] = v
+            object.__setattr__(model, field_name, ReadOnlyDict(frozen_dict))
+
+
+# -----------------------------------------------------------------------------
 # Base Schema Configuration
 # -----------------------------------------------------------------------------
 
@@ -194,14 +289,14 @@ class CoordinateSpace(StrEnum):
 class ExtractionBaseModel(BaseModel):
     """Base model enforcing strict unknown-field rejection and assignment validation.
 
-    Design & Lifecycle Notes:
-    Instances are deliberately configured with `validate_assignment=True` (ensuring every
-    mutation is type-checked against Pydantic validators) and `extra='forbid'` (rejecting
-    unknown or undeclared fields). Instances are intentionally not frozen (`frozen=False`),
-    which allows controlled, validated in-memory staging across extraction phases.
-    Instances are therefore NOT immutable at the Python object level.
-    Cryptographic content and record immutability is established via content-addressed
-    canonical SHA-256 digests (`compute_content_sha256()`, `compute_record_sha256()`).
+    Lifecycle Semantics:
+    1. During construction, instances are mutable with `validate_assignment=True` and
+       `extra='forbid'`, enabling staged pipeline assembly.
+    2. Any mutation on an unfinalized child model automatically notifies the root
+       NormalizedDocument to invalidate populated hashes.
+    3. Once finalized via `doc.finalize()`, all models, lists, and dictionaries in
+       the object graph become deeply immutable; any attempt to mutate attributes,
+       list items, or dictionary entries raises TypeError.
     """
 
     model_config = ConfigDict(
@@ -209,6 +304,32 @@ class ExtractionBaseModel(BaseModel):
         validate_assignment=True,
         populate_by_name=True,
     )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_is_finalized", False):
+            raise TypeError(
+                f"Cannot mutate finalized extraction model '{self.__class__.__name__}' "
+                f"(model is deeply immutable after finalization)"
+            )
+        super().__setattr__(name, value)
+        root_ref = getattr(self, "_root_doc_ref", None)
+        if root_ref is not None:
+            root = root_ref()
+            if root is not None and not getattr(root, "_is_finalized", False):
+                root.invalidate_hashes()
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_is_finalized", False):
+            raise TypeError(
+                f"Cannot delete attribute from finalized model '{self.__class__.__name__}' "
+                f"(model is deeply immutable after finalization)"
+            )
+        super().__delattr__(name)
+        root_ref = getattr(self, "_root_doc_ref", None)
+        if root_ref is not None:
+            root = root_ref()
+            if root is not None and not getattr(root, "_is_finalized", False):
+                root.invalidate_hashes()
 
 
 # Backwards-compatibility alias for previous naming
@@ -773,11 +894,40 @@ class NormalizedDocument(ExtractionBaseModel):
     errors: list[ExtractionError] = Field(default_factory=list)
     extracted_at: datetime
 
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        self._bind_child_models()
+
+    def _bind_child_models(self) -> None:
+        """Bind weak backreference to root document on all nested child models."""
+        ref = weakref.ref(self)
+        for field_name in self.__class__.model_fields:
+            val = getattr(self, field_name, None)
+            if isinstance(val, ExtractionBaseModel):
+                object.__setattr__(val, "_root_doc_ref", ref)
+                for sub_field in val.__class__.model_fields:
+                    sub_val = getattr(val, sub_field, None)
+                    if isinstance(sub_val, ExtractionBaseModel):
+                        object.__setattr__(sub_val, "_root_doc_ref", ref)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, ExtractionBaseModel):
+                        object.__setattr__(item, "_root_doc_ref", ref)
+                        for sub_field in item.__class__.model_fields:
+                            sub_val = getattr(item, sub_field, None)
+                            if isinstance(sub_val, ExtractionBaseModel):
+                                object.__setattr__(sub_val, "_root_doc_ref", ref)
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Mutate attribute while automatically invalidating cached digests.
 
         Prevents stale hashes after in-memory model mutations.
         """
+        if getattr(self, "_is_finalized", False):
+            raise TypeError(
+                f"Cannot mutate finalized extraction model '{self.__class__.__name__}' "
+                f"(model is deeply immutable after finalization)"
+            )
         hash_fields = {
             "normalized_content_sha256",
             "extraction_record_sha256",
@@ -788,6 +938,38 @@ class NormalizedDocument(ExtractionBaseModel):
                 if getattr(self, hf, None) is not None:
                     object.__setattr__(self, hf, None)
         super().__setattr__(name, value)
+        if name not in hash_fields:
+            self._bind_child_models()
+
+    def invalidate_hashes(self) -> None:
+        """Invalidate all cached cryptographic digests."""
+        if getattr(self, "_is_finalized", False):
+            raise TypeError("Cannot invalidate hashes on finalized, immutable document")
+        object.__setattr__(self, "normalized_content_sha256", None)
+        object.__setattr__(self, "extraction_record_sha256", None)
+        object.__setattr__(self, "normalized_output_sha256", None)
+
+    @property
+    def is_finalized(self) -> bool:
+        """Check whether the document is finalized and deeply immutable."""
+        return getattr(self, "_is_finalized", False)
+
+    def finalize(self) -> NormalizedDocument:
+        """Finalize document: validate, compute cryptographic digests, and deeply freeze."""
+        if self.is_finalized:
+            return self
+
+        self.validate_document_contracts()
+
+        content_hash = self.compute_content_sha256()
+        record_hash = self.compute_record_sha256()
+
+        object.__setattr__(self, "normalized_content_sha256", content_hash)
+        object.__setattr__(self, "extraction_record_sha256", record_hash)
+        object.__setattr__(self, "normalized_output_sha256", record_hash)
+
+        _deep_freeze_model(self)
+        return self
 
     @field_validator("extracted_at")
     @classmethod
@@ -956,14 +1138,92 @@ class NormalizedDocument(ExtractionBaseModel):
         """Return a copy of the document with all hash fields computed and populated."""
         content_hash = self.compute_content_sha256()
         record_hash = self.compute_record_sha256()
-        return self.model_copy(
+        copied = self.model_copy(
             update={
                 "normalized_content_sha256": content_hash,
                 "extraction_record_sha256": record_hash,
                 "normalized_output_sha256": record_hash,
             }
         )
+        copied._bind_child_models()
+        return copied
 
     def with_computed_output_hash(self) -> NormalizedDocument:
         """Legacy alias for with_computed_hashes()."""
         return self.with_computed_hashes()
+
+    def verify_hash_integrity(self) -> bool:
+        """Verify that populated cryptographic digests strictly match freshly recomputed hashes.
+
+        Returns True only if hashes are populated AND match actual live content/record exactly.
+        Returns False if unhashed, stale, or mismatched.
+        """
+        if self.normalized_content_sha256 is None or self.extraction_record_sha256 is None:
+            return False
+
+        expected_content = self.compute_content_sha256()
+        if self.normalized_content_sha256 != expected_content:
+            return False
+
+        expected_record = self.compute_record_sha256()
+        if self.extraction_record_sha256 != expected_record:
+            return False
+
+        if self.normalized_output_sha256 is not None:
+            if self.normalized_output_sha256 != expected_record:
+                return False
+
+        return True
+
+    def assert_hash_integrity(self) -> None:
+        """Assert hash integrity against live state, failing closed on discrepancy."""
+        if self.normalized_content_sha256 is None:
+            raise HashIntegrityError("Document has no normalized_content_sha256 digest")
+        if self.extraction_record_sha256 is None:
+            raise HashIntegrityError("Document has no extraction_record_sha256 digest")
+
+        expected_content = self.compute_content_sha256()
+        if self.normalized_content_sha256 != expected_content:
+            raise HashIntegrityError(
+                f"Stale or mismatched normalized_content_sha256: "
+                f"expected {expected_content}, got {self.normalized_content_sha256}"
+            )
+
+        expected_record = self.compute_record_sha256()
+        if self.extraction_record_sha256 != expected_record:
+            raise HashIntegrityError(
+                f"Stale or mismatched extraction_record_sha256: "
+                f"expected {expected_record}, got {self.extraction_record_sha256}"
+            )
+
+        if self.normalized_output_sha256 is not None:
+            if self.normalized_output_sha256 != expected_record:
+                raise HashIntegrityError(
+                    f"Stale or mismatched normalized_output_sha256: "
+                    f"expected {expected_record}, got {self.normalized_output_sha256}"
+                )
+
+
+# -----------------------------------------------------------------------------
+# Trust Boundary Gate
+# -----------------------------------------------------------------------------
+
+
+def verify_trust_boundary(
+    doc: NormalizedDocument,
+    require_finalized: bool = True,
+) -> NormalizedDocument:
+    """Verify document integrity before accepting it across trust boundaries.
+
+    Ensures:
+    1. Document is deeply finalized (if require_finalized=True).
+    2. Cryptographic digests match live state with zero drift or tampering.
+    Fails closed by raising HashIntegrityError on any violation.
+    """
+    if require_finalized and not doc.is_finalized:
+        raise HashIntegrityError(
+            f"Document '{doc.document_id}' cannot pass trust boundary: "
+            f"document is not finalized (unfrozen)"
+        )
+    doc.assert_hash_integrity()
+    return doc

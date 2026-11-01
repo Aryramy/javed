@@ -309,6 +309,10 @@ To ensure reproducible testing without external network dependencies, a dedicate
 > 7. **Heuristic Raw PDF Marker Detection**: Raw token scanning for active PDF markers (`/JS`, `/Launch`, etc.) is a defense-in-depth heuristic on uncompressed streams; it does not replace sandboxed engine execution, as streams can be compressed (FlateDecode) or encrypted.
 > 8. **HTML Preflight Trust Boundary**: Preflight classification and script pattern detection flag untrusted markers; preflight acceptance does not render HTML trusted or safe for unescaped DOM insertion. Crawl4AI SSRF guards and origin controls remain mandatory.
 > 9. **Explicit Input Typing**: Input types must be explicitly confirmed by magic signatures, structure validation, and declared MIME contracts rather than trusted from arbitrary user-supplied extension strings.
+> 10. **Nested Mutation Prevention & Deep Immutability**:
+>     - **Deep Immutability after Finalization (`finalize()`)**: Once `doc.finalize()` is called, all child models (`metadata`, `elements`, `source`, `extractor`, `table`, etc.), lists (`ReadOnlyList`), and dictionaries (`ReadOnlyDict`) are recursively deeply frozen (`_is_finalized = True`). Attempting to mutate or delete any attribute, append/remove/assign list items, or update dict entries raises a fail-closed `TypeError`.
+>     - **Parent Invalidation on Unfinalized Child Models**: In unfinalized documents, child models hold weak backreferences (`_root_doc_ref`). Mutating any nested model automatically notifies the parent document to clear all cached hash fields (`normalized_content_sha256`, `extraction_record_sha256`, `normalized_output_sha256`).
+>     - **Mandatory Hash Reverification before Trust Boundaries**: `verify_trust_boundary(doc)` and `assert_hash_integrity()` recompute cryptographic digests from scratch against the live object graph. Even if low-level reflection (`object.__setattr__`) bypasses `__setattr__`, any stale or drifted digest is immediately caught and rejected with `HashIntegrityError`. Unfinalized documents are strictly rejected at trust boundaries.
 
 ### Hash Field Inclusion Rules
 

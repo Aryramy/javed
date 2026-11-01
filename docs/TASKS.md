@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3B Security Guard, Schema Integrity & Defensive Contracts Hardened (74/74 security tests, 25/25 schema tests, 328/328 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3B Security Guard, Schema Integrity & Defensive Contracts Hardened (74/74 security tests, 28/28 schema tests, 331/331 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -378,6 +378,9 @@
     - Corrected false immutability naming by renaming `ImmutableExtractionBase` to `ExtractionBaseModel` (retaining backward-compatible alias).
     - Separated `normalized_content_sha256` (pure content/elements) and `extraction_record_sha256` (full extraction record lifecycle digest), with `normalized_output_sha256` alias.
     - Added `__setattr__` on `NormalizedDocument` to clear cached hashes before attribute assignment, completely eliminating stale digests.
+    - Implemented deep immutability after finalization (`finalize()`, `ReadOnlyList`, `ReadOnlyDict`), strictly rejecting mutations on child models, list items, and dictionary entries.
+    - Implemented unfinalized child-model hash invalidation via `_root_doc_ref` backreferences, clearing parent digests on nested mutation.
+    - Implemented mandatory hash reverification before trust boundaries (`verify_trust_boundary()`, `assert_hash_integrity()`, `HashIntegrityError`).
     - Hardened `validate_document_contracts` to fail-closed on mismatched explicit hashes.
   - Hardened asynchronous timeout, concurrency, and cleanup guarantees:
     - Implemented active file tracking in `QuarantineManager` (`_active_files`, `cleanup_inspection`, `cleanup_all_active`, `is_inspection_active`).
@@ -386,8 +389,8 @@
     - Guaranteed semaphore release preventing deadlocks, with worker pool capacity preventing starvation from lingering cancelled tasks.
     - Enforced late promotion prevention: timed-out or cancelled inspections are verified via `is_inspection_active()` and strictly aborted with unlinking.
   - Implemented explicit inspection entry points (`validate_bytes`, `validate_stream`, `validate_local_file`, `validate_text`, `validate_html`, and async counterparts) to eliminate ambiguous string inference.
-  - Implemented 74 comprehensive security tests in `tests/test_extraction_security.py` (74/74 passed in 3.55s) and 25 schema tests in `tests/test_extraction_schema.py` (25/25 passed in 0.28s).
-  - Executed full project regression gate: 328/328 backend pytests passed.
+  - Implemented 74 comprehensive security tests in `tests/test_extraction_security.py` (74/74 passed in 3.55s) and 28 schema tests in `tests/test_extraction_schema.py` (28/28 passed in 0.31s).
+  - Executed full project regression gate: 331/331 backend pytests passed.
   - Verified code quality: 0 Ruff errors, 79 files formatted.
   - Process hygiene verified: 0 dangling Chromium, Node.js, Python, or Docling processes.
   - Enforced Phase 3B stop condition.
