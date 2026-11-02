@@ -71,7 +71,7 @@ In strict adherence to Stage 0 execution boundaries, this brick encompasses **pl
 - [x] Deep Agents established as primary agent harness without redundant bespoke execution loops.
 - [x] Defense-in-depth prompt injection and complete filesystem sandboxing (symlink, junction, ADS, TOCTOU protection, host-side deterministic gating) established.
 - [x] Direct dependency licensing verified; model weights distinguished from code; transitive dependency audit policy defined for BRICK-001.
-- [x] Local multilingual TTS models (Urdu, English, Arabic) reopened as `EVALUATING`; OpenRouter audio gateway documented as provisional; latency (< 1.2s) and barge-in (< 50ms) established as empirical targets.
+- [x] Local multilingual TTS models (Urdu [REMOVED BY PROJECT OWNER DECISION per ADR-008], English, Arabic) reopened as EVALUATING; OpenRouter audio gateway documented as provisional; latency (< 1.2s) and barge-in (< 50ms) established as empirical targets.
 - [x] OpenRouter configurable spending limits, retry budgets, and provider-side hard cap enforcement documented.
 - [x] Git security verified: `.gitignore` excludes `.env` while tracking `.env.example`.
 - [x] All internal Markdown links verified with zero broken targets.

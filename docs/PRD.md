@@ -22,7 +22,7 @@ The system enforces strict human-in-the-loop authorization for consequential ope
 | Persona | Profile & Workload | Core Value Delivered |
 |---|---|---|
 | **Autonomous Power User / Engineer** | Executes coding, system automation, web research, file management, and data analysis. | Rapid multi-step task execution, sandboxed shell dispatch, automated code inspection, instant answers with source citations. |
-| **Multilingual Professional** | Communicates across English, Urdu, and Arabic; requires voice and text interaction with seamless code-switching. | Natural, low-latency multilingual voice conversation with automatic language detection, hands-free operation, and instant barge-in. |
+| **Multilingual Professional** | Communicates across English and Arabic; requires voice and text interaction with seamless code-switching. *(Note: Urdu language support REMOVED BY PROJECT OWNER DECISION per ADR-008)* | Natural, low-latency voice conversation with automatic language detection, hands-free operation, and instant barge-in. |
 | **Document & Research Analyst** | Ingests complex multi-column PDFs, research papers, financial spreadsheets, and live web pages. | High-fidelity table and text extraction with exact page/bounding box provenance; semantic search across long-term knowledge corpora. |
 
 ---
@@ -35,7 +35,7 @@ The system enforces strict human-in-the-loop authorization for consequential ope
 - **FR-03: Real-Time Streaming & Branching**: Stream tokens incrementally with sub-800ms time-to-first-token; support multi-turn thread branching, message editing, and regeneration.
 
 ### 3.2 Multilingual Voice System
-- **FR-04: Trilingual Voice Conversation**: Natural voice interaction in **Urdu, English, and Arabic** without requiring separate assistant personas.
+- **FR-04: Bilingual Voice Conversation (English & Arabic)**: Natural voice interaction in **English and Arabic** without requiring separate assistant personas. *(Note: Urdu language support REMOVED BY PROJECT OWNER DECISION per ADR-008)*.
 - **FR-05: Automatic Language Detection & Switching**: Automatically detect spoken language per utterance and respond in the matching language; handle mixed-language code-switching gracefully.
 - **FR-06: Low-Latency Streaming & Barge-in**: Support Voice Activity Detection (VAD via Silero VAD) with immediate speaker cut-off and generation cancellation upon user interruption (barge-in).
 - **FR-06b: Provider-Independent Voice Adapters & Provisional Models**: Maintain abstract `AudioSTTAdapter` and `AudioTTSAdapter` interfaces. Support provisional OpenRouter audio endpoints (`openai/whisper-large-v3-turbo` for STT; `elevenlabs/eleven-v4-turbo`, voice `george` for TTS) alongside local fallbacks (Faster-Whisper, Kokoro-82M, XTTS v2).
@@ -92,10 +92,10 @@ The system enforces strict human-in-the-loop authorization for consequential ope
 - Crawl4AI web scraper + Docling document understanding engine.
 - SQLite (local dev) migrating cleanly to PostgreSQL + pgvector (production).
 - Model Context Protocol (MCP) client integration.
-- Trilingual voice pipeline (Urdu, English, Arabic) with VAD and barge-in.
+- Real-time voice pipeline (**English and Arabic**; Urdu language support REMOVED BY PROJECT OWNER DECISION) with VAD and barge-in.
 
 ### Out of Scope (Explicit Non-Goals)
-- Hard dependencies on proprietary cloud platforms (AWS Bedrock, Azure OpenAI SaaS, Google Vertex exclusive APIs).
+- Hard dependencies on proprietary cloud platforms (AWS Bedrock, Azure OpenAI SaaS, Azure MCP Server [REMOVED BY PROJECT OWNER DECISION], Microsoft Fabric MCP Server [REMOVED BY PROJECT OWNER DECISION], Google Vertex exclusive APIs).
 - Unapproved proprietary paid services (Pinecone, LangSmith SaaS, ElevenLabs, Claude Team SaaS).
 - Closed-source commercial desktop wrappers or Electron bloatware (runs cleanly in modern web browsers).
 - Multi-tenant enterprise IAM, billing, or organization management (JARVIS is an independent, single-user personal system).
@@ -108,7 +108,7 @@ The system enforces strict human-in-the-loop authorization for consequential ope
 1. **Autonomous Coding & System Task**:
    > *"As a developer, I want JARVIS to research an API, write a test suite, run it via the terminal, and show me the exact diff and test logs before committing, so that I can automate repetitive workflows with complete safety."*
 2. **Multilingual Voice Research**:
-   > *"As a multilingual user, I want to speak to JARVIS in Urdu or Arabic, have it understand my query, summarize an English technical PDF, and explain the findings back to me in natural Urdu, interrupting immediately if I speak."*
+> *"As a multilingual user, I want to speak to JARVIS in Arabic or English, have it understand my query, summarize an English technical PDF, and explain the findings back to me in natural Arabic, interrupting immediately if I speak."*
 3. **Complex Document & Financial Analysis**:
    > *"As an analyst, I want to drop a 50-page financial PDF with complex multi-year tables into JARVIS and receive exact calculations with references to the specific table cells and page numbers."*
 4. **Autonomous Web Task with Approval**:

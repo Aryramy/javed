@@ -126,7 +126,7 @@ The project environment configures provisional remote voice models accessible th
 > The mere presence of STT/TTS models on an API endpoint does not prove they can support natural, low-latency, real-time conversational voice.
 > 1. Turn-around latency must be proven (< 1.2s round-trip).
 > 2. Voice Activity Detection (VAD) and immediate barge-in (interruption) must be benchmarked.
-> 3. Flawless multilingual support (Urdu, English, Arabic) and dynamic code-switching must be verified empirically in **BRICK-012**.
+> 3. Flawless bilingual support (English and Arabic; Urdu language support REMOVED BY PROJECT OWNER DECISION per ADR-008) and dynamic code-switching must be verified empirically in **BRICK-012**.
 > 4. Provider-independent adapter interfaces must be preserved so that local models (Faster-Whisper, Kokoro, XTTS v2) can seamlessly substitute for or supplement remote endpoints.
 
 ---

@@ -40,11 +40,11 @@
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
 | **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 4 Crawl4AI Web Extraction Subsystem Completed (33/33 web tests, 109 schema/security tests, 142 extraction tests, 371/371 full regression tests passed, 0 leaks, $0.00 spend). Awaiting Phase 5 authorization. |
-| **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
-| **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
-| **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
-| **TASK-110** | BRICK-011 | Implement Specialized Subagents & Durable Execution | **NOT STARTED** | Requires BRICK-010 Verification | Dynamic subagent spawning with isolated subgraphs and cancellation. |
-| **TASK-120** | BRICK-012 | Implement Real-Time Multilingual Voice System | **NOT STARTED** | Requires BRICK-011 Verification | Trilingual voice (Urdu, English, Arabic) with auto language detection, low latency (< 1.2s), barge-in (< 50ms), provider-independent adapters, and empirical performance verification. |
+| **TASK-080** | BRICK-008 | Build Browser Use and Authenticated Navigation Subsystem | **NOT STARTED** | Requires BRICK-007 Verification | OpenCLI-based authenticated navigation with dedicated JAVED profiles, deterministic Playwright & Playwright MCP foundation, Stagehand eval-only, native owner takeover, redirect route checks, subresource guards, and single-use fail-closed approvals. Anti-bot/stealth/captcha-takeover bypasses removed by owner decision. |
+| **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | Qdrant vector store with LangGraph orchestration, Mem0 eval-only, LangGraph Store/SQLite local structured memory, deterministic provenance-aware chunking, benchmarked English & Arabic embeddings, memory governance, and hash integrity. Urdu support removed by owner decision. |
+| **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Official & GitHub MCP registry discovery, JAVED Private Registry authority, SecureMCPGateway execution, Playwright/Time/GitHub/Context7 approved servers, conditional DBHub/Notion/MarkItDown, and 8-stage execution filter. Microsoft Fabric & Azure MCP removed by owner decision. |
+| **TASK-110** | BRICK-011 | Implement Advanced Tasks, Specialized Subagents & Durable Execution | **NOT STARTED** | Requires BRICK-010 Verification | Deep Agents framework on LangGraph with 6 specialized subagents (Research, Document-Analysis, Analytics, Browser-Operator, Coding, Report-Generation), narrow tool allowlists, token/cost budgets, cancellation propagation, and parent authority. |
+| **TASK-120** | BRICK-012 | Implement Real-Time English and Arabic Voice System | **NOT STARTED** | Requires BRICK-011 Verification | Bilingual voice (English and Arabic) with LiveKit transport, Silero VAD, faster-whisper STT, Kokoro English TTS, Piper fallback, benchmarked Arabic TTS, barge-in (< 50ms), and privacy controls. Urdu support removed by owner decision. |
 | **TASK-130** | BRICK-013 | Production Hardening, PG Migration & Release Validation | **NOT STARTED** | Requires BRICK-012 Verification | Full test suite execution, PostgreSQL migration, authenticated browser-preview subscriptions, multi-user thread/session stream isolation, capability tokens, release audit report. |
 
 ---
@@ -442,3 +442,188 @@
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
 - **Milestone Status**: **IN PROGRESS** (Phase 4 Completed and Verified; Awaiting Phase 5 Authorization).
 - **Stop Condition**: Phase 4 Crawl4AI web extraction subsystem complete. Mandatory Stop: Await explicit Project Owner review and Phase 5 authorization before authoring Docling document extraction subsystem.
+
+
+---
+
+### TASK-080: BRICK-008 — Browser Use and Authenticated Navigation
+
+- **Milestone**: BRICK-008
+- **Status**: **NOT STARTED** (Requires BRICK-007 Verification and Owner Authorization)
+- **Approved Stack**:
+  - Primary deterministic browser foundation: Microsoft Playwright, Microsoft Playwright MCP, native JAVED browser tools, Browser Preview Panel.
+  - Primary authenticated browser and session foundation candidate: OpenCLI (`opencli`) connecting to a dedicated JAVED Chrome profile.
+  - Evaluation-only candidate: Stagehand (`stagehand`) for semantic element discovery where deterministic selectors fail.
+  - Reference-only architecture: Browser Use (`browser-use`) for multi-step reasoning patterns (reference only; not a direct dependency).
+  - Human takeover: Native JAVED owner takeover for MFA, passkeys, logins, and security challenges.
+- **Responsibility Hierarchy**:
+  1. *Deterministic Playwright / Playwright MCP*: Direct, predictable web automation and structured interactions.
+  2. *OpenCLI*: Authenticated sessions via dedicated JAVED Chrome profile.
+  3. *Stagehand*: Semantic element discovery when deterministic selectors fail.
+  4. *Native Owner Takeover*: When human judgment, login, MFA, or CAPTCHA is required.
+  5. *Browser Use*: Architecture and reasoning reference only.
+- **OpenCLI Integration Boundary**:
+  - Model never receives an unrestricted shell, raw CLI, or unrestricted everyday Chrome profile.
+  - Flow: JAVED Agent -> `PositiveToolAllowlistMiddleware` -> Typed JAVED Authenticated-Browser Tool -> Owner, profile, domain, thread, run, and action policy -> Approval Gateway (where required) -> Argument and result redaction -> Constrained OpenCLI Adapter -> Dedicated JAVED Chrome Profile.
+  - Dedicated profiles: `work-outlook`, `personal-outlook`, `work-gmail`, `personal-gmail`, `google-analytics`, `general-research`.
+  - Profile bindings: owner identity, account alias, approved domains, allowed read actions, approval-required actions, browser session ID, connected timestamp, expiry state, revocation state.
+- **Proposed Tools**:
+  - *Read-Only*: `authenticated_page_read`, `authenticated_page_search`, `authenticated_page_extract`, `authenticated_page_list_links`, `mail_list_messages`, `mail_search_messages`, `mail_open_message`, `mail_read_conversation`, `analytics_read_page`, `analytics_extract_report`, `browser_owner_takeover`, `browser_session_status`, `browser_session_disconnect`.
+  - *Approval-Required (Single-Use Fail-Closed HITL)*: `mail_download_attachment`, `mail_create_draft`, `mail_reply`, `mail_forward`, `mail_send`, `mail_move`, `mail_archive`, `mail_delete`, `authenticated_form_fill`, `authenticated_form_submit`, `browser_upload_file`, `browser_download_file`, `browser_change_setting`.
+- **Session Security & Zero Secrets to Model**:
+  - Dedicated profile, encrypted session metadata, OS-backed secret storage where available, domain-scoped use, session expiry detection, manual reauthentication, immediate revocation, secure deletion, owner-visible control indicator, authenticated preview subscriptions, per-thread and per-session stream isolation, exact resource teardown.
+  - Model never receives cookies, raw Chrome profile data, browser storage, auth headers, login form values, auth-page DOM, sensitive screenshots, passkeys, recovery material.
+  - During owner login / security challenges: pause model-visible DOM extraction and screenshots; transfer full control to owner; resume only after explicit owner approval; preserve exactly-once action semantics.
+- **Mandatory Browser Security Follow-Up Criteria (Inherited from BRICK-006)**:
+  - Redirect-destination validation (3xx), request-time private-network validation (RFC 1918 / loopback / link-local), DNS rebinding resistance, subresource interception, fetch/XHR destination enforcement, iframe destination enforcement, page WebSocket destination enforcement, download blocking or quarantine, authenticated preview subscriptions, thread/session isolation.
+- **Explicit Exclusions (Owner Decision)**:
+  - `beyahcuruk-del/captcha-takeover` — **REMOVED BY PROJECT OWNER DECISION**
+  - `scrapfly/Antibot-Detector` — **REMOVED BY PROJECT OWNER DECISION**
+  - `rebrowser/rebrowser-bot-detector` — **REMOVED BY PROJECT OWNER DECISION**
+  - Stealth plugins, fingerprint spoofing, automated CAPTCHA solvers, residential proxy rotation, access-control circumvention.
+
+---
+
+### TASK-090: BRICK-009 — Persistent Memory and Semantic RAG
+
+- **Milestone**: BRICK-009
+- **Status**: **NOT STARTED** (Requires BRICK-008 Verification and Owner Authorization)
+- **Approved Stack**:
+  - Primary orchestration: LangGraph.
+  - Canonical extraction input: BRICK-007 `NormalizedDocument`.
+  - Primary vector-store candidate: Qdrant.
+  - Personal-memory evaluation candidate: Mem0 (evaluation only).
+  - Local structured-memory foundation: LangGraph Store, SQLite where appropriate during local development.
+  - Reference-only memory project: `BjornMelin/enhanced-mem-vector-rag` (reference only; not a direct dependency).
+  - Primary chunking: JAVED deterministic provenance-aware chunker.
+  - Embeddings: Benchmark-selected English and Arabic embedding model.
+  - Optional retrieval improvements: sparse lexical retrieval, metadata filtering, multilingual reranking.
+- **Data Flow & Trust Boundary**:
+  - `NormalizedDocument` -> integrity verification -> source authorization check -> document and version comparison -> deterministic chunking -> chunk hashing -> embedding generation -> Qdrant indexing -> provenance-aware retrieval -> reranking -> citation construction -> grounded answer.
+  - No crawler, browser, mailbox reader, Docling converter, or MCP server may write directly to Qdrant. All indexed content must originate from a verified BRICK-007 `NormalizedDocument` or governed memory write.
+- **Qdrant Responsibilities**:
+  - Store: chunk ID, document ID, version ID, ingestion ID, element IDs, source type, source URI or safe reference, source title, section hierarchy, page/sheet provenance, source hash, normalized-content hash, chunk hash, embedding model and version, language, owner/tenant scope, access classification, retention state, deletion state.
+  - Enforce on every search: owner/tenant isolation, source authorization, document status, version status, deletion state, language and metadata filters.
+- **Memory Governance**:
+  - Do not allow the model to persist arbitrary inferred facts automatically.
+  - Memory schema: memory ID, owner ID, source, source-message/document reference, provenance, created timestamp, updated timestamp, verification state, retention policy, expiry, sensitivity classification, deletion state.
+  - Categories: owner-stated fact, owner preference, project decision, verified system fact, document-derived fact, model inference. Model inferences must not silently become trusted owner facts.
+  - Owner UI controls: list, inspect provenance, edit, delete, expire, export, disable auto-recall, clear by project/owner.
+- **Hash and Version Rules**:
+  - `source_sha256`: exact source-byte identity.
+  - `normalized_content_sha256`: stable normalized content identity.
+  - `extraction_record_sha256`: complete extraction-run record identity.
+  - `chunk_sha256`: canonical chunk identity.
+  - `embedding_config_sha256`: embedding model and configuration identity.
+  - Do not re-embed unchanged content unless model, chunking policy, security classification, or metadata contract changes.
+- **Evaluation Requirements**:
+  - Benchmark English and Arabic separately for: semantic retrieval, mixed-language queries, exact-name retrieval, numbers and dates, table retrieval, heading retrieval, source citation accuracy, stale-version filtering, owner isolation, deletion propagation, latency, memory use, and index size.
+- **Explicit Exclusions (Owner Decision)**:
+  - Urdu language support — **REMOVED BY PROJECT OWNER DECISION** (Urdu-specific memory, embeddings, retrieval tests, rerankers, and voice requirements are strictly excluded).
+
+---
+
+### TASK-100: BRICK-010 — Managed Model Context Protocol (MCP) Ecosystem
+
+- **Milestone**: BRICK-010
+- **Status**: **NOT STARTED** (Requires BRICK-009 Verification and Owner Authorization)
+- **Approved Control Plane**:
+  - Primary public discovery: Official MCP Registry (`modelcontextprotocol/registry`).
+  - Secondary discovery: GitHub MCP Registry.
+  - Private authority: JAVED Private MCP Registry.
+  - Execution: `SecureMCPGateway`.
+  - Authorization states: `DENIED`, `ALLOWED_READ_ONLY`, `APPROVAL_REQUIRED`.
+  - Public registry is a discovery source, not a trust authority.
+- **MCP Admission Pipeline**:
+  - Registry discovery -> publisher verification -> source repo inspection -> license review -> supply-chain audit -> version selection -> package hash -> isolated installation -> transport validation -> tool discovery -> schema fingerprinting -> security classification -> owner approval -> private-registry entry -> activation -> health monitoring -> revocation.
+  - Unknown tools default to `DENIED`. Schema changes reset affected tools to `DENIED` pending re-review.
+- **Initial Approved MCP Servers**:
+  - Existing / Primary: Playwright MCP, Time MCP, GitHub MCP, Context7 MCP.
+  - Conditional Future Candidates: DBHub, Notion MCP, MarkItDown MCP (must not be installed or enabled without a concrete use case, security review, and Project Owner authorization).
+- **Explicitly Removed MCP Servers (Owner Decision)**:
+  - Microsoft Fabric MCP Server — **REMOVED BY PROJECT OWNER DECISION**
+  - Azure MCP Server — **REMOVED BY PROJECT OWNER DECISION**
+- **Not Enabled by Default**:
+  - Generic shell MCP, generic filesystem MCP, Desktop Commander, arbitrary remote MCP servers, unverified community servers, duplicate web/document servers, servers requiring broad unscoped credentials.
+- **Private MCP Registry Record**:
+  - Server ID, display name, publisher, repository, license, approved version, package location, package hash, transport, command and arguments, required env vars, sandbox profile, discovered tools, tool schema digests, permission states, owner approval, installation timestamp, last health check, revocation state, last security review. Never store secret values directly.
+- **MCP Execution Controls**:
+  - 8-stage filter: 1. Tool-construction filtering, 2. Pre-model schema filtering, 3. Execution-time authorization, 4. Secret redaction, 5. Output bounding, 6. Telemetry, 7. Execution ledger, 8. Process teardown. Single-use HITL for mutating operations. Individual tool classification.
+
+---
+
+### TASK-110: BRICK-011 — Advanced Tasks and Specialized Subagents
+
+- **Milestone**: BRICK-011
+- **Status**: **NOT STARTED** (Requires BRICK-010 Verification and Owner Authorization)
+- **Approved Stack**:
+  - Primary subagent framework: Deep Agents.
+  - Orchestration: LangGraph.
+  - Memory: BRICK-009 governed memory and RAG.
+  - External tools: BRICK-010 managed MCP tools.
+  - Approvals: Existing JAVED HITL system (`ApprovalStore`).
+  - Persistence: Existing checkpointing (`SqliteSaver` / approved stores).
+- **6 Planned Subagents**:
+  1. **Research Subagent**: Public web extraction, read-only RAG, read-only approved MCP sources. Outputs source-backed research packet, citations, uncertainty and missing evidence.
+  2. **Document-Analysis Subagent**: BRICK-007 normalized documents, BRICK-009 retrieval, table and provenance operations. Outputs structured document analysis, evidence references, extracted risks and findings.
+  3. **Analytics Subagent**: Approved analytics data, SEO datasets, approved spreadsheets, RAG. Outputs metrics, anomalies, trends, recommendations, and source references.
+  4. **Browser-Operator Subagent**: Deterministic Playwright, approved OpenCLI-backed tools, owner takeover, read-only operations by default. Outputs task result, browser evidence, action and approval ledger.
+  5. **Coding Subagent**: Sandboxed repository operations, GitHub MCP, test runners, narrowly approved file operations. Outputs patch proposal, changed files, verification evidence, unresolved risks.
+  6. **Report-Generation Subagent**: Retrieved evidence, approved document-generation tools, citation validator. Outputs structured draft report, source traceability, unsupported-claim warnings.
+- **Subagent Contract**:
+  - Every subagent receives: unique subagent ID, parent run ID, explicit task, detailed system instruction, explicit output schema, narrow tool allowlist, model selection, token budget, monetary budget, maximum steps, timeout, cancellation token, source-access policy, mutation policy, memory policy, retention policy.
+  - Subagents must not automatically inherit all parent tools; no creating child subagents unless explicitly authorized.
+- **Subagent Execution Rules**:
+  - Parent remains authoritative; subagents return concise structured results; large intermediate outputs remain isolated; tool calls remain visible in telemetry; mutating operations remain approval-controlled; cancellation must propagate; failed subagents must not corrupt parent state; duplicate resumption must not duplicate actions; budget exhaustion stops subagent; output retains provenance; memory writes follow BRICK-009 governance; MCP access uses BRICK-010 permissions; browser access uses BRICK-008 controls.
+
+---
+
+### TASK-120: BRICK-012 — Real-Time English and Arabic Voice System
+
+- **Milestone**: BRICK-012
+- **Status**: **NOT STARTED** (Requires BRICK-011 Verification and Owner Authorization)
+- **Approved Stack**:
+  - Primary real-time media transport: LiveKit.
+  - Primary voice activity detection (VAD): Silero VAD.
+  - Primary local speech-to-text candidate: `faster-whisper`.
+  - Primary English TTS candidate: Kokoro.
+  - Lightweight fallback TTS candidate: Piper.
+  - Arabic TTS: Benchmark-selected Arabic TTS engine.
+  - Reference-only architectures: `S-P-A-C-E-B-A-R/VoxBigBrain`, `Madhurelision/AI_assist` (reference only; not direct dependencies).
+- **Voice Pipeline**:
+  - Browser microphone -> owner permission -> LiveKit room -> Silero VAD -> streaming audio segmentation -> faster-whisper -> language detection -> normalized transcript -> JAVED LangGraph agent -> response-language selection -> English or Arabic TTS router -> streaming synthesized audio -> LiveKit room -> browser speaker.
+  - Barge-in: Silero VAD detects user speech while audio is playing -> LiveKit immediately mutes playback -> active agent generation cancelled -> user input collected.
+- **Language Routing**:
+  - English speech -> English STT -> English text response -> Kokoro (or Piper).
+  - Arabic speech -> Arabic STT -> Arabic text response -> benchmarked Arabic TTS.
+  - Mixed English and Arabic -> language detection chooses primary response language, matching TTS engine.
+- **Arabic TTS Benchmark**:
+  - Evaluate candidate Arabic TTS engines for: natural pronunciation, diacritics/tashkeel handling, latency to first audio chunk, real-time factor (RTF), CPU/GPU footprint, license, stability under continuous streaming.
+- **Voice Session Security**:
+  - Microphone access requires explicit owner authorization; visual recording/listening indicator; hardware/software mute; session timeout; audio stream ephemeral by default (in-memory only); no audio saved without approval; transcripts classified as user-private; no audio or transcripts sent to unauthorized third-party services; room tokens time-bounded, single-use, scoped to authorized session.
+- **Proposed Voice Tools**:
+  - *Read / Session-Control*: `voice_session_status`, `voice_get_active_language`, `voice_interrupt_output`, `voice_replay_last_response`, `voice_list_available_voices`, `voice_mute`, `voice_unmute`.
+  - *Approval-Required*: `voice_enable_microphone`, `voice_record_session`, `voice_export_transcript`, `voice_send_transcript_to_external_service`, `voice_retain_audio`, `voice_retain_transcript`.
+- **Acceptance Criteria (Evaluated Separately for English and Arabic)**:
+  - Language detection, final transcript accuracy, partial transcript stability, names, dates, numbers, commands, mixed English and Arabic terms, response-language correctness, TTS naturalness, first-audio latency, end-to-end latency (< 1.2s), interruption latency (< 50ms), false interruption recovery, long-silence handling, noisy-room behavior, browser reconnect, microphone revocation, session cleanup, zero audio leakage, zero process leakage.
+- **Explicit Exclusions (Owner Decision)**:
+  - Urdu language support — **REMOVED BY PROJECT OWNER DECISION** (Urdu STT, TTS, fixtures, evaluation metrics, voices, routing, and acceptance criteria are completely removed).
+
+---
+
+## 4. Explicitly Removed Technologies & Architecture Decisions
+
+In accordance with the **Owner Architecture Directive (2026-11-02)**, the following technologies, tools, and capabilities are explicitly removed from the planned JAVED architecture and task backlog:
+
+1. **Microsoft Fabric MCP Server** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Enterprise cloud-specific scope outside core local-first and governed architecture; unapproved external SaaS dependency.
+2. **Azure MCP Server** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Proprietary cloud-platform coupling violating FOSS-first, model-agnostic, and local-first architecture principles (Rule 1, Rule 4).
+3. **beyahcuruk-del/captcha-takeover** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Security-challenge detection and human takeover must be implemented natively within JAVED (Rule 1, Rule 3, Rule 4); no unvetted external takeover wrappers.
+4. **scrapfly/Antibot-Detector** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Stealth bot-detection evasion violates core operational constraints (human takeover, not security bypass); JAVED does not evade anti-bot measures.
+5. **rebrowser/rebrowser-bot-detector** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Fingerprint spoofing and bot-detection patching violate Rule 4 and security principles; native owner takeover is the sole authorized path for security challenges.
+6. **Urdu Language Support** — `REMOVED BY PROJECT OWNER DECISION`
+   - *Rationale*: Voice, STT, TTS, memory, and RAG capabilities are formally bounded to English and Arabic to ensure acoustic quality, reliable diacritics/tashkeel handling, and high-fidelity benchmarked evaluation without unsupported models or synthetic artifacts.

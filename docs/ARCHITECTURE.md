@@ -191,14 +191,14 @@ flowchart TB
   - Store vector embeddings for semantic document retrieval and user memory facts (`sqlite-vec` in dev -> `pgvector` in prod).
   - Provide CRUD APIs for user memory management (view, search, correct, delete).
 
-### 3.9 Multilingual Voice Subsystem (`src/voice/` — BRICK-012)
-- **Technology**: Silero VAD, Provider-Independent Audio Adapters (`AudioSTTAdapter`, `AudioTTSAdapter`), OpenRouter Audio Gateway (`openai/whisper-large-v3-turbo`, `elevenlabs/eleven-v4-turbo`), Local Fallback (Faster-Whisper, Kokoro-82M, XTTS v2 / Piper).
+### 3.9 Real-Time Voice Subsystem (src/voice/ — BRICK-012)
+- **Technology**: LiveKit WebRTC media transport, Silero VAD, Provider-Independent Audio Adapters, Local STT (aster-whisper), Local TTS (Kokoro for English, Piper fallback, benchmark-selected Arabic TTS). Reference architectures: VoxBigBrain, AI_assist.
 - **Responsibilities**:
-  - Real-time microphone audio processing with Silero Voice Activity Detection.
-  - Provider-independent Speech-to-Text with automatic language detection (Urdu, English, Arabic).
-  - Streaming Text-to-Speech synthesis with dynamic language routing.
-  - Instant barge-in / cancellation when the user speaks during assistant playback.
-  - *Performance Caveat*: Remote STT/TTS availability on OpenRouter does not guarantee real-time latency (< 1.2s round-trip); performance must be verified in BRICK-012.
+  - Real-time microphone audio streaming via LiveKit with local Silero Voice Activity Detection.
+  - Provider-independent Speech-to-Text with automatic language detection (English and Arabic; Urdu language support: REMOVED BY PROJECT OWNER DECISION per ADR-008).
+  - Streaming Text-to-Speech synthesis with dynamic English/Arabic language routing.
+  - Instant barge-in / cancellation (< 50ms) when the user speaks during assistant playback.
+  - *Performance Caveat*: Real-time latency (< 1.2s round-trip) and barge-in (< 50ms) must be empirically verified in BRICK-012.
 
 ---
 
