@@ -2,7 +2,7 @@
 
 > **Brick ID**: `BRICK-007`<br/>
 > **Title**: Crawl4AI & Docling Extraction Pipeline<br/>
-> **Status**: `IN PROGRESS` (Phase 0 Preflight & Architecture Completed; Awaiting Phase 1 Authorization)<br/>
+> **Status**: `IN PROGRESS` (Phase 4 Crawl4AI Web Extraction Subsystem Completed; Awaiting Phase 5 Authorization)<br/>
 > **Author**: Antigravity Full-Stack AI Engineering Team<br/>
 > **Date**: 2026-10-29<br/>
 > **Baseline Anchor**: Commit `83cdeeac0db71a646cb06c906d59e14e55a56c00` (Verified BRICK-006 synchronized on `master`)<br/>
@@ -339,6 +339,19 @@ To ensure reproducible testing without external network dependencies, a dedicate
 | `normalized_content_sha256` | Content Identity (Stable deduplication across runs) | `metadata` (DocumentMetadata), `elements` (ExtractionElement list), `full_text`, `full_markdown` | `document_id`, `version_id`, `ingestion_id`, `source`, `authenticated_context`, `extractor`, `extracted_at`, `status`, `warnings`, `errors`, `source_sha256`, and all hash fields |
 | `extraction_record_sha256` | Execution Record Identity (Full lifecycle provenance) | All model fields (`document_id`, `version_id`, `ingestion_id`, `source`, `authenticated_context`, `extractor`, `metadata`, `elements`, `full_text`, `full_markdown`, `status`, `warnings`, `errors`, `extracted_at`, `source_sha256`) | `normalized_content_sha256`, `extraction_record_sha256`, `normalized_output_sha256` (excludes only hash fields to eliminate circularity) |
 | `normalized_output_sha256` | Backward Compatibility | Identical to `extraction_record_sha256` | Same as `extraction_record_sha256` |
+
+> [!NOTE] Phase 4 Crawl4AI Web Extraction Subsystem Implementation (Completed 2026-11-02)
+> 1. **Single-Page Scope Enforcement**: Strictly 1 page acquired per extraction operation (`max_depth=0`). No recursive crawling, no sitemap expansion, no automatic link following, and no speculative prefetching. Discovered links are sanitized and stored as bounded metadata attributes (`custom_attributes["discovered_links"]`, capped at 2,000 links).
+> 2. **Zero-Trust URL & SSRF Policy**: Enforces HTTP/HTTPS-only schemes; strictly rejects embedded credentials (`user:pass@host`), secret-bearing query parameters (`token=`, `api_key=`, etc.), path traversal (`..`), localhost/internal domains, and private/loopback/cloud-metadata addresses (RFC 1918, 127.0.0.0/8, 169.254.169.254, decimal/hex IP encodings). Reuses `BrowserSecurityGuard` for comprehensive DNS resolution and address validation.
+> 3. **Request-Time & Redirect Enforcement**: Installs Playwright request interception via `page.route("**/*")` using `route.fetch(max_redirects=0)` to inspect and validate every HTTP request and redirect hop before proceeding. Immediately aborts requests targeting unapproved domains or restricted IPs. Intercepts and closes page-created WebSockets via `page.route_web_socket("**/*")`. Blocks popups (`page.on("popup")`) and cancels downloads (`page.on("download")`).
+> 4. **Dual Execution Modes**:
+>    - **STATIC**: Bounded non-browser HTTP GET with streaming body read up to 10 MB limit and SSRF validation on every redirect hop; parses HTML via Crawl4AI without launching Chromium or executing page JavaScript.
+>    - **RENDERED**: Controlled dynamic browser rendering via `AsyncWebCrawler` with Playwright; applies bounded page timeouts (`wait_until="domcontentloaded"`), request interception, and total response tracking (25 MB limit).
+> 5. **Structured Element & Table Mapping**: Generates ordered `ExtractionElement` stream preserving heading hierarchy (`SectionReference` with levels and paths), paragraphs, code blocks, lists, images, and horizontal rules. Parses HTML tables into `TableRepresentation` with normalized columns; emits `ExtractionWarning(code="MALFORMED_TABLE")` when padding irregular rows without fabricating cells.
+> 6. **Authentication & Challenge Defense**: Classifies HTTP 401 as `AUTH_REQUIRED`, HTTP 403 as `ACCESS_DENIED`, HTTP 429 as `RATE_LIMITED` (honoring `Retry-After`), login forms (`<input type="password">`) as `AUTH_REQUIRED`, and Cloudflare / CAPTCHA challenge markers as `AUTOMATION_NOT_ALLOWED`. Never captures or handles credentials; never attempts CAPTCHA bypass or anti-detection spoofing.
+> 7. **Canonical Schema Integration**: Populates `NormalizedDocument`, runs `finalize()` (computing content/record SHA-256 digests and freezing models), and verifies `verify_trust_boundary(doc)`.
+> 8. **Lifecycle & Hygiene**: Idempotent `close()`, async context management, zero `os._exit` usage, zero process/thread leaks, and zero model downloads.
+> 9. **Verification Evidence**: 33/33 targeted web tests passed (`tests/test_extraction_web.py`), 109/109 schema/security regression tests passed (142 total extraction tests), 371/371 full regression suite passed, 0 ruff errors. Live public verification against `https://example.com` verified in both STATIC (0.16s) and RENDERED (1.52s) modes. OpenCLI remains uninstalled and deferred to BRICK-008.
 
 ---
 

@@ -45,6 +45,18 @@ from javed.extraction.security import (
     SecurityValidationDecision,
     sanitize_and_validate_display_name,
 )
+from javed.extraction.web import (
+    Crawl4AIWebExtractor,
+    WebExtractionConfig,
+    WebExtractionError,
+    WebExtractionLimitExceededError,
+    WebExtractionLimits,
+    WebExtractionSecurityError,
+    WebExtractionStrategy,
+    WebExtractionTimeoutError,
+    extract_url,
+    validate_web_url,
+)
 
 __all__ = [
     "AccessMethod",
@@ -53,6 +65,7 @@ __all__ = [
     "BoundingBox",
     "CoordinateOrigin",
     "CoordinateSpace",
+    "Crawl4AIWebExtractor",
     "DocumentMetadata",
     "ElementProvenance",
     "ExtractionBaseModel",
@@ -80,6 +93,15 @@ __all__ = [
     "SourceType",
     "TableCell",
     "TableRepresentation",
+    "WebExtractionConfig",
+    "WebExtractionError",
+    "WebExtractionLimitExceededError",
+    "WebExtractionLimits",
+    "WebExtractionSecurityError",
+    "WebExtractionStrategy",
+    "WebExtractionTimeoutError",
+    "extract_url",
     "sanitize_and_validate_display_name",
+    "validate_web_url",
     "verify_trust_boundary",
 ]

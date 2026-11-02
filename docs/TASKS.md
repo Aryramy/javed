@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3C Finalization & Nested Mutation Integrity Contract Completed (74/74 security tests, 35/35 schema tests, 109 extraction tests, 338/338 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 4 Crawl4AI Web Extraction Subsystem Completed (33/33 web tests, 109 schema/security tests, 142 extraction tests, 371/371 full regression tests passed, 0 leaks, $0.00 spend). Awaiting Phase 5 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -413,6 +413,20 @@
     - 74/74 security tests in `tests/test_extraction_security.py` passed.
     - 109/109 total targeted extraction tests passed in 3.35s.
     - Ruff check (0 errors) and ruff format (79 files) verified.
+- **Phase 4 Status**: **COMPLETED & VERIFIED** (2026-11-02):
+  - Implemented `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`, `extract_url`, `validate_web_url`, `WebExtractionConfig`, `WebExtractionLimits`, `WebExtractionStrategy`):
+    - Strict single-page policy: 1 page max, crawl depth 0, no recursive crawl, no sitemap expansion, no link following, no speculative prefetching.
+    - Zero-trust URL & SSRF validation: HTTP/HTTPS only, blocked embedded credentials, stripped secret-bearing query params (`token`, `api_key`, `secret`, etc.), blocked RFC 1918, loopbacks, and cloud metadata (169.254.169.254).
+    - Request-time and redirect-time enforcement: Playwright `page.route` with `route.fetch(max_redirects=0)` validating every redirect hop and subresource (images, scripts, stylesheets, iframes). Intercepted and closed WebSockets via `page.route_web_socket`. Blocked popups and downloads.
+    - Dual execution modes: STATIC (non-browser HTTP GET with streaming body read up to 10 MB and redirect SSRF checks) and RENDERED (controlled dynamic browser rendering via `AsyncWebCrawler`).
+    - Structured element extraction: ordered `ExtractionElement` stream with `SectionReference` hierarchy paths, `TableRepresentation` normalization with `MALFORMED_TABLE` warnings for irregular rows, discovered link sanitization (max 2,000 links, credentials/tokens stripped, internal/external classified).
+    - Authentication and challenge defense: classified HTTP 401 as `AUTH_REQUIRED`, HTTP 403 as `ACCESS_DENIED`, HTTP 429 as `RATE_LIMITED` (honoring `Retry-After`), login forms (`<input type="password">`) as `AUTH_REQUIRED`, Cloudflare/CAPTCHA markers as `AUTOMATION_NOT_ALLOWED`. Zero credential handling, zero CAPTCHA bypass, zero stealth spoofing.
+    - Resource limits: 10 MB main document, 25 MB total responses, character and element limits enforced.
+    - Canonical schema integration: output mapped to `NormalizedDocument`, finalized via `finalize()` (digests generated, models and collections deeply frozen), verified against `verify_trust_boundary(doc)`.
+    - Lifecycle management: idempotent `close()`, context manager, zero `os._exit`, zero process/thread leaks, zero model downloads, $0.00 external spend.
+    - Test verification: 33/33 targeted web tests passed (`tests/test_extraction_web.py`), 109/109 schema and security regression tests passed (142 extraction tests total), 371/371 full regression suite passed, 0 ruff errors.
+    - Live public test against `https://example.com` verified in both STATIC (0.16s) and RENDERED (1.52s) modes.
+    - OpenCLI remains uninstalled and formally deferred to BRICK-008.
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox
   - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
@@ -426,5 +440,5 @@
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 3C Completed and Verified; Awaiting Phase 4 Authorization).
-- **Stop Condition**: Phase 3C nested mutation hash integrity and finalization contract complete. Mandatory Stop: Await explicit Project Owner review and Phase 4 authorization before authoring Crawl4AI web extraction subsystem.
+- **Milestone Status**: **IN PROGRESS** (Phase 4 Completed and Verified; Awaiting Phase 5 Authorization).
+- **Stop Condition**: Phase 4 Crawl4AI web extraction subsystem complete. Mandatory Stop: Await explicit Project Owner review and Phase 5 authorization before authoring Docling document extraction subsystem.
