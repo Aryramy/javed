@@ -40,11 +40,13 @@ Strict Invariants:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
 import re
 import weakref
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
@@ -220,6 +222,25 @@ class HashIntegrityError(ValueError):
     """Raised when document content or record hash verification fails at a trust boundary."""
 
 
+@dataclass(frozen=True)
+class HashVerificationResult:
+    """Structured result of cryptographic hash verification against live state."""
+
+    is_valid: bool
+    content_hash_matches: bool
+    record_hash_matches: bool
+    output_hash_matches: bool
+    expected_content_sha256: str
+    expected_record_sha256: str
+    actual_content_sha256: str | None
+    actual_record_sha256: str | None
+    actual_output_sha256: str | None
+    error_message: str | None = None
+
+    def __bool__(self) -> bool:
+        return self.is_valid
+
+
 class ReadOnlyList(list):
     """Immutable list view preventing mutations on finalized extraction models."""
 
@@ -241,10 +262,22 @@ class ReadOnlyList(list):
     def clear(self) -> None:
         raise TypeError("Cannot modify immutable list in finalized extraction model")
 
+    def sort(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def reverse(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
     def __setitem__(self, *args: Any, **kwargs: Any) -> None:
         raise TypeError("Cannot modify immutable list in finalized extraction model")
 
     def __delitem__(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def __iadd__(self, *args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Cannot modify immutable list in finalized extraction model")
+
+    def __imul__(self, *args: Any, **kwargs: Any) -> Any:
         raise TypeError("Cannot modify immutable list in finalized extraction model")
 
 
@@ -270,6 +303,9 @@ class ReadOnlyDict(dict):
         raise TypeError("Cannot modify immutable dict in finalized extraction model")
 
     def setdefault(self, *args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Cannot modify immutable dict in finalized extraction model")
+
+    def __ior__(self, *args: Any, **kwargs: Any) -> Any:
         raise TypeError("Cannot modify immutable dict in finalized extraction model")
 
 
@@ -351,7 +387,9 @@ class ExtractionBaseModel(BaseModel):
 # Deprecated Compatibility Alias
 # -----------------------------------------------------------------------------
 
-# ImmutableExtractionBase is deprecated; use ExtractionBaseModel instead.
+# ImmutableExtractionBase is deprecated and scheduled for removal in Stage 5 /
+# BRICK-013 (Production Hardening & Release Validation).
+# Use ExtractionBaseModel instead.
 # ExtractionBaseModel instances are mutable drafts during pipeline construction
 # and become deeply immutable only after NormalizedDocument.finalize() is invoked.
 ImmutableExtractionBase = ExtractionBaseModel
@@ -1123,6 +1161,10 @@ class NormalizedDocument(ExtractionBaseModel):
         """Compute SHA-256 digest of purely normalized content and structure."""
         return hashlib.sha256(self.to_content_canonical_json().encode("utf-8")).hexdigest()
 
+    def compute_normalized_content_sha256(self) -> str:
+        """Compute canonical SHA-256 digest of purely normalized content and structure."""
+        return self.compute_content_sha256()
+
     def to_record_canonical_dict(self) -> dict[str, Any]:
         """Produce canonical dictionary of the full extraction execution record.
 
@@ -1152,6 +1194,10 @@ class NormalizedDocument(ExtractionBaseModel):
     def compute_record_sha256(self) -> str:
         """Compute SHA-256 digest of the entire extraction execution record."""
         return hashlib.sha256(self.to_record_canonical_json().encode("utf-8")).hexdigest()
+
+    def compute_extraction_record_sha256(self) -> str:
+        """Compute SHA-256 digest of the entire extraction execution record."""
+        return self.compute_record_sha256()
 
     def to_canonical_dict(self) -> dict[str, Any]:
         """Legacy alias for to_record_canonical_dict()."""
@@ -1183,65 +1229,97 @@ class NormalizedDocument(ExtractionBaseModel):
         """Legacy alias for with_computed_hashes()."""
         return self.with_computed_hashes()
 
-    def verify_hash_integrity(self) -> bool:
-        """Verify that populated cryptographic digests strictly match freshly recomputed hashes.
-
-        Returns True only if hashes are populated AND match actual live content/record exactly.
-        Returns False if unhashed, stale, or mismatched.
-        """
-        if self.normalized_content_sha256 is None or self.extraction_record_sha256 is None:
-            return False
-
-        expected_content = self.compute_content_sha256()
-        if self.normalized_content_sha256 != expected_content:
-            return False
-
-        expected_record = self.compute_record_sha256()
-        if self.extraction_record_sha256 != expected_record:
-            return False
-
-        if self.normalized_output_sha256 is not None:
-            if self.normalized_output_sha256 != expected_record:
-                return False
-
-        return True
-
-    def verify_hashes(self) -> bool:
+    def verify_hashes(
+        self,
+        *,
+        fail_closed: bool = False,
+        structured: bool = False,
+    ) -> bool | HashVerificationResult:
         """Verify that populated cryptographic digests strictly match freshly recomputed hashes.
 
         Recomputes normalized-content and extraction-record digests from the live
-        object graph. Returns True only if hashes are populated AND match actual
-        live content and record exactly.
+        object graph. Compares digests using constant-time comparison (hmac.compare_digest).
+
+        Args:
+            fail_closed: If True, raises HashIntegrityError on any verification failure.
+            structured: If True, returns a HashVerificationResult with detailed diagnostic state.
+
+        Returns:
+            bool (True if all digests match) or HashVerificationResult if structured=True.
+
+        Raises:
+            HashIntegrityError: If fail_closed=True and verification fails.
         """
-        return self.verify_hash_integrity()
+        expected_content = self.compute_content_sha256()
+        expected_record = self.compute_record_sha256()
+
+        actual_content = self.normalized_content_sha256
+        actual_record = self.extraction_record_sha256
+        actual_output = self.normalized_output_sha256
+
+        content_match = actual_content is not None and hmac.compare_digest(
+            actual_content, expected_content
+        )
+        record_match = actual_record is not None and hmac.compare_digest(
+            actual_record, expected_record
+        )
+        output_match = actual_output is None or hmac.compare_digest(actual_output, expected_record)
+
+        is_valid = content_match and record_match and output_match
+        error_msg: str | None = None
+
+        if not is_valid:
+            reasons = []
+            if actual_content is None:
+                reasons.append("Document has no normalized_content_sha256 digest")
+            elif not content_match:
+                reasons.append(
+                    f"Stale or mismatched normalized_content_sha256: "
+                    f"expected {expected_content}, got {actual_content}"
+                )
+
+            if actual_record is None:
+                reasons.append("Document has no extraction_record_sha256 digest")
+            elif not record_match:
+                reasons.append(
+                    f"Stale or mismatched extraction_record_sha256: "
+                    f"expected {expected_record}, got {actual_record}"
+                )
+
+            if actual_output is not None and not output_match:
+                reasons.append(
+                    f"Stale or mismatched normalized_output_sha256: "
+                    f"expected {expected_record}, got {actual_output}"
+                )
+
+            error_msg = "; ".join(reasons)
+            if fail_closed:
+                raise HashIntegrityError(error_msg)
+
+        if structured:
+            return HashVerificationResult(
+                is_valid=is_valid,
+                content_hash_matches=content_match,
+                record_hash_matches=record_match,
+                output_hash_matches=output_match,
+                expected_content_sha256=expected_content,
+                expected_record_sha256=expected_record,
+                actual_content_sha256=actual_content,
+                actual_record_sha256=actual_record,
+                actual_output_sha256=actual_output,
+                error_message=error_msg,
+            )
+
+        return is_valid
+
+    def verify_hash_integrity(self) -> bool:
+        """Verify that populated cryptographic digests strictly match freshly recomputed hashes."""
+        res = self.verify_hashes()
+        return bool(res)
 
     def assert_hash_integrity(self) -> None:
         """Assert hash integrity against live state, failing closed on discrepancy."""
-        if self.normalized_content_sha256 is None:
-            raise HashIntegrityError("Document has no normalized_content_sha256 digest")
-        if self.extraction_record_sha256 is None:
-            raise HashIntegrityError("Document has no extraction_record_sha256 digest")
-
-        expected_content = self.compute_content_sha256()
-        if self.normalized_content_sha256 != expected_content:
-            raise HashIntegrityError(
-                f"Stale or mismatched normalized_content_sha256: "
-                f"expected {expected_content}, got {self.normalized_content_sha256}"
-            )
-
-        expected_record = self.compute_record_sha256()
-        if self.extraction_record_sha256 != expected_record:
-            raise HashIntegrityError(
-                f"Stale or mismatched extraction_record_sha256: "
-                f"expected {expected_record}, got {self.extraction_record_sha256}"
-            )
-
-        if self.normalized_output_sha256 is not None:
-            if self.normalized_output_sha256 != expected_record:
-                raise HashIntegrityError(
-                    f"Stale or mismatched normalized_output_sha256: "
-                    f"expected {expected_record}, got {self.normalized_output_sha256}"
-                )
+        self.verify_hashes(fail_closed=True)
 
 
 # -----------------------------------------------------------------------------

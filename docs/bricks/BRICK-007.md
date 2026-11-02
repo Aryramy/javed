@@ -316,18 +316,21 @@ To ensure reproducible testing without external network dependencies, a dedicate
 
 > [!NOTE] Phase 3C Finalization & Nested Mutation Integrity Contract
 > 1. **Nested Mutation Analysis & Bypass Findings**:
->    - In unfinalized draft documents, in-place list mutations (`document.elements.append(...)`, `document.warnings.append(...)`) modify collections directly and bypass `NormalizedDocument.__setattr__`. Stored hashes are therefore explicitly unauthoritative during drafting.
->    - Live cryptographic verification (`verify_hashes()` / `verify_hash_integrity()`) recomputes normalized-content and extraction-record digests from the live object graph without trusting stored fields, immediately catching any nested list or collection mutation fail-closed.
->    - Direct nested model attribute mutations (`document.metadata.title = ...`, `document.elements[0].text = ...`, `document.elements[0].table.rows[0][0].value = ...`) notify the root document via recursive weak backreferences (`_root_doc_ref`) and immediately invalidate cached digests to `None`.
+>    - In unfinalized draft documents, in-place list mutations (`document.elements.append(...)`, `document.elements.pop(...)`, `document.warnings.append(...)`, `document.errors.append(...)`) modify collections directly and bypass `NormalizedDocument.__setattr__`. Stored hashes are therefore explicitly unauthoritative during drafting.
+>    - Live cryptographic verification (`verify_hashes()` / `verify_hash_integrity()`) recomputes normalized-content and extraction-record digests from the live object graph using constant-time comparison (`hmac.compare_digest`) without trusting stored fields, immediately catching any direct or nested mutation fail-closed.
+>    - Direct nested model attribute mutations (`document.metadata.title = ...`, `document.elements[0].text = ...`, `document.elements[0].provenance.page_number = ...`, `document.elements[0].table.rows[0][0].value = ...`, `document.full_text = ...`, `document.full_markdown = ...`) notify the root document via recursive weak backreferences (`_root_doc_ref`) and immediately invalidate cached digests to `None`.
 > 2. **Adopted Integrity Model (Preferred Model)**:
 >    - **Draft Phase**: `NormalizedDocument` is mutable during pipeline assembly (`is_finalized == False`). Collections (`elements`, `warnings`, `errors`, `table.rows`, `custom_attributes`) are standard mutable Python `list` and `dict` instances for straightforward extraction builder assembly.
 >    - **Explicit Finalization**: Calling `doc.finalize()` validates all document contracts, freshly computes canonical digests from the live content and record, and deeply freezes the entire document hierarchy into immutable representations (`ReadOnlyList`, `ReadOnlyDict`).
 >    - **Finalized Immutability**: Finalized documents reject all direct field mutations, nested model mutations, collection appends/modifications, and attribute deletions with `TypeError`.
 >    - **Trust Boundary Enforcement**: `verify_trust_boundary(doc, require_finalized=True)` requires `doc.is_finalized is True` and asserts live hash integrity (`assert_hash_integrity()`), failing closed with `HashIntegrityError` on any drift or unfinalized state.
+>    - **Mandatory Trust Boundaries**: Successful hash verification is mandatory before future persistence, quarantine promotion into canonical storage, deduplication, cache reuse, version comparison, API response publication, BRICK-009 chunking, embedding generation, vector indexing, or downstream agent handoff.
 > 3. **Compatibility-Alias Disposition**:
->    - `ImmutableExtractionBase` is formally deprecated as a compatibility alias for `ExtractionBaseModel`. Unfinalized models are explicitly documented as mutable drafts, not immutable instances.
-> 4. **Table Cell Property**:
+>    - `ImmutableExtractionBase` is formally deprecated as a compatibility alias for `ExtractionBaseModel` and scheduled for removal in Stage 5 / BRICK-013 (Production Hardening & Release Validation). Unfinalized models are explicitly documented as mutable drafts, not immutable instances.
+> 4. **Table Cell Property & API Hardening**:
 >    - `TableCell.value` property alias (`@property def value`, `@value.setter def value`) allows cell text access and mutation, cascading hash invalidation up to the parent document during drafting, and rejecting mutation after finalization.
+>    - `compute_normalized_content_sha256()` and `compute_extraction_record_sha256()` provide canonical entry points for digest generation.
+>    - `verify_hashes(*, fail_closed: bool = False, structured: bool = False)` provides constant-time comparison via `hmac.compare_digest` and returns detailed diagnostic reports (`HashVerificationResult`).
 
 ### Hash Field Inclusion Rules
 

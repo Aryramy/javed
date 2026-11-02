@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3C Finalization & Nested Mutation Integrity Contract Completed (74/74 security tests, 31/31 schema tests, 105 extraction tests, 334/334 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 3C Finalization & Nested Mutation Integrity Contract Completed (74/74 security tests, 35/35 schema tests, 109 extraction tests, 338/338 full regression passed, 0 leaks). Awaiting Phase 4 authorization. |
 | **TASK-080** | BRICK-008 | Integrate Intelligent Navigation using Browser Use | **NOT STARTED** | Requires BRICK-007 Verification | Vision-guided autonomous web exploration with safety guards, redirect destination route validation, request-time private-network checks, subresource filtering, and page WebSocket enforcement. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | SQLite/sqlite-vec memory store with user CRUD drawer. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Multi-server MCP management, runtime discovery, health monitoring, and Developer Mode UI toggles. |
@@ -394,21 +394,24 @@
   - Verified code quality: 0 Ruff errors, 79 files formatted.
   - Process hygiene verified: 0 dangling Chromium, Node.js, Python, or Docling processes.
   - Enforced Phase 3B stop condition.
-- **Phase 3C Status**: **COMPLETED & VERIFIED** (2026-11-01):
+- **Phase 3C Status**: **COMPLETED & VERIFIED** (2026-11-02):
   - Addressed nested mutation hash integrity and finalization contract:
-    - Tested mandatory 5 mutation operations: `elements.append`, `elements[0].text = ...`, `metadata.title = ...`, `elements[0].table.rows[0][0].value = ...`, `warnings.append`.
-    - Identified that in-place collection mutations (`append`, `extend`) bypass `NormalizedDocument.__setattr__` on unfinalized drafts; proved that stored digests on unfinalized drafts are unauthoritative.
-    - Implemented live cryptographic reverification via `verify_hashes()` and `verify_hash_integrity()`: recomputes normalized-content and extraction-record digests from live state, catching stale hashes fail-closed.
+    - Tested mandatory 10 mutation operations: `elements.append`, `elements.pop`, `elements[0].text = ...`, `metadata.title = ...`, `elements[0].provenance.page_number = ...`, `elements[0].table.rows[0][0].value = ...`, `warnings.append`, `errors.append`, `full_text = ...`, `full_markdown = ...`.
+    - Proved in-place collection mutations (`append`, `pop`) modify lists directly, bypassing `NormalizedDocument.__setattr__` on unfinalized drafts; proved that stored digests on unfinalized drafts are unauthoritative.
+    - Implemented live cryptographic reverification via `verify_hashes()` and `verify_hash_integrity()` using constant-time comparison (`hmac.compare_digest`): recomputes normalized-content and extraction-record digests from live state, catching stale hashes fail-closed.
+    - Added structured verification reports via `HashVerificationResult` (supporting `structured=True` and `fail_closed=True`).
+    - Added canonical entry points `compute_normalized_content_sha256()` and `compute_extraction_record_sha256()`.
+    - Defined explicit trust boundary gates: mandatory verification before persistence, quarantine promotion, deduplication, cache reuse, version comparison, API response publication, BRICK-009 chunking, embedding generation, vector indexing, and agent handoff.
     - Adopted Preferred Integrity Model:
       - Mutable draft during extraction/pipeline assembly (`is_finalized == False`) with standard Python lists and dicts.
       - Explicit finalization via `doc.finalize()` computing canonical digests from live content/record.
       - Deep freezing into immutable representations (`ReadOnlyList`, `ReadOnlyDict`) across all nested models and collections.
       - Finalized documents reject all direct and nested mutations with `TypeError`.
     - Implemented `TableCell.value` property and setter, with recursive weak backreferences (`_root_doc_ref`) invalidating unfinalized root hashes on cell mutations.
-    - Marked `ImmutableExtractionBase` as a deprecated compatibility alias.
-    - Added deterministic test suite: 31/31 schema tests in `tests/test_extraction_schema.py` (including direct mutation, list append, nested element, nested metadata, nested table cell, unchanged verification, serialization parity, and finalized immutability).
+    - Marked `ImmutableExtractionBase` as a deprecated compatibility alias scheduled for removal in Stage 5 / BRICK-013.
+    - Added deterministic test suite: 35/35 schema tests in `tests/test_extraction_schema.py` (covering all 10 mutation operations, list append/pop, nested provenance, nested table cell, structured results, sensitivity matrix, order independence, JSON round-trip stability, serialization parity, and finalized immutability).
     - 74/74 security tests in `tests/test_extraction_security.py` passed.
-    - 105/105 total targeted extraction tests passed in 3.84s.
+    - 109/109 total targeted extraction tests passed in 3.35s.
     - Ruff check (0 errors) and ruff format (79 files) verified.
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox

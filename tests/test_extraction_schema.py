@@ -44,6 +44,7 @@ from javed.extraction.schema import (
     ExtractionWarning,
     ExtractorDescriptor,
     HashIntegrityError,
+    HashVerificationResult,
     MergedCell,
     NormalizedDocument,
     SectionReference,
@@ -1213,12 +1214,17 @@ def test_hash_reverification_and_trust_boundary_enforcement() -> None:
 def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None:
     """Verify nested mutations on unfinalized drafts and fail-closed live verification.
 
-    Tests the mandatory 5 operations:
+    Tests the mandatory 10 operations:
     1. document.elements.append(...)
-    2. document.elements[0].text = ...
-    3. document.metadata.title = ...
-    4. document.elements[0].table.rows[0][0].value = ...
-    5. document.warnings.append(...)
+    2. document.elements.pop(...)
+    3. document.elements[0].text = ...
+    4. document.metadata.title = ...
+    5. document.elements[0].provenance.page_number = ...
+    6. document.elements[0].table.rows[0][0].value = ...
+    7. document.warnings.append(...)
+    8. document.errors.append(...)
+    9. document.full_text = ...
+    10. document.full_markdown = ...
     """
     cell_a = TableCell(row=0, col=0, text="A0")
     cell_b = TableCell(row=0, col=1, text="B0")
@@ -1228,12 +1234,14 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
         row_count=1,
         column_count=2,
     )
+    prov = ElementProvenance(page_number=1, source_native_reference="para-01")
     elem_0 = ExtractionElement(
         element_id="elem-draft-0",
         element_type=ExtractionElementType.TABLE,
         ordinal=0,
         text="Draft table text",
         table=table,
+        provenance=prov,
     )
     elem_1 = ExtractionElement(
         element_id="elem-draft-1",
@@ -1255,6 +1263,7 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
         ),
         elements=[elem_0],
         full_text="Draft table text",
+        full_markdown="# Draft Title\n\nDraft table text",
         extracted_at=datetime.now(UTC),
     )
 
@@ -1271,7 +1280,7 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     assert hashed_doc.verify_hash_integrity() is True
 
     # --- Operation 1: document.elements.append(...) ---
-    # List mutation modifies collection in-place, bypassing document.__setattr__
+    # List append modifies collection in-place, bypassing document.__setattr__
     hashed_doc.elements.append(elem_1)
     # The stored hash in memory was not cleared by list.append...
     assert hashed_doc.normalized_content_sha256 == initial_content_hash
@@ -1283,12 +1292,26 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     with pytest.raises(HashIntegrityError):
         verify_trust_boundary(hashed_doc, require_finalized=False)
 
-    # Re-synchronize hashes on the draft
-    hashed_doc.metadata.element_count = 2
+    # --- Operation 2: document.elements.pop(...) ---
+    # List removal also modifies collection in-place
+    hashed_doc.elements.pop()  # Remove elem_1, leaving elem_0
+    assert len(hashed_doc.elements) == 1
+    # Hash is re-synchronized to match current element count (1)
+    hashed_doc = hashed_doc.with_computed_hashes()
+    assert hashed_doc.verify_hashes() is True
+    # Now pop elem_0: in-place list mutation leaves stale hash
+    removed_elem = hashed_doc.elements.pop()
+    assert len(hashed_doc.elements) == 0
+    assert hashed_doc.verify_hashes() is False
+    with pytest.raises(HashIntegrityError, match="Stale or mismatched normalized_content_sha256"):
+        hashed_doc.assert_hash_integrity()
+
+    # Restore elements and re-synchronize hashes
+    hashed_doc.elements.append(removed_elem)
     hashed_doc = hashed_doc.with_computed_hashes()
     assert hashed_doc.verify_hashes() is True
 
-    # --- Operation 2: document.elements[0].text = ... ---
+    # --- Operation 3: document.elements[0].text = ... ---
     # Child model field mutation triggers ExtractionBaseModel.__setattr__ and invalidates parent
     hashed_doc.elements[0].text = "Mutated table text via child model"
     assert hashed_doc.normalized_content_sha256 is None
@@ -1301,7 +1324,7 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     hashed_doc = hashed_doc.with_computed_hashes()
     assert hashed_doc.verify_hashes() is True
 
-    # --- Operation 3: document.metadata.title = ... ---
+    # --- Operation 4: document.metadata.title = ... ---
     # Child model field mutation triggers DocumentMetadata.__setattr__ and invalidates parent
     hashed_doc.metadata.title = "Mutated metadata title"
     assert hashed_doc.normalized_content_sha256 is None
@@ -1312,7 +1335,20 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     hashed_doc = hashed_doc.with_computed_hashes()
     assert hashed_doc.verify_hashes() is True
 
-    # --- Operation 4: document.elements[0].table.rows[0][0].value = ... ---
+    # --- Operation 5: document.elements[0].provenance.page_number = ... ---
+    # Child model nested field mutation triggers invalidation up to root document
+    assert hashed_doc.elements[0].provenance is not None
+    hashed_doc.elements[0].provenance.page_number = 42
+    assert hashed_doc.normalized_content_sha256 is None
+    assert hashed_doc.extraction_record_sha256 is None
+    assert hashed_doc.verify_hashes() is False
+
+    # Re-synchronize hashes on the draft
+    hashed_doc = hashed_doc.with_computed_hashes()
+    assert hashed_doc.verify_hashes() is True
+    rec_hash_before_warning = hashed_doc.extraction_record_sha256
+
+    # --- Operation 6: document.elements[0].table.rows[0][0].value = ... ---
     # TableCell setter mutates child model, which notifies root document to invalidate hashes
     assert isinstance(hashed_doc.elements[0].table.rows[0][0], TableCell)  # type: ignore[union-attr]
     hashed_doc.elements[0].table.rows[0][0].value = "New Cell Value via .value"  # type: ignore[union-attr]
@@ -1325,7 +1361,7 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     assert hashed_doc.verify_hashes() is True
     rec_hash_before_warning = hashed_doc.extraction_record_sha256
 
-    # --- Operation 5: document.warnings.append(...) ---
+    # --- Operation 7: document.warnings.append(...) ---
     # In-place list append on warnings collection
     hashed_doc.warnings.append(
         ExtractionWarning(
@@ -1340,9 +1376,52 @@ def test_unfinalized_nested_mutation_bypasses_and_stale_hash_detection() -> None
     with pytest.raises(HashIntegrityError, match="Stale or mismatched extraction_record_sha256"):
         hashed_doc.assert_hash_integrity()
 
+    # Re-synchronize hashes with warning
+    hashed_doc.status = ExtractionStatus.PARTIAL_SUCCESS
+    hashed_doc = hashed_doc.with_computed_hashes()
+    assert hashed_doc.verify_hashes() is True
+    rec_hash_before_error = hashed_doc.extraction_record_sha256
+
+    # --- Operation 8: document.errors.append(...) ---
+    # In-place list append on errors collection
+    hashed_doc.errors.append(
+        ExtractionError(
+            code=ExtractionErrorCode.INTERNAL_EXTRACTION_ERROR,
+            message="Error appended to draft",
+            timestamp=datetime.now(UTC),
+        )
+    )
+    assert hashed_doc.extraction_record_sha256 == rec_hash_before_error
+    assert hashed_doc.verify_hashes() is False
+    with pytest.raises(HashIntegrityError, match="extraction_record_sha256"):
+        hashed_doc.assert_hash_integrity()
+
+    # Clear error, re-synchronize hashes
+    hashed_doc.errors.clear()
+    hashed_doc = hashed_doc.with_computed_hashes()
+    assert hashed_doc.verify_hashes() is True
+
+    # --- Operation 9: document.full_text = ... ---
+    # Direct field assignment on root document clears hashes
+    hashed_doc.full_text = "Updated full text directly"
+    assert hashed_doc.normalized_content_sha256 is None
+    assert hashed_doc.extraction_record_sha256 is None
+    assert hashed_doc.verify_hashes() is False
+
+    # Re-synchronize hashes
+    hashed_doc = hashed_doc.with_computed_hashes()
+    assert hashed_doc.verify_hashes() is True
+
+    # --- Operation 10: document.full_markdown = ... ---
+    # Direct field assignment on root document clears hashes
+    hashed_doc.full_markdown = "# Updated Markdown Header"
+    assert hashed_doc.normalized_content_sha256 is None
+    assert hashed_doc.extraction_record_sha256 is None
+    assert hashed_doc.verify_hashes() is False
+
 
 def test_finalized_document_strictly_rejects_nested_and_collection_mutations() -> None:
-    """Prove finalize() rejects all 5 required mutations with TypeError."""
+    """Prove finalize() rejects all 10 operations, list removal, and cell updates with TypeError."""
     cell_a = TableCell(row=0, col=0, text="A0")
     cell_b = TableCell(row=0, col=1, text="B0")
     table = TableRepresentation(
@@ -1351,12 +1430,14 @@ def test_finalized_document_strictly_rejects_nested_and_collection_mutations() -
         row_count=1,
         column_count=2,
     )
+    prov = ElementProvenance(page_number=1, source_native_reference="sec-1")
     elem_0 = ExtractionElement(
         element_id="elem-fin-0",
         element_type=ExtractionElementType.TABLE,
         ordinal=0,
         text="Finalized table text",
         table=table,
+        provenance=prov,
     )
     elem_new = ExtractionElement(
         element_id="elem-fin-new",
@@ -1378,6 +1459,7 @@ def test_finalized_document_strictly_rejects_nested_and_collection_mutations() -
         ),
         elements=[elem_0],
         full_text="Finalized table text",
+        full_markdown="# Finalized Title",
         extracted_at=datetime.now(UTC),
     )
 
@@ -1389,15 +1471,23 @@ def test_finalized_document_strictly_rejects_nested_and_collection_mutations() -
     with pytest.raises(TypeError, match="Cannot modify immutable list"):
         doc.elements.append(elem_new)
 
-    # 2. document.elements[0].text = ... rejected
+    # 2. document.elements.pop(...) rejected
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements.pop()
+
+    # 3. document.elements[0].text = ... rejected
     with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
         doc.elements[0].text = "Hacked text"
 
-    # 3. document.metadata.title = ... rejected
+    # 4. document.metadata.title = ... rejected
     with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
         doc.metadata.title = "Hacked title"
 
-    # 4. document.elements[0].table.rows[0][0].value = ... rejected
+    # 5. document.elements[0].provenance.page_number = ... rejected
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.elements[0].provenance.page_number = 99  # type: ignore[union-attr]
+
+    # 6. document.elements[0].table.rows[0][0].value = ... rejected
     with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
         doc.elements[0].table.rows[0][0].value = "Hacked cell"  # type: ignore[union-attr]
 
@@ -1408,17 +1498,276 @@ def test_finalized_document_strictly_rejects_nested_and_collection_mutations() -
     with pytest.raises(TypeError, match="Cannot modify immutable list"):
         doc.elements[0].table.rows[0].append(cell_a)  # type: ignore[union-attr]
 
-    # 5. document.warnings.append(...) rejected
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.elements[0].table.rows[0].pop()  # type: ignore[union-attr]
+
+    # 7. document.warnings.append(...) rejected
     with pytest.raises(TypeError, match="Cannot modify immutable list"):
         doc.warnings.append(ExtractionWarning(code="TEST", message="Test warning"))
 
-    # 6. Direct field mutation rejected
+    # 8. document.errors.append(...) rejected
+    with pytest.raises(TypeError, match="Cannot modify immutable list"):
+        doc.errors.append(
+            ExtractionError(
+                code=ExtractionErrorCode.INTERNAL_EXTRACTION_ERROR,
+                message="Test error",
+                timestamp=datetime.now(UTC),
+            )
+        )
+
+    # 9. Direct field mutation (full_text) rejected
     with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
         doc.full_text = "Hacked full text"
+
+    # 10. Direct field mutation (full_markdown) rejected
+    with pytest.raises(TypeError, match="Cannot mutate finalized extraction model"):
+        doc.full_markdown = "# Hacked markdown"
 
     # Document remains 100% valid and verified
     assert doc.verify_hashes() is True
     assert verify_trust_boundary(doc, require_finalized=True) is doc
+
+
+def test_verify_hashes_structured_and_fail_closed() -> None:
+    """Verify structured result and fail-closed behaviors of verify_hashes()."""
+    elem = ExtractionElement(
+        element_id="elem-struct-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Structured verification test line",
+    )
+    doc = NormalizedDocument(
+        document_id="doc-struct-01",
+        version_id="ver-1",
+        ingestion_id="ing-struct-01",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Structured Document",
+            element_count=1,
+            table_count=0,
+        ),
+        elements=[elem],
+        full_text="Structured verification test line",
+        extracted_at=datetime.now(UTC),
+    )
+
+    # 1. Unhashed document structured result
+    res_unhashed = doc.verify_hashes(structured=True)
+    assert isinstance(res_unhashed, HashVerificationResult)
+    assert not res_unhashed
+    assert res_unhashed.is_valid is False
+    assert res_unhashed.content_hash_matches is False
+    assert res_unhashed.record_hash_matches is False
+    assert "has no normalized_content_sha256 digest" in (res_unhashed.error_message or "")
+
+    # Unhashed document fail_closed raises HashIntegrityError
+    with pytest.raises(HashIntegrityError, match="has no normalized_content_sha256 digest"):
+        doc.verify_hashes(fail_closed=True)
+
+    # 2. Finalized document structured result
+    doc.finalize()
+    res_valid = doc.verify_hashes(structured=True)
+    assert isinstance(res_valid, HashVerificationResult)
+    assert bool(res_valid) is True
+    assert res_valid.is_valid is True
+    assert res_valid.content_hash_matches is True
+    assert res_valid.record_hash_matches is True
+    assert res_valid.output_hash_matches is True
+    assert res_valid.error_message is None
+    assert res_valid.actual_content_sha256 == doc.compute_normalized_content_sha256()
+    assert res_valid.actual_record_sha256 == doc.compute_extraction_record_sha256()
+
+    # fail_closed succeeds without error on valid document
+    assert doc.verify_hashes(fail_closed=True) is True
+
+    # 3. Tampered document structured result
+    object.__setattr__(doc.metadata, "title", "Tampered Title")
+    res_tampered = doc.verify_hashes(structured=True)
+    assert isinstance(res_tampered, HashVerificationResult)
+    assert bool(res_tampered) is False
+    assert res_tampered.is_valid is False
+    assert res_tampered.content_hash_matches is False
+    assert "Stale or mismatched normalized_content_sha256" in (res_tampered.error_message or "")
+
+
+def test_hash_sensitivity_matrix() -> None:
+    """Verify distinct digest behaviors across content vs execution record mutations."""
+    elem = ExtractionElement(
+        element_id="elem-sens-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Base text content",
+    )
+    doc_base = NormalizedDocument(
+        document_id="doc-sens-01",
+        version_id="ver-1",
+        ingestion_id="ing-attempt-001",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Base Document",
+            element_count=1,
+            table_count=0,
+        ),
+        elements=[elem],
+        full_text="Base text content",
+        extracted_at=datetime(2026, 11, 2, 8, 0, 0, tzinfo=UTC),
+    )
+
+    base_content_hash = doc_base.compute_normalized_content_sha256()
+    base_record_hash = doc_base.compute_extraction_record_sha256()
+
+    # 1. Ingestion ID change: alters record digest ONLY
+    doc_ing = doc_base.model_copy(update={"ingestion_id": "ing-attempt-002"})
+    assert doc_ing.compute_normalized_content_sha256() == base_content_hash
+    assert doc_ing.compute_extraction_record_sha256() != base_record_hash
+
+    # 2. Timestamp change: alters record digest ONLY
+    doc_time = doc_base.model_copy(
+        update={"extracted_at": datetime(2026, 11, 2, 9, 30, 0, tzinfo=UTC)}
+    )
+    assert doc_time.compute_normalized_content_sha256() == base_content_hash
+    assert doc_time.compute_extraction_record_sha256() != base_record_hash
+
+    # 3. Source SHA-256 change: alters record digest ONLY
+    doc_src = doc_base.model_copy(update={"source_sha256": _sample_sha256("2")})
+    assert doc_src.compute_normalized_content_sha256() == base_content_hash
+    assert doc_src.compute_extraction_record_sha256() != base_record_hash
+
+    # 4. Warnings append: alters record digest ONLY (does not change content digest)
+    doc_warn = doc_base.model_copy(
+        update={
+            "status": ExtractionStatus.PARTIAL_SUCCESS,
+            "warnings": [ExtractionWarning(code="NOTE", message="Note warning")],
+        }
+    )
+    assert doc_warn.compute_normalized_content_sha256() == base_content_hash
+    assert doc_warn.compute_extraction_record_sha256() != base_record_hash
+
+    # 5. Content text change: alters BOTH content AND record digests
+    doc_content = doc_base.model_copy(
+        update={
+            "full_text": "Altered text content",
+            "elements": [
+                ExtractionElement(
+                    element_id="elem-sens-1",
+                    element_type=ExtractionElementType.TEXT,
+                    ordinal=0,
+                    text="Altered text content",
+                )
+            ],
+        }
+    )
+    assert doc_content.compute_normalized_content_sha256() != base_content_hash
+    assert doc_content.compute_extraction_record_sha256() != base_record_hash
+
+
+def test_canonical_serialization_order_independence() -> None:
+    """Prove equivalent models constructed with different key order yield identical hashes."""
+    elem_a = ExtractionElement(
+        ordinal=0,
+        element_type=ExtractionElementType.TEXT,
+        text="Sample line",
+        element_id="elem-order-1",
+    )
+    elem_b = ExtractionElement(
+        element_id="elem-order-1",
+        text="Sample line",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+    )
+
+    doc_a = NormalizedDocument(
+        document_id="doc-order",
+        version_id="ver-1",
+        ingestion_id="ing-1",
+        source_sha256=_sample_sha256("1"),
+        extracted_at=datetime(2026, 11, 2, 8, 0, 0, tzinfo=UTC),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Order Test",
+            element_count=1,
+            table_count=0,
+            custom_attributes={"zebra": "1", "alpha": "2"},
+        ),
+        elements=[elem_a],
+        full_text="Sample line",
+    )
+
+    doc_b = NormalizedDocument(
+        full_text="Sample line",
+        elements=[elem_b],
+        metadata=DocumentMetadata(
+            custom_attributes={"alpha": "2", "zebra": "1"},  # reverse dict key order
+            table_count=0,
+            element_count=1,
+            title="Order Test",
+        ),
+        extractor=_make_minimal_extractor(),
+        source=_make_minimal_source(),
+        extracted_at=datetime(2026, 11, 2, 8, 0, 0, tzinfo=UTC),
+        source_sha256=_sample_sha256("1"),
+        ingestion_id="ing-1",
+        version_id="ver-1",
+        document_id="doc-order",
+    )
+
+    # Canonical content JSON and hashes must be 100% IDENTICAL
+    assert doc_a.to_content_canonical_json() == doc_b.to_content_canonical_json()
+    assert doc_a.compute_normalized_content_sha256() == doc_b.compute_normalized_content_sha256()
+
+    # Canonical record JSON and hashes must be 100% IDENTICAL
+    assert doc_a.to_record_canonical_json() == doc_b.to_record_canonical_json()
+    assert doc_a.compute_extraction_record_sha256() == doc_b.compute_extraction_record_sha256()
+
+
+def test_canonical_serialization_json_roundtrip_stability() -> None:
+    """Prove canonical serialization is stable after JSON round-trip."""
+    import json
+
+    elem = ExtractionElement(
+        element_id="elem-rt-1",
+        element_type=ExtractionElementType.TEXT,
+        ordinal=0,
+        text="Roundtrip text with unicode: \u2603 \u2764 \u0645\u0631\u062d\u0628\u0627",
+    )
+    doc = NormalizedDocument(
+        document_id="doc-rt-01",
+        version_id="ver-1",
+        ingestion_id="ing-rt-01",
+        source_sha256=_sample_sha256("1"),
+        source=_make_minimal_source(),
+        extractor=_make_minimal_extractor(),
+        metadata=DocumentMetadata(
+            title="Unicode Document",
+            element_count=1,
+            table_count=0,
+            custom_attributes={"lang": "multi", "score": 98.6},
+        ),
+        elements=[elem],
+        full_text="Roundtrip text with unicode: \u2603 \u2764 \u0645\u0631\u062d\u0628\u0627",
+        extracted_at=datetime(2026, 11, 2, 8, 0, 0, tzinfo=UTC),
+    )
+
+    content_json = doc.to_content_canonical_json()
+    record_json = doc.to_record_canonical_json()
+
+    # Parse and re-dump with canonical settings
+    content_dict = json.loads(content_json)
+    roundtrip_content_json = json.dumps(
+        content_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    assert content_json == roundtrip_content_json
+
+    record_dict = json.loads(record_json)
+    roundtrip_record_json = json.dumps(
+        record_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    assert record_json == roundtrip_record_json
 
 
 def test_recomputed_hashes_match_canonical_serialization() -> None:
