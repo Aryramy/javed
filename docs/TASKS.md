@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 4 Crawl4AI Web Extraction Subsystem Completed (33/33 web tests, 109 schema/security tests, 142 extraction tests, 371/371 full regression tests passed, 0 leaks, $0.00 spend). Awaiting Phase 5 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 6 Storage Manager & Metadata Registry Completed (13/13 storage tests, 168 extraction tests, 397/397 full regression tests passed, 0 leaks, $0.00 spend). Awaiting Phase 7 authorization. |
 | **TASK-080** | BRICK-008 | Build Browser Use and Authenticated Navigation Subsystem | **NOT STARTED** | Requires BRICK-007 Verification | OpenCLI-based authenticated navigation with dedicated JAVED profiles, deterministic Playwright & Playwright MCP foundation, Stagehand eval-only, native owner takeover, redirect route checks, subresource guards, and single-use fail-closed approvals. Anti-bot/stealth/captcha-takeover bypasses removed by owner decision. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | Qdrant vector store with LangGraph orchestration, Mem0 eval-only, LangGraph Store/SQLite local structured memory, deterministic provenance-aware chunking, benchmarked English & Arabic embeddings, memory governance, and hash integrity. Urdu support removed by owner decision. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Official & GitHub MCP registry discovery, JAVED Private Registry authority, SecureMCPGateway execution, Playwright/Time/GitHub/Context7 approved servers, conditional DBHub/Notion/MarkItDown, and 8-stage execution filter. Microsoft Fabric & Azure MCP removed by owner decision. |
@@ -427,21 +427,46 @@
     - Test verification: 33/33 targeted web tests passed (`tests/test_extraction_web.py`), 109/109 schema and security regression tests passed (142 extraction tests total), 371/371 full regression suite passed, 0 ruff errors.
     - Live public test against `https://example.com` verified in both STATIC (0.16s) and RENDERED (1.52s) modes.
     - OpenCLI remains uninstalled and formally deferred to BRICK-008.
+- **Phase 5 Status**: **COMPLETED & VERIFIED** (2026-11-02):
+  - Implemented `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`, `extract_document`, `extract_document_async`, `DocumentExtractionConfig`, `DocumentExtractionLimits`):
+    - Multi-format local document understanding: PDF, Word DOCX, Excel XLSX.
+    - 100% offline, zero HuggingFace model download execution via `NativePdfPipeline` and `PyPdfiumDocumentBackend`.
+    - Hierarchical section heading breadcrumbs and section paths across document elements.
+    - Deep table structure extraction with `TableRepresentation`, `TableCell`, row/col counts, sheet names, and markdown.
+    - Element-level provenance with page numbers, sheet names, `POINTS` bounding boxes, and char spans.
+    - Defensive boundary integration via `ExtractionSecurityGuard` preflight.
+    - Resource limit enforcements (file size, page counts, element truncation).
+    - Canonical `NormalizedDocument` contract, hash integrity, finalization, and trust boundary.
+    - Clean async execution and idempotent resource teardown without leaks or `os._exit`.
+    - 13/13 targeted document tests passed, 155 extraction tests passed, 384/384 full deterministic regression suite passed, 0 ruff errors, 0 process/thread leaks, $0.00 spend.
+- **Phase 6 Status**: **COMPLETED & VERIFIED** (2026-11-02):
+  - Implemented `src/javed/extraction/storage.py` (`ExtractionStorageManager`, `StorageConfig`, `StoredDocumentSummary`, `StoredExtractionRecord`, `StoredTableInfo`, `IngestionResult`):
+    - SQLite database schema: `extraction_documents`, `extraction_records`, and `extraction_tables` tables with WAL mode, foreign keys, and busy timeout handlers.
+    - Content deduplication via `normalized_content_sha256` and `source_sha256`: identical content reuses existing document entity and avoids duplicate raw source files.
+    - Execution record deduplication via `extraction_record_sha256`: exact duplicate runs return cached result immediately without DB mutation.
+    - Monotonic document versioning for evolving URLs with differing content: updates `version_count`, `current_version_id`, and `last_ingested_at`.
+    - Safe quarantine promotion: atomically stages raw sources from `data/quarantine/` into `data/sources/{source_sha256}.ext` and purges quarantine file.
+    - Atomic canonical JSON persistence: writes indentation-formatted, deterministic JSON representations to `data/extractions/{record_sha256}.json`.
+    - Structured table artifact exports: exports individual table CSV and JSON files to `data/tables/{table_id}.csv` and `.json`.
+    - Zero-trust boundary validation: documents must be finalized (`is_finalized=True`) and verified (`verify_trust_boundary(doc)`) before persistence and on reload.
+    - Complete sync and async APIs: `store_document`/`store_document_async`, `get_document`/`get_document_async`, `load_normalized_document`/`load_normalized_document_async`, `delete_document`/`delete_document_async`.
+    - Clean resource management, context managers, zero `os._exit`, zero process/thread leaks, and $0.00 spend.
+    - 13/13 targeted storage tests passed, 168 extraction subsystem tests passed, 397/397 full deterministic regression tests passed, 0 ruff errors.
 - **Phased Implementation Roadmap**:
-  - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox
-  - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models
-  - **TASK-070-P3 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator (Including OOXML ZIP inspection)
-  - **TASK-070-P3B (Phase 3B)**: Schema Hash Integrity, Timeout Enforcement & Defensive Contract Hardening
-  - **TASK-070-P3C (Phase 3C)**: Nested Mutation Hash Integrity & Finalization Contract
-  - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem
+  - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox — `VERIFIED`
+  - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models — `VERIFIED`
+  - **TASK-070-P3 (Phase 3)**: Security Guard, Quarantine & Whitelist Validator — `VERIFIED`
+  - **TASK-070-P3B (Phase 3B)**: Schema Hash Integrity, Timeout Enforcement & Defensive Contract Hardening — `VERIFIED`
+  - **TASK-070-P3C (Phase 3C)**: Nested Mutation Hash Integrity & Finalization Contract — `VERIFIED`
+  - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem — `VERIFIED`
   - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX) — `VERIFIED`
-  - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
+  - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry — `VERIFIED`
   - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 5 Completed and Verified; Awaiting Phase 6 Authorization).
-- **Stop Condition**: Phase 5 Docling document extraction subsystem complete. Mandatory Stop: Await explicit Project Owner review and Phase 6 authorization before authoring Storage Manager, Deduplication & Metadata Registry.
+- **Milestone Status**: **IN PROGRESS** (Phase 6 Completed and Verified; Awaiting Phase 7 Authorization).
+- **Stop Condition**: Phase 6 Storage Manager, Deduplication & Metadata Registry complete. Mandatory Stop: Await explicit Project Owner review and Phase 7 authorization before authoring LangChain Extraction Tools & Agent Runtime Integration.
 
 
 ---
