@@ -2,7 +2,7 @@
 
 > **Brick ID**: `BRICK-007`<br/>
 > **Title**: Crawl4AI & Docling Extraction Pipeline<br/>
-> **Status**: `IN PROGRESS` (Phase 4 Crawl4AI Web Extraction Subsystem Completed; Awaiting Phase 5 Authorization)<br/>
+> **Status**: `IN PROGRESS` (Phase 5 Docling Document Extraction Subsystem Completed; Awaiting Phase 6 Authorization)<br/>
 > **Author**: Antigravity Full-Stack AI Engineering Team<br/>
 > **Date**: 2026-10-29<br/>
 > **Baseline Anchor**: Commit `83cdeeac0db71a646cb06c906d59e14e55a56c00` (Verified BRICK-006 synchronized on `master`)<br/>
@@ -275,7 +275,7 @@ To ensure reproducible testing without external network dependencies, a dedicate
 | **Phase 2 (`TASK-070-P2`)** | **Normalized Extraction Schema & Pydantic Models** | Implement `src/javed/extraction/schema.py`; full serialization and validation unit tests. *(Completed & Accepted at `3bf1658`)* |
 | **Phase 3 (`TASK-070-P3`)** | **Security Guard, Quarantine & Whitelist Validator** | Implement `src/javed/extraction/security.py` (`ExtractionSecurityGuard`, `QuarantineManager`); file size, page count, MIME magic, OOXML zip inspection, active content warnings, path traversal guards; 66/66 targeted tests passed; 317/317 full regression passed. *(Completed)* |
 | **Phase 4 (`TASK-070-P4`)** | **Crawl4AI Web Extraction Subsystem** | Implement `src/javed/extraction/web.py` (`Crawl4AIWebExtractor`); SSRF protection, headless Chromium rendering, markdown generation; deterministic mock HTTP server tests. |
-| **Phase 5 (`TASK-070-P5`)** | **Docling Document Extraction Subsystem** | Implement `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`); PDF (layout + table extraction), DOCX, XLSX parsers; provenance tracking; fixture tests. |
+| **Phase 5 (`TASK-070-P5`)** | **Docling Document Extraction Subsystem** | Implement `src/javed/extraction/documents.py` (`DoclingDocumentExtractor`); PDF (`NativePdfPipeline`, zero HuggingFace download, layout + bounding boxes), DOCX (heading hierarchy, tables), XLSX (multi-sheet workbooks); 13/13 targeted tests passed; 155 extraction tests passed; 384 deterministic regression tests passed. *(Completed)* |
 | **Phase 6 (`TASK-070-P6`)** | **Storage Manager, Deduplication & Metadata Registry** | Implement `src/javed/extraction/storage.py` (`ExtractionStorageManager`); SQLite `documents` and `extractions` tables; SHA-256 deduplication and versioning. |
 | **Phase 7 (`TASK-070-P7`)** | **LangChain Agent Tools & HITL Ingestion Gating** | Implement `src/javed/extraction/tools.py` (`extract_web_page`, `extract_document`, `list_ingested_documents`); bind into LangGraph agent runtime; permission tier enforcement. |
 | **Phase 8 (`TASK-070-P8`)** | **REST API & Developer Mode Telemetry** | Implement FastAPI endpoints in `src/javed/api/v1/extraction.py` (`/upload`, `/crawl`, `/documents`); streaming progress events; OpenAPI schemas. |

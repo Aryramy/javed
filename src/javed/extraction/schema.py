@@ -1023,6 +1023,31 @@ class NormalizedDocument(ExtractionBaseModel):
         """Check whether the document is finalized and deeply immutable."""
         return getattr(self, "_is_finalized", False)
 
+    @property
+    def tables(self) -> list[TableRepresentation]:
+        """Convenience accessor for all tables attached to extraction elements."""
+        return [elem.table for elem in self.elements if elem.table is not None]
+
+    @property
+    def text_content(self) -> str:
+        """Backward-compatible alias for full_text."""
+        return self.full_text or ""
+
+    @text_content.setter
+    def text_content(self, value: str) -> None:
+        """Setter for backward-compatible alias full_text."""
+        self.full_text = value
+
+    @property
+    def markdown_content(self) -> str:
+        """Backward-compatible alias for full_markdown."""
+        return self.full_markdown or ""
+
+    @markdown_content.setter
+    def markdown_content(self, value: str) -> None:
+        """Setter for backward-compatible alias full_markdown."""
+        self.full_markdown = value
+
     def finalize(self) -> NormalizedDocument:
         """Finalize document: validate, compute cryptographic digests, and deeply freeze."""
         if self.is_finalized:

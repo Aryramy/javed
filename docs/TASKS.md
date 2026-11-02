@@ -434,14 +434,14 @@
   - **TASK-070-P3B (Phase 3B)**: Schema Hash Integrity, Timeout Enforcement & Defensive Contract Hardening
   - **TASK-070-P3C (Phase 3C)**: Nested Mutation Hash Integrity & Finalization Contract
   - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem
-  - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX)
+  - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX) — `VERIFIED`
   - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry
   - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 4 Completed and Verified; Awaiting Phase 5 Authorization).
-- **Stop Condition**: Phase 4 Crawl4AI web extraction subsystem complete. Mandatory Stop: Await explicit Project Owner review and Phase 5 authorization before authoring Docling document extraction subsystem.
+- **Milestone Status**: **IN PROGRESS** (Phase 5 Completed and Verified; Awaiting Phase 6 Authorization).
+- **Stop Condition**: Phase 5 Docling document extraction subsystem complete. Mandatory Stop: Await explicit Project Owner review and Phase 6 authorization before authoring Storage Manager, Deduplication & Metadata Registry.
 
 
 ---
