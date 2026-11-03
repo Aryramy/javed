@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import json
 import logging
 import threading
 from pathlib import Path
@@ -670,13 +669,28 @@ class ExtractionToolsManager:
                 source_type=st,
             )
 
-            summaries = [doc.model_dump(mode="json") for doc in docs]
+            compact_docs = [
+                {
+                    "document_id": doc.document_id,
+                    "title": doc.original_display_name,
+                    "source_type": doc.source_type.value,
+                    "page_count": doc.page_count,
+                    "element_count": doc.element_count,
+                    "table_count": doc.table_count,
+                    "first_ingested_at": (
+                        doc.first_ingested_at.isoformat() if doc.first_ingested_at else None
+                    ),
+                    "artifact_available": doc.artifact_available,
+                    "artifact_id": doc.artifact_id,
+                }
+                for doc in docs
+            ]
             return {
                 "success": True,
-                "count": len(summaries),
+                "count": len(compact_docs),
                 "limit": limit,
                 "offset": offset,
-                "documents": summaries,
+                "documents": compact_docs,
             }
 
         except Exception as exc:
@@ -719,13 +733,6 @@ class ExtractionToolsManager:
                     "error_type": "DocumentNotFoundError",
                 }
 
-            meta_dict: dict[str, Any] = {}
-            if doc_summary.metadata_json:
-                try:
-                    meta_dict = json.loads(doc_summary.metadata_json)
-                except Exception:
-                    meta_dict = {}
-
             result: dict[str, Any] = {
                 "success": True,
                 "duplicate_read": False,
@@ -733,60 +740,31 @@ class ExtractionToolsManager:
                 "document_id": doc_summary.document_id,
                 "title": doc_summary.original_display_name,
                 "source_type": doc_summary.source_type.value,
-                "source_uri": doc_summary.source_uri,
-                "source_title": doc_summary.source_title,
                 "mime_type": doc_summary.mime_type,
-                "source_sha256": doc_summary.source_sha256,
-                "normalized_content_sha256": doc_summary.normalized_content_sha256,
-                "version_count": doc_summary.version_count,
-                "current_version_id": doc_summary.current_version_id,
-                "current_extraction_id": doc_summary.current_extraction_id,
                 "artifact_available": doc_summary.artifact_available,
                 "artifact_id": doc_summary.artifact_id,
-                "first_ingested_at": doc_summary.first_ingested_at.isoformat(),
-                "last_ingested_at": doc_summary.last_ingested_at.isoformat(),
-                "metadata": meta_dict,
-                "provenance": {
-                    "source_sha256": doc_summary.source_sha256,
-                    "normalized_content_sha256": doc_summary.normalized_content_sha256,
-                    "ingested_at": doc_summary.last_ingested_at.isoformat(),
-                    "version": doc_summary.version_count,
-                },
+                "offset": offset,
             }
 
-            # Retrieve extraction record details without filesystem paths
-            record = await asyncio.to_thread(
-                self.storage.get_extraction_record, doc_summary.current_extraction_id
-            )
-            if record:
-                result["extraction_record"] = {
-                    "extractor_name": record.extractor_name,
-                    "extractor_version": record.extractor_version,
-                    "extractor_strategy": record.extractor_strategy,
-                    "status": record.status.value,
-                    "element_count": record.element_count,
-                    "table_count": record.table_count,
-                    "word_count": record.word_count,
-                    "page_count": record.page_count,
-                    "warning_count": record.warning_count,
-                    "error_count": record.error_count,
-                    "canonical_json_available": record.canonical_json_available,
-                    "canonical_json_id": record.canonical_json_id,
-                }
-
-            # Retrieve standalone table exports without filesystem paths
-            tables = await asyncio.to_thread(self.storage.list_tables, doc_summary.document_id)
-            result["tables"] = [
-                {
-                    "table_id": tbl.table_id,
-                    "sheet_name": tbl.sheet_name,
-                    "row_count": tbl.row_count,
-                    "column_count": tbl.column_count,
-                    "csv_available": tbl.csv_available,
-                    "json_available": tbl.json_available,
-                }
-                for tbl in tables
-            ]
+            # On initial chunk (offset == 0), provide concise high-level statistics
+            if offset == 0:
+                result["page_count"] = doc_summary.page_count
+                result["element_count"] = doc_summary.element_count
+                result["table_count"] = doc_summary.table_count
+                result["first_ingested_at"] = doc_summary.first_ingested_at.isoformat()
+                tables = await asyncio.to_thread(self.storage.list_tables, doc_summary.document_id)
+                if tables:
+                    result["tables"] = [
+                        {
+                            "table_id": tbl.table_id,
+                            "sheet_name": tbl.sheet_name,
+                            "row_count": tbl.row_count,
+                            "column_count": tbl.column_count,
+                            "csv_available": tbl.csv_available,
+                            "json_available": tbl.json_available,
+                        }
+                        for tbl in tables
+                    ]
 
             # Reload full document and compute mathematically stable pagination slice
             if include_text and doc_summary.current_extraction_id:
@@ -813,19 +791,11 @@ class ExtractionToolsManager:
                         truncated = (offset + returned_chars) < total_chars
                         next_offset = (offset + returned_chars) if truncated else None
 
-                    if normalized_doc.full_markdown:
-                        md_slice = (normalized_doc.full_markdown)[offset : offset + max_chars]
-                    else:
-                        md_slice = content_slice
-
                     result["content"] = content_slice
                     result["text_content"] = content_slice
-                    result["markdown_content"] = md_slice
                     result["returned_characters"] = returned_chars
                     result["total_characters"] = total_chars
-                    result["offset"] = offset
                     result["next_offset"] = next_offset
-                    result["is_truncated"] = truncated
                     result["truncated"] = truncated
 
             # Record successful retrieval in ledger
@@ -923,8 +893,10 @@ def create_extraction_tools(manager: ExtractionToolsManager) -> list[StructuredT
         coroutine=_list_ingested_documents,
         name="list_ingested_documents",
         description=(
-            "List previously ingested and extracted documents from the metadata registry "
-            "with versioning and summary statistics."
+            "Lists document metadata only (document_id, title, source_type, page/element counts). "
+            "Use when the user asks what documents exist or asks to list/inspect the registry. "
+            "DO NOT follow with get_document_details unless the user explicitly requested "
+            "reading, analyzing, summarizing, or extracting document content."
         ),
         args_schema=ListIngestedDocumentsInput,
     )
@@ -934,8 +906,10 @@ def create_extraction_tools(manager: ExtractionToolsManager) -> list[StructuredT
         coroutine=_get_document_details,
         name="get_document_details",
         description=(
-            "Retrieve detailed metadata, structured tables, and text/markdown content "
-            "for a previously ingested document by its document_id."
+            "Retrieves bounded normalized content chunks for a specific document. "
+            "Use ONLY when document content, reading, analysis, or summarization is required. "
+            "Requires a document_id previously resolved from list_ingested_documents. "
+            "Advance next_offset without repeating successful pages."
         ),
         args_schema=GetDocumentDetailsInput,
     )

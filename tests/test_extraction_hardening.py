@@ -54,11 +54,14 @@ def assert_zero_path_leaks(data: Any, label: str = "") -> None:
     serialized = json.dumps(data, default=str)
     for pattern in PROHIBITED_PATTERNS:
         match = pattern.search(serialized)
-        snippet = serialized[max(0, match.start() - 40) : min(len(serialized), match.end() + 40)]
-        assert match is None, (
-            f"Prohibited pattern '{pattern.pattern}' leaked in {label}: "
-            f"found '{match.group(0)}' in snippet: {snippet}"
-        )
+        if match is not None:
+            s_start = max(0, match.start() - 40)
+            s_end = min(len(serialized), match.end() + 40)
+            snippet = serialized[s_start:s_end]
+            assert match is None, (
+                f"Prohibited pattern '{pattern.pattern}' leaked in {label}: "
+                f"found '{match.group(0)}' in snippet: {snippet}"
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -755,6 +758,10 @@ async def test_list_only_user_intent_does_not_call_details(tmp_path: Path) -> No
     assert "extract_document" not in tools_called
     assert "extract_web_page" not in tools_called
 
+    # Strict tool execution sequence: exactly ["list_ingested_documents"]
+    tool_sequence = [e.data.get("tool") for e in events if e.event == "tool_started"]
+    assert tool_sequence == ["list_ingested_documents"]
+
     # Verify classification reported in event telemetry is accurate
     for e in events:
         if (
@@ -765,3 +772,131 @@ async def test_list_only_user_intent_does_not_call_details(tmp_path: Path) -> No
             assert e.data.get("server_id") == "extraction"
 
     await runtime.close()
+
+
+# -----------------------------------------------------------------------------
+# Test 11 (Phase 9D): Token Accounting Resolves Exactly Once (No 2x Double Counting)
+# -----------------------------------------------------------------------------
+
+
+class _DuplicatedUsageModel(BaseChatModel):
+    """Model that populates both llm_output['token_usage'] AND AIMessage.usage_metadata
+    to verify runtime token resolution does not double-count usages.
+    """
+
+    def _generate(
+        self, messages: Any, stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
+        msg = AIMessage(
+            content="Deterministic test response.",
+            usage_metadata={"input_tokens": 120, "output_tokens": 40, "total_tokens": 160},
+            response_metadata={"cost": 0.0025, "model_name": "test-mock-model"},
+        )
+        return ChatResult(
+            generations=[ChatGeneration(message=msg)],
+            llm_output={
+                "token_usage": {"prompt_tokens": 120, "completion_tokens": 40, "cost": 0.0025},
+                "model_name": "test-mock-model",
+            },
+        )
+
+    async def _agenerate(
+        self, messages: Any, stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
+        return self._generate(messages, stop, run_manager, **kwargs)
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        return self
+
+    @property
+    def _llm_type(self) -> str:
+        return "duplicated-usage-model"
+
+
+@pytest.mark.asyncio
+async def test_token_accounting_no_double_counting(tmp_path: Path) -> None:
+    """Verify runtime calculates token usage and inference cost exactly once per turn,
+    preventing additive double-counting when both llm_output and usage_metadata are populated.
+    """
+    settings = Settings(
+        agent_checkpoint_db_path=str(tmp_path / "checkpoints.db"),
+        agent_approvals_db_path=str(tmp_path / "approvals.db"),
+    )
+    dup_model = _DuplicatedUsageModel()
+    runtime = AgentRuntimeManager(
+        settings=settings,
+        model_override=dup_model,
+        enable_extraction=False,
+    )
+    await runtime.initialize()
+
+    thread_id = f"test-thread-tokens-{uuid.uuid4().hex[:6]}"
+    req = AgentStreamRequest(thread_id=thread_id, message="Hello")
+
+    events = []
+    async for ev in runtime.stream_agent(req):
+        events.append(ev)
+
+    run_comp = next((e for e in events if e.event == "run_completed"), None)
+    assert run_comp is not None
+    usage = run_comp.data.get("usage", {})
+    cost = usage.get("cost_usd", 0.0)
+
+    # Must be 120 prompt, 40 completion, 160 total - NOT 240 / 80 / 320
+    assert usage.get("prompt_tokens") == 120
+    assert usage.get("completion_tokens") == 40
+    assert usage.get("total_tokens") == 160
+    assert abs(cost - 0.0025) < 1e-6
+
+    await runtime.close()
+
+
+# -----------------------------------------------------------------------------
+# Test 12 (Phase 9D): Artifact ID Is Not a Bearer Credential
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_artifact_id_not_bearer_credential(tmp_path: Path) -> None:
+    """Verify the raw document download endpoint rejects artifact_id hex hashes,
+    requiring the authoritative document_id entity key and preventing credential bypass.
+    """
+    settings = Settings(
+        env="test",
+        openrouter_api_key="sk-or-v1-mock-test-key",
+        agent_checkpoint_db_path=str(tmp_path / "checkpoints.db"),
+        agent_approvals_db_path=str(tmp_path / "approvals.db"),
+    )
+    app = create_app(settings)
+
+    storage_cfg = StorageConfig(
+        db_path=str(tmp_path / "bearer.db"),
+        sources_dir=str(tmp_path / "sources"),
+        extractions_dir=str(tmp_path / "extractions"),
+        tables_dir=str(tmp_path / "tables"),
+    )
+    tools_mgr = ExtractionToolsManager(storage_config=storage_cfg)
+    app.state.extraction_tools_manager = tools_mgr
+
+    norm_doc, raw_bytes = make_sample_normalized_document(
+        text="Confidential terms.", display_name="confidential.pdf"
+    )
+    ing_res = tools_mgr.storage.store_document(norm_doc, raw_bytes=raw_bytes)
+    doc_sum = tools_mgr.storage.get_document(ing_res.document_id)
+    assert doc_sum is not None
+    assert doc_sum.artifact_available is True
+    assert doc_sum.artifact_id is not None
+    assert len(doc_sum.artifact_id) == 64
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # Attempting download with artifact_id must fail closed with 404
+        dl_url = f"/api/v1/extraction/documents/{doc_sum.artifact_id}/download"
+        r_artifact = await client.get(dl_url)
+        assert r_artifact.status_code == 404
+        assert f"Document '{doc_sum.artifact_id}' not found" in r_artifact.json()["detail"]
+
+        # Valid document_id succeeds
+        r_doc = await client.get(f"/api/v1/extraction/documents/{doc_sum.document_id}/download")
+        assert r_doc.status_code == 200
+        assert r_doc.content == raw_bytes

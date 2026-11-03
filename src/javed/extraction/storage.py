@@ -188,6 +188,7 @@ class StoredDocumentSummary(ExtractionBaseModel):
     metadata_json: str
     element_count: int = 0
     table_count: int = 0
+    page_count: int | None = None
 
 
 class StoredExtractionRecord(ExtractionBaseModel):
@@ -611,9 +612,12 @@ class ExtractionStorageManager:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT d.*, "
+                "r.page_count, r.element_count, r.table_count, "
                 "(SELECT COUNT(*) FROM extraction_records WHERE document_id = d.document_id) "
                 "AS total_runs "
-                "FROM extraction_documents d WHERE d.document_id = ?",
+                "FROM extraction_documents d "
+                "LEFT JOIN extraction_records r ON d.current_extraction_id = r.extraction_id "
+                "WHERE d.document_id = ?",
                 (document_id,),
             )
             row = cursor.fetchone()
@@ -637,7 +641,10 @@ class ExtractionStorageManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM extraction_documents WHERE normalized_content_sha256 = ?",
+                "SELECT d.*, r.page_count, r.element_count, r.table_count "
+                "FROM extraction_documents d "
+                "LEFT JOIN extraction_records r ON d.current_extraction_id = r.extraction_id "
+                "WHERE d.normalized_content_sha256 = ?",
                 (normalized_content_sha256,),
             )
             row = cursor.fetchone()
@@ -654,7 +661,10 @@ class ExtractionStorageManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM extraction_documents WHERE source_sha256 = ?",
+                "SELECT d.*, r.page_count, r.element_count, r.table_count "
+                "FROM extraction_documents d "
+                "LEFT JOIN extraction_records r ON d.current_extraction_id = r.extraction_id "
+                "WHERE d.source_sha256 = ?",
                 (source_sha256,),
             )
             row = cursor.fetchone()
@@ -671,7 +681,10 @@ class ExtractionStorageManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM extraction_documents WHERE source_uri = ?",
+                "SELECT d.*, r.page_count, r.element_count, r.table_count "
+                "FROM extraction_documents d "
+                "LEFT JOIN extraction_records r ON d.current_extraction_id = r.extraction_id "
+                "WHERE d.source_uri = ?",
                 (source_uri,),
             )
             row = cursor.fetchone()
@@ -742,12 +755,16 @@ class ExtractionStorageManager:
         self.initialize()
         import sqlite3
 
-        query = "SELECT * FROM extraction_documents"
+        query = (
+            "SELECT d.*, r.page_count, r.element_count, r.table_count "
+            "FROM extraction_documents d "
+            "LEFT JOIN extraction_records r ON d.current_extraction_id = r.extraction_id"
+        )
         params: list[Any] = []
         if source_type:
-            query += " WHERE source_type = ?"
+            query += " WHERE d.source_type = ?"
             params.append(source_type.value)
-        query += " ORDER BY last_ingested_at DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY d.last_ingested_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         with sqlite3.connect(self.db_path) as conn:
@@ -1176,6 +1193,23 @@ class ExtractionStorageManager:
         artifact_avail = bool(raw_p and Path(raw_p).is_file())
         artifact_id_val = str(row["source_sha256"]) if artifact_avail else None
 
+        keys = row.keys() if hasattr(row, "keys") else []
+        elem_cnt = (
+            row["element_count"]
+            if "element_count" in keys and row["element_count"] is not None
+            else 0
+        )
+        tbl_cnt = (
+            row["table_count"]
+            if "table_count" in keys and row["table_count"] is not None
+            else 0
+        )
+        pg_cnt = (
+            row["page_count"]
+            if "page_count" in keys and row["page_count"] is not None
+            else None
+        )
+
         return StoredDocumentSummary(
             document_id=row["document_id"],
             source_type=SourceType(row["source_type"]),
@@ -1194,6 +1228,9 @@ class ExtractionStorageManager:
             artifact_available=artifact_avail,
             artifact_id=artifact_id_val,
             metadata_json=row["metadata_json"],
+            element_count=elem_cnt,
+            table_count=tbl_cnt,
+            page_count=pg_cnt,
         )
 
     def _row_to_extraction_record(self, row: Any) -> StoredExtractionRecord:
