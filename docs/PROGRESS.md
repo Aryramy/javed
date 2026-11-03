@@ -1,7 +1,7 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 7.10 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 Phase 8 Completed)<br/>
+> **Version**: 7.11 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 Phase 9 Completed)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
 > **Last Updated**: 2026-11-03
 
@@ -14,11 +14,11 @@
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
 | **Current Stage** | **Stage 4 / BRICK-007 — Crawl4AI & Docling Extraction Pipeline (`IN PROGRESS`)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 | **Current Brick** | **BRICK-007: Crawl4AI & Docling Extraction Pipeline (`IN PROGRESS`)** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
-| **Brick Status** | **`IN PROGRESS`** (Phase 8 Completed & Verified; Awaiting Phase 9 Authorization) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
+| **Brick Status** | **`IN PROGRESS`** (Phase 9 Completed & Verified; Awaiting Phase 10 Authorization) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
 | **Last Verified Milestone** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | Formally accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
-| **Application Code** | **BRICK-007 Phase 8 Complete & Verified** (`src/javed/api/v1/extraction.py`, `src/javed/schemas/extraction.py`, 11 FastAPI endpoints [`/upload`, `/crawl`, `/crawl/stream`, `/documents`, `/documents/{id}`, `/documents/{id}/extractions`, `/documents/{id}/tables`, `/documents/{id}/tables/{table_id}`, `/documents/{id}/download`, `DELETE /documents/{id}`, `/telemetry`], `ExtractionToolsManager` in `app.state`, SSE crawl streaming, 25MB upload middleware, and developer mode telemetry; 12/12 targeted API tests passed; 195 extraction subsystem tests passed; 424/424 full deterministic regression suite passed; 0 Ruff errors; 0 process/thread leaks; $0.00 spend) | Strict execution boundary |
+| **Application Code** | **BRICK-007 Phase 9 Complete & Verified** (`frontend/src/views/user/DocumentsView.tsx`, `frontend/src/components/extraction/`, `frontend/src/services/extractionService.ts`, `frontend/src/types/extraction.ts`; 15/15 targeted UI unit/integration tests passed; 89/89 full frontend vitest tests passed; 200/200 backend extraction tests passed; production build verified in 844ms; 0 Ruff errors; 0 process/thread leaks; $0.00 spend) | Strict execution boundary |
 | **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.162.0, crawl4ai 0.9.5, docling 2.144.0, pypdfium2 5.14.0, torch 2.15.0+cpu, torchvision 0.29.2+cpu, playwright 1.49.1, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.18, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.4, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-007 IN PROGRESS (Phase 8 Completed; Awaiting Phase 9 Authorization)** | Authoritative Status |
+| **Overall Status** | **BRICK-007 IN PROGRESS (Phase 9 Completed; Awaiting Phase 10 Authorization)** | Authoritative Status |
 
 
 ---
@@ -52,7 +52,7 @@ stateDiagram-v2
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | **`VERIFIED`** | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) | Formally approved and accepted by Project Owner on 2026-10-28. All Phases 0–10 verified (165 deterministic backend pytests, 8 live OpenRouter pytests, 62 vitest, 17 Playwright E2E passed, 0 ruff errors, 0 leak). |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`VERIFIED`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | **`IN PROGRESS`** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) | Phase 8 Complete & Verified (`src/javed/api/v1/extraction.py`, `src/javed/schemas/extraction.py`, 11 FastAPI endpoints [`/upload`, `/crawl`, `/crawl/stream`, `/documents`, `/documents/{id}`, `/documents/{id}/extractions`, `/documents/{id}/tables`, `/documents/{id}/tables/{table_id}`, `/documents/{id}/download`, `DELETE /documents/{id}`, `/telemetry`], `ExtractionToolsManager` in `app.state`, SSE crawl streaming, 25MB upload middleware, and developer mode telemetry; 12/12 targeted API tests passed, 195 extraction subsystem tests passed, 424/424 full deterministic regression suite passed; 0 leaks; $0.00 spend). Awaiting Phase 9 authorization. |
+| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | **`IN PROGRESS`** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) | Phase 9 Complete & Verified (`frontend/src/views/user/DocumentsView.tsx`, `frontend/src/components/extraction/`, `frontend/src/services/extractionService.ts`, `frontend/src/types/extraction.ts`; 15/15 targeted UI unit/integration tests passed; 89/89 full frontend vitest tests passed; 200/200 backend extraction tests passed; production build verified in 844ms; 0 leaks; $0.00 spend). Awaiting Phase 10 authorization. |
 | **BRICK-008** | Browser Use and Authenticated Navigation | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. OpenCLI dedicated profile candidate, Playwright/Playwright MCP foundation, Stagehand eval-only, native owner takeover. Anti-bot/stealth bypasses removed by owner decision. |
 | **BRICK-009** | Persistent Memory and Semantic RAG | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. Qdrant vector store, LangGraph orchestration, Mem0 eval-only, LangGraph Store/SQLite, deterministic chunker, benchmarked English & Arabic embeddings. Urdu removed by owner decision. |
 | **BRICK-010** | Managed MCP Ecosystem | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. Official & GitHub registry discovery, JAVED Private Registry authority, SecureMCPGateway, Playwright/Time/GitHub/Context7 approved, conditional DBHub/Notion/MarkItDown. Fabric & Azure MCP removed by owner decision. |
@@ -279,6 +279,19 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Zero `os._exit` calls across codebase.
   - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
   - Promoted status to `READY FOR ACCEPTANCE` and enforced mandatory stop condition awaiting Project Owner review.
+
+- **BRICK-007 Phase 8 Implementation & Verification (2026-11-03)**:
+  - Implemented 11 FastAPI endpoints in `src/javed/api/v1/extraction.py` and OpenAPI schemas in `src/javed/schemas/extraction.py`.
+  - Configured SSE real-time crawl streaming, 25MB body upload limit, and clean lifespan resource management in `app.state`.
+  - 12/12 targeted tests passed (`tests/test_extraction_api.py`), 195 extraction tests passed, 424/424 full deterministic regression tests passed, 0 ruff errors.
+
+- **BRICK-007 Phase 9 Implementation & Verification (2026-11-03)**:
+  - Evaluated native `<dialog>` best practices via Modern Web Guidance (`npx.cmd -y modern-web-guidance@latest search "accessible modal dialog"`).
+  - Implemented `frontend/src/types/extraction.ts` and `frontend/src/services/extractionService.ts` for full API, streaming, and export actions.
+  - Implemented `DocumentUploadZone.tsx` (drag-and-drop, format whitelisting, 25MB validation), `WebCrawlModal.tsx` (accessible native dialog, SSRF warning, live SSE progress), `TableView.tsx` (sheet-aware, pagination, CSV/JSON exports), `ExtractionViewer.tsx` (accessible native dialog, 4 tabs, clipboard copy, raw download), `DocumentList.tsx` (filter chips, version indicators, view/download/delete actions), and `ExtractionTelemetryCard.tsx`.
+  - Transformed `frontend/src/views/user/DocumentsView.tsx` into a comprehensive ingestion workspace.
+  - Authored `frontend/src/test/extraction.test.tsx` with 15 tests (15/15 passed). Full frontend suite: 89/89 tests passed across 14 test suites. Production build: `tsc -b && vite build` in 844ms.
+  - Backend extraction suite: 200/200 passed. Zero ruff errors, zero process/thread leaks, $0.00 spend.
 
 
 

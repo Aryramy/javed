@@ -391,6 +391,14 @@ To ensure reproducible testing without external network dependencies, a dedicate
 > 3. **Server & Security Configuration**: Integrated `extraction_router` into `src/javed/api/v1/router.py`, registered `ExtractionToolsManager` in `app.state` with lifespan async teardown, adjusted upload body size cap to 25MB for document uploads, and enabled `DELETE` in CORS allowed methods.
 > 4. **Verification Evidence**: 12/12 targeted tests passed (`tests/test_extraction_api.py`), 195 extraction subsystem tests passed, 424/424 full deterministic regression tests passed, 100% ruff check and format compliance, 0 process/thread leaks, $0.00 external spend.
 
+> [!NOTE] Phase 9 React Document Ingestion UI & Extraction Viewer (Completed 2026-11-03)
+> 1. **Modern Web Standards & Accessible Dialog Architecture**: Evaluated via Modern Web Guidance (`npx.cmd -y modern-web-guidance@latest search "accessible modal dialog"`); implemented native `<dialog>` elements for `WebCrawlModal`, `ExtractionViewer`, and delete confirmation with `showModal()`, focus management, `overscroll-behavior: contain`, and ESC key handling.
+> 2. **Complete TypeScript Data Models & API Service**: Authored `frontend/src/types/extraction.ts` and `frontend/src/services/extractionService.ts` providing full REST endpoints, file downloads, blob exports, and Server-Sent Events (`EventSource` / `fetch` reader) for streaming web crawl progress.
+> 3. **Document Ingestion Hub (`DocumentsView`)**: Replaced empty state placeholder in `frontend/src/views/user/DocumentsView.tsx` with a dual-pane ingestion workspace featuring real-time telemetry stats, drag-and-drop document upload, public web crawling trigger, filterable catalog, and tabular data viewers.
+> 4. **Client-Side Security & Preflight Validation**: Enforced format whitelisting (`.pdf`, `.docx`, `.xlsx`), strict 25 MB file size ceilings in `DocumentUploadZone`, zero-trust SSRF warnings and HTTP/HTTPS protocol validation in `WebCrawlModal`.
+> 5. **Interactive Extraction Viewer & Tabular Data Studio**: Built `ExtractionViewer.tsx` (4 preview modes: Plain Text, Markdown, Tables, and Ingestion History with copy-to-clipboard and raw file downloads) and `TableView.tsx` (paginated sheet-aware data tables with CSV and JSON data export).
+> 6. **Testing & Verification Evidence**: Authored 15 tests in `frontend/src/test/extraction.test.tsx` (15/15 passed); full frontend test suite (89/89 tests passed across 14 test suites); production build succeeded (`tsc -b && vite build` in 844ms); 200/200 backend extraction tests passed; 0 ruff errors; 0 process/thread leaks; $0.00 external spend.
+
 ---
 
 ## 10. Mandatory Stop Points & Acceptance Criteria

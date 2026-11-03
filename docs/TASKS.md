@@ -471,6 +471,24 @@
     - 183/183 extraction subsystem tests passed.
     - 412/412 full deterministic regression suite passed.
     - 0 Ruff errors, 0 process/thread leaks, $0.00 spend.
+- **Phase 8 Status**: **COMPLETED & VERIFIED** (2026-11-03):
+  - Implemented 11 REST API endpoints in `src/javed/api/v1/extraction.py`: `POST /upload`, `POST /crawl`, `POST /crawl/stream`, `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/extractions`, `GET /documents/{id}/tables`, `GET /documents/{id}/tables/{table_id}`, `GET /documents/{id}/download`, `DELETE /documents/{id}`, and `GET /telemetry`.
+  - Comprehensive Pydantic models in `src/javed/schemas/extraction.py`.
+  - Integrated into API router and application lifecycle with 25MB body ceiling.
+  - 12/12 targeted API tests passed (`tests/test_extraction_api.py`), 195 extraction subsystem tests passed, 424/424 full deterministic regression tests passed, 0 ruff errors.
+- **Phase 9 Status**: **COMPLETED & VERIFIED** (2026-11-03):
+  - Evaluated and implemented accessible native `<dialog>` components per Modern Web Guidance (`npx.cmd -y modern-web-guidance@latest search "accessible modal dialog"`):
+    - `WebCrawlModal.tsx`: URL validation, zero-trust SSRF policy advisory, live SSE streaming progress indicator.
+    - `ExtractionViewer.tsx`: Multi-tab inspector (Text, Markdown, Tables, Extraction history), clipboard copy, and raw artifact downloads.
+    - `DocumentList.tsx`: Safe deletion confirmation dialog with accessible focus management.
+  - Implemented `DocumentUploadZone.tsx`: Drag-and-drop file upload target with extension filter (`.pdf`, `.docx`, `.xlsx`), client-side 25MB validation, and progress indicators.
+  - Implemented `TableView.tsx`: Tabular data viewer with multi-sheet support, pagination, markdown copy, and CSV/JSON export actions.
+  - Implemented `ExtractionTelemetryCard.tsx`: Developer & user telemetry card displaying document, extraction, and table counts with storage health indicator.
+  - Full Ingestion Hub View (`DocumentsView.tsx`): Replaced placeholder with comprehensive document ingestion and web scraping dashboard.
+  - Typed API Service & Models: `frontend/src/types/extraction.ts` and `frontend/src/services/extractionService.ts`.
+  - Authored 15 tests in `frontend/src/test/extraction.test.tsx` (15/15 passed).
+  - Full frontend suite: 89/89 tests passing across 14 test suites; production build verified in 844ms.
+  - Backend extraction suite: 200/200 tests passing; 0 ruff errors; 0 process/thread leaks; $0.00 spend.
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox — `VERIFIED`
   - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models — `VERIFIED`
@@ -482,10 +500,10 @@
   - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry — `VERIFIED`
   - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration — `VERIFIED`
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry — `VERIFIED`
-  - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
+  - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer — `VERIFIED`
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 8 Completed and Verified; Awaiting Phase 9 Authorization).
-- **Stop Condition**: Phase 8 REST API & Developer Mode Telemetry complete. Mandatory Stop: Await explicit Project Owner review and Phase 9 authorization before authoring React Document Ingestion UI & Extraction Viewer components.
+- **Milestone Status**: **IN PROGRESS** (Phase 9 Completed and Verified; Awaiting Phase 10 Authorization).
+- **Stop Condition**: Phase 9 React Document Ingestion UI & Extraction Viewer complete. Mandatory Stop: Await explicit Project Owner review and Phase 10 authorization before running full milestone hardening and drafting `REPORT-007.md`.
 
 
 ---
