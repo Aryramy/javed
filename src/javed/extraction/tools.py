@@ -12,10 +12,12 @@ Integrates:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, field_validator
@@ -43,6 +45,116 @@ logger = logging.getLogger("javed.extraction.tools")
 # Default character limits to prevent context window exhaustion
 DEFAULT_PREVIEW_MAX_CHARS = 25000
 DEFAULT_DETAILS_MAX_CHARS = 10000
+DEFAULT_MAX_RETRIEVAL_READS_PER_RUN = 15
+
+# Context variable binding the current execution run_id to tool executions
+CURRENT_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_run_id", default=None
+)
+
+
+class RetrievalKey(NamedTuple):
+    run_id: str
+    document_id: str
+    offset: int
+    max_chars: int
+
+
+class RunRetrievalLedger:
+    """Runtime guard tracking document page reads within a run.
+
+    Prevents infinite retrieval loops, deduplicates identical page requests,
+    and enforces a per-run retrieval ceiling.
+    """
+
+    def __init__(self, max_reads_per_run: int = DEFAULT_MAX_RETRIEVAL_READS_PER_RUN) -> None:
+        self.max_reads_per_run = max_reads_per_run
+        self._history: dict[RetrievalKey, dict[str, Any]] = {}
+        self._run_counts: dict[str, int] = {}
+        self._lock = threading.Lock()
+
+    def check_and_record_request(
+        self,
+        run_id: str,
+        document_id: str,
+        offset: int,
+        max_chars: int,
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Check if request hits ceiling or is duplicate.
+
+        Returns (is_handled, response_dict).
+        If is_handled is True, caller should return response_dict immediately.
+        """
+        key = RetrievalKey(run_id, document_id, offset, max_chars)
+        with self._lock:
+            # 1. Check duplicate read
+            if key in self._history:
+                logger.info(
+                    "Duplicate page read intercepted in run '%s' for doc '%s' "
+                    "(offset=%d, max_chars=%d). Reusing cached result.",
+                    run_id,
+                    document_id,
+                    offset,
+                    max_chars,
+                )
+                cached = dict(self._history[key])
+                cached["duplicate_read"] = True
+                cached["from_cache"] = True
+                cached["warning"] = (
+                    "Duplicate page retrieval detected for this run. Cached page reused."
+                )
+                return True, cached
+
+            # 2. Check per-run ceiling
+            current_count = self._run_counts.get(run_id, 0)
+            if current_count >= self.max_reads_per_run:
+                logger.warning(
+                    "Per-run document read ceiling (%d) exceeded for run '%s'",
+                    self.max_reads_per_run,
+                    run_id,
+                )
+                return True, {
+                    "success": False,
+                    "error": (
+                        f"Per-run document read ceiling ({self.max_reads_per_run}) "
+                        f"exceeded for run '{run_id}'. Ceiling enforced to prevent "
+                        "context exhaustion."
+                    ),
+                    "error_type": "RetrievalCeilingExceeded",
+                    "retrieval_ceiling_exceeded": True,
+                }
+
+            # 3. Increment count
+            self._run_counts[run_id] = current_count + 1
+            return False, None
+
+    def record_success(
+        self,
+        run_id: str,
+        document_id: str,
+        offset: int,
+        max_chars: int,
+        result: dict[str, Any],
+    ) -> None:
+        """Cache successful retrieval result for deduplication within the run."""
+        key = RetrievalKey(run_id, document_id, offset, max_chars)
+        with self._lock:
+            self._history[key] = dict(result)
+
+    def reset_run(self, run_id: str) -> None:
+        """Clear entries and counter for a specific run_id."""
+        with self._lock:
+            self._run_counts.pop(run_id, None)
+            keys_to_del = [k for k in self._history if k.run_id == run_id]
+            for k in keys_to_del:
+                self._history.pop(k, None)
+
+    def clear(self) -> None:
+        """Clear all ledger state."""
+        with self._lock:
+            self._history.clear()
+            self._run_counts.clear()
+
 
 # Permitted document extensions for local extraction
 PERMITTED_DOCUMENT_EXTENSIONS = frozenset({".pdf", ".docx", ".xlsx"})
@@ -150,9 +262,7 @@ class ListIngestedDocumentsInput(BaseModel):
     @field_validator("offset")
     @classmethod
     def validate_offset(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("offset cannot be negative")
-        return v
+        return max(0, v)
 
 
 class GetDocumentDetailsInput(BaseModel):
@@ -185,9 +295,7 @@ class GetDocumentDetailsInput(BaseModel):
     @field_validator("offset")
     @classmethod
     def validate_offset(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("offset cannot be negative")
-        return v
+        return max(0, v)
 
     @field_validator("max_chars")
     @classmethod
@@ -265,6 +373,7 @@ class ExtractionToolsManager:
         self._web_extractor: Crawl4AIWebExtractor | None = None
         self._doc_extractor: DoclingDocumentExtractor | None = None
         self._security_guard = ExtractionSecurityGuard()
+        self.retrieval_ledger = RunRetrievalLedger()
         self._closed = False
 
     def get_web_extractor(self) -> Crawl4AIWebExtractor:
@@ -288,6 +397,7 @@ class ExtractionToolsManager:
         if self._closed:
             return
         self._closed = True
+        self.retrieval_ledger.clear()
 
         if self._web_extractor is not None:
             try:
@@ -327,6 +437,7 @@ class ExtractionToolsManager:
         if self._closed:
             return
         self._closed = True
+        self.retrieval_ledger.clear()
 
         if self._web_extractor is not None:
             try:
@@ -582,8 +693,23 @@ class ExtractionToolsManager:
         include_text: bool = True,
         offset: int = 0,
         max_chars: int = DEFAULT_DETAILS_MAX_CHARS,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         """Retrieve detailed metadata, structured tables, and content for an ingested document."""
+        active_run_id = run_id or CURRENT_RUN_ID.get() or "default_run"
+        offset = max(0, offset)
+        max_chars = min(max(1, max_chars), 30000)
+
+        # Check retrieval ledger for duplicate page requests or per-run ceiling
+        is_handled, cached_resp = self.retrieval_ledger.check_and_record_request(
+            run_id=active_run_id,
+            document_id=document_id,
+            offset=offset,
+            max_chars=max_chars,
+        )
+        if is_handled and cached_resp is not None:
+            return cached_resp
+
         try:
             doc_summary = await self.storage.get_document_async(document_id)
             if not doc_summary:
@@ -602,6 +728,8 @@ class ExtractionToolsManager:
 
             result: dict[str, Any] = {
                 "success": True,
+                "duplicate_read": False,
+                "from_cache": False,
                 "document_id": doc_summary.document_id,
                 "title": doc_summary.original_display_name,
                 "source_type": doc_summary.source_type.value,
@@ -613,6 +741,8 @@ class ExtractionToolsManager:
                 "version_count": doc_summary.version_count,
                 "current_version_id": doc_summary.current_version_id,
                 "current_extraction_id": doc_summary.current_extraction_id,
+                "artifact_available": doc_summary.artifact_available,
+                "artifact_id": doc_summary.artifact_id,
                 "first_ingested_at": doc_summary.first_ingested_at.isoformat(),
                 "last_ingested_at": doc_summary.last_ingested_at.isoformat(),
                 "metadata": meta_dict,
@@ -624,7 +754,7 @@ class ExtractionToolsManager:
                 },
             }
 
-            # Retrieve extraction record details
+            # Retrieve extraction record details without filesystem paths
             record = await asyncio.to_thread(
                 self.storage.get_extraction_record, doc_summary.current_extraction_id
             )
@@ -640,9 +770,11 @@ class ExtractionToolsManager:
                     "page_count": record.page_count,
                     "warning_count": record.warning_count,
                     "error_count": record.error_count,
+                    "canonical_json_available": record.canonical_json_available,
+                    "canonical_json_id": record.canonical_json_id,
                 }
 
-            # Retrieve standalone table exports
+            # Retrieve standalone table exports without filesystem paths
             tables = await asyncio.to_thread(self.storage.list_tables, doc_summary.document_id)
             result["tables"] = [
                 {
@@ -650,26 +782,44 @@ class ExtractionToolsManager:
                     "sheet_name": tbl.sheet_name,
                     "row_count": tbl.row_count,
                     "column_count": tbl.column_count,
+                    "csv_available": tbl.csv_available,
+                    "json_available": tbl.json_available,
                 }
                 for tbl in tables
             ]
 
-            # Optionally reload full document and include bounded text/markdown slice
+            # Reload full document and compute mathematically stable pagination slice
             if include_text and doc_summary.current_extraction_id:
                 normalized_doc = await self.storage.load_normalized_document_async(
                     doc_summary.current_extraction_id
                 )
                 if normalized_doc:
-                    full_txt = normalized_doc.full_text or ""
-                    full_md = normalized_doc.full_markdown or ""
-                    txt_slice = full_txt[offset : offset + max_chars]
-                    md_slice = full_md[offset : offset + max_chars]
-                    total_chars = max(len(full_txt), len(full_md))
-                    returned_chars = max(len(txt_slice), len(md_slice))
-                    truncated = (offset + returned_chars) < total_chars
-                    next_offset = (offset + returned_chars) if truncated else None
+                    # Slicing operates on a single canonical content representation
+                    primary_content = (
+                        normalized_doc.full_text
+                        if normalized_doc.full_text
+                        else (normalized_doc.full_markdown or "")
+                    )
+                    total_chars = len(primary_content)
 
-                    result["text_content"] = txt_slice
+                    if offset >= total_chars:
+                        content_slice = ""
+                        returned_chars = 0
+                        truncated = False
+                        next_offset = None
+                    else:
+                        content_slice = primary_content[offset : offset + max_chars]
+                        returned_chars = len(content_slice)
+                        truncated = (offset + returned_chars) < total_chars
+                        next_offset = (offset + returned_chars) if truncated else None
+
+                    if normalized_doc.full_markdown:
+                        md_slice = (normalized_doc.full_markdown)[offset : offset + max_chars]
+                    else:
+                        md_slice = content_slice
+
+                    result["content"] = content_slice
+                    result["text_content"] = content_slice
                     result["markdown_content"] = md_slice
                     result["returned_characters"] = returned_chars
                     result["total_characters"] = total_chars
@@ -677,6 +827,15 @@ class ExtractionToolsManager:
                     result["next_offset"] = next_offset
                     result["is_truncated"] = truncated
                     result["truncated"] = truncated
+
+            # Record successful retrieval in ledger
+            self.retrieval_ledger.record_success(
+                run_id=active_run_id,
+                document_id=document_id,
+                offset=offset,
+                max_chars=max_chars,
+                result=result,
+            )
 
             return result
 
@@ -736,46 +895,53 @@ def create_extraction_tools(manager: ExtractionToolsManager) -> list[StructuredT
             max_chars=max_chars,
         )
 
-    return [
-        StructuredTool.from_function(
-            coroutine=_extract_web_page,
-            name="extract_web_page",
-            description=(
-                "Extract structured text, markdown, and tables from a public web page URL "
-                "using Crawl4AI. Enforces SSRF and redirect validation, dedupes content, "
-                "and persists into the extraction registry."
-            ),
-            args_schema=ExtractWebPageInput,
+    t_web = StructuredTool.from_function(
+        coroutine=_extract_web_page,
+        name="extract_web_page",
+        description=(
+            "Extract structured text, markdown, and tables from a public web page URL "
+            "using Crawl4AI. Enforces SSRF and redirect validation, dedupes content, "
+            "and persists into the extraction registry."
         ),
-        StructuredTool.from_function(
-            coroutine=_extract_document,
-            name="extract_document",
-            description=(
-                "Extract structured text, heading hierarchy, and tables from a local document "
-                "(PDF, Word DOCX, Excel XLSX) using Docling. Enforces security preflight, "
-                "content deduplication, and persistence."
-            ),
-            args_schema=ExtractDocumentInput,
+        args_schema=ExtractWebPageInput,
+    )
+    t_web.metadata = {"server_id": "extraction", "classification": "APPROVAL_REQUIRED"}
+
+    t_doc = StructuredTool.from_function(
+        coroutine=_extract_document,
+        name="extract_document",
+        description=(
+            "Extract structured text, heading hierarchy, and tables from a local document "
+            "(PDF, Word DOCX, Excel XLSX) using Docling. Enforces security preflight, "
+            "content deduplication, and persistence."
         ),
-        StructuredTool.from_function(
-            coroutine=_list_ingested_documents,
-            name="list_ingested_documents",
-            description=(
-                "List previously ingested and extracted documents from the metadata registry "
-                "with versioning and summary statistics."
-            ),
-            args_schema=ListIngestedDocumentsInput,
+        args_schema=ExtractDocumentInput,
+    )
+    t_doc.metadata = {"server_id": "extraction", "classification": "APPROVAL_REQUIRED"}
+
+    t_list = StructuredTool.from_function(
+        coroutine=_list_ingested_documents,
+        name="list_ingested_documents",
+        description=(
+            "List previously ingested and extracted documents from the metadata registry "
+            "with versioning and summary statistics."
         ),
-        StructuredTool.from_function(
-            coroutine=_get_document_details,
-            name="get_document_details",
-            description=(
-                "Retrieve detailed metadata, structured tables, and text/markdown content "
-                "for a previously ingested document by its document_id."
-            ),
-            args_schema=GetDocumentDetailsInput,
+        args_schema=ListIngestedDocumentsInput,
+    )
+    t_list.metadata = {"server_id": "extraction", "classification": "ALLOWED_READ_ONLY"}
+
+    t_detail = StructuredTool.from_function(
+        coroutine=_get_document_details,
+        name="get_document_details",
+        description=(
+            "Retrieve detailed metadata, structured tables, and text/markdown content "
+            "for a previously ingested document by its document_id."
         ),
-    ]
+        args_schema=GetDocumentDetailsInput,
+    )
+    t_detail.metadata = {"server_id": "extraction", "classification": "ALLOWED_READ_ONLY"}
+
+    return [t_web, t_doc, t_list, t_detail]
 
 
 def create_extraction_tools_inventory(

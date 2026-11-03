@@ -183,7 +183,8 @@ class StoredDocumentSummary(ExtractionBaseModel):
     version_count: int = 1
     current_version_id: str
     current_extraction_id: str
-    raw_artifact_path: str | None = None
+    artifact_available: bool = False
+    artifact_id: str | None = None
     metadata_json: str
     element_count: int = 0
     table_count: int = 0
@@ -213,7 +214,8 @@ class StoredExtractionRecord(ExtractionBaseModel):
     page_count: int | None = None
     warning_count: int = 0
     error_count: int = 0
-    canonical_json_path: str | None = None
+    canonical_json_available: bool = False
+    canonical_json_id: str | None = None
     full_text: str | None = None
     full_markdown: str | None = None
     warnings: list[ExtractionWarning] = Field(default_factory=list)
@@ -230,8 +232,8 @@ class StoredTableInfo(ExtractionBaseModel):
     caption: str | None = None
     row_count: int
     column_count: int
-    csv_path: str | None = None
-    json_path: str | None = None
+    csv_available: bool = False
+    json_available: bool = False
 
 
 class IngestionResult(ExtractionBaseModel):
@@ -697,13 +699,13 @@ class ExtractionStorageManager:
     def load_normalized_document(self, extraction_id: str) -> NormalizedDocument | None:
         """Load and verify a stored NormalizedDocument from its canonical JSON artifact."""
         self.initialize()
-        record = self.get_extraction_record(extraction_id)
-        if not record or not record.canonical_json_path:
+        p = self.get_canonical_json_path(extraction_id)
+        if not p or not p.is_file():
             return None
 
-        p = Path(record.canonical_json_path)
-        if not p.is_file():
-            raise StorageCorruptionError(f"Canonical extraction JSON missing: {p}")
+        record = self.get_extraction_record(extraction_id)
+        if not record:
+            return None
 
         raw_json = p.read_text(encoding="utf-8")
         try:
@@ -810,8 +812,8 @@ class ExtractionStorageManager:
                     caption=r["caption"],
                     row_count=r["row_count"],
                     column_count=r["column_count"],
-                    csv_path=r["csv_path"],
-                    json_path=r["json_path"],
+                    csv_available=bool(r["csv_path"] and Path(r["csv_path"]).is_file()),
+                    json_available=bool(r["json_path"] and Path(r["json_path"]).is_file()),
                 )
                 for r in rows
             ]
@@ -843,8 +845,8 @@ class ExtractionStorageManager:
                 caption=row["caption"],
                 row_count=row["row_count"],
                 column_count=row["column_count"],
-                csv_path=row["csv_path"],
-                json_path=row["json_path"],
+                csv_available=bool(row["csv_path"] and Path(row["csv_path"]).is_file()),
+                json_available=bool(row["json_path"] and Path(row["json_path"]).is_file()),
             )
 
     async def get_table_async(self, table_id: str) -> StoredTableInfo | None:
@@ -899,13 +901,65 @@ class ExtractionStorageManager:
         """Asynchronously count total extracted tables."""
         return await asyncio.to_thread(self.count_tables)
 
+    def get_raw_artifact_path(self, document_id: str) -> Path | None:
+        """Internal lookup for raw artifact path on filesystem."""
+        self.initialize()
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT raw_artifact_path FROM extraction_documents WHERE document_id = ?",
+                (document_id,),
+            )
+            row = cursor.fetchone()
+            if not row or not row["raw_artifact_path"]:
+                return None
+            p = Path(row["raw_artifact_path"])
+            return p if p.is_file() else None
+
+    def get_canonical_json_path(self, extraction_id: str) -> Path | None:
+        """Internal lookup for canonical JSON artifact path on filesystem."""
+        self.initialize()
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT canonical_json_path FROM extraction_records WHERE extraction_id = ?",
+                (extraction_id,),
+            )
+            row = cursor.fetchone()
+            if not row or not row["canonical_json_path"]:
+                return None
+            p = Path(row["canonical_json_path"])
+            return p if p.is_file() else None
+
+    def get_table_artifact_path(self, table_id: str, format: str = "json") -> Path | None:
+        """Internal lookup for table CSV or JSON artifact path on filesystem."""
+        self.initialize()
+        import sqlite3
+
+        col = "csv_path" if format.lower() == "csv" else "json_path"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT {col} FROM extraction_tables WHERE table_id = ?",
+                (table_id,),
+            )
+            row = cursor.fetchone()
+            if not row or not row[col]:
+                return None
+            p = Path(row[col])
+            return p if p.is_file() else None
+
     def get_raw_source_bytes(self, document_id: str) -> bytes | None:
         """Retrieve raw canonical source bytes for a document."""
-        doc = self.get_document(document_id)
-        if not doc or not doc.raw_artifact_path:
-            return None
-        p = Path(doc.raw_artifact_path)
-        if not p.is_file():
+        p = self.get_raw_artifact_path(document_id)
+        if not p or not p.is_file():
             return None
         return p.read_bytes()
 
@@ -1117,7 +1171,11 @@ class ExtractionStorageManager:
         )
 
     def _row_to_document_summary(self, row: Any) -> StoredDocumentSummary:
-        """Convert SQLite row to StoredDocumentSummary."""
+        """Convert SQLite row to StoredDocumentSummary with safe opaque artifact metadata."""
+        raw_p = row["raw_artifact_path"] if "raw_artifact_path" in row.keys() else None
+        artifact_avail = bool(raw_p and Path(raw_p).is_file())
+        artifact_id_val = str(row["source_sha256"]) if artifact_avail else None
+
         return StoredDocumentSummary(
             document_id=row["document_id"],
             source_type=SourceType(row["source_type"]),
@@ -1133,16 +1191,21 @@ class ExtractionStorageManager:
             version_count=row["version_count"],
             current_version_id=row["current_version_id"],
             current_extraction_id=row["current_extraction_id"],
-            raw_artifact_path=row["raw_artifact_path"],
+            artifact_available=artifact_avail,
+            artifact_id=artifact_id_val,
             metadata_json=row["metadata_json"],
         )
 
     def _row_to_extraction_record(self, row: Any) -> StoredExtractionRecord:
-        """Convert SQLite row to StoredExtractionRecord."""
+        """Convert SQLite row to StoredExtractionRecord with safe opaque artifact metadata."""
         raw_warn = row["warnings_json"]
         warnings = [ExtractionWarning(**w) for w in json.loads(raw_warn)] if raw_warn else []
         raw_err = row["errors_json"]
         errors = [ExtractionError(**e) for e in json.loads(raw_err)] if raw_err else []
+
+        canon_p = row["canonical_json_path"] if "canonical_json_path" in row.keys() else None
+        canon_avail = bool(canon_p and Path(canon_p).is_file())
+        canon_id_val = str(row["extraction_record_sha256"]) if canon_avail else None
 
         return StoredExtractionRecord(
             extraction_id=row["extraction_id"],
@@ -1166,7 +1229,8 @@ class ExtractionStorageManager:
             page_count=row["page_count"],
             warning_count=row["warning_count"],
             error_count=row["error_count"],
-            canonical_json_path=row["canonical_json_path"],
+            canonical_json_available=canon_avail,
+            canonical_json_id=canon_id_val,
             full_text=row["full_text"],
             full_markdown=row["full_markdown"],
             warnings=warnings,

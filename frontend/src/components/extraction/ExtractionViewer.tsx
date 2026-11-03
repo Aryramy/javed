@@ -220,7 +220,7 @@ export const ExtractionViewer = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {detail?.document.raw_artifact_path && (
+          {detail?.document.artifact_available && (
             <button
               type="button"
               onClick={handleDownloadRaw}

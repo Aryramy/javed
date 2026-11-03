@@ -56,6 +56,7 @@ export interface ToolActivityRecord {
   completed_at?: string | null;
   elapsed_ms?: number | null;
   approval_id?: string | null;
+  classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';

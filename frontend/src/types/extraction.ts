@@ -30,7 +30,8 @@ export interface StoredDocumentSummary {
   version_count: number
   current_version_id: string
   current_extraction_id: string
-  raw_artifact_path?: string | null
+  artifact_available: boolean
+  artifact_id?: string | null
   metadata_json?: string | null
 }
 
@@ -50,7 +51,8 @@ export interface StoredExtractionRecord {
   word_count?: number | null
   raw_byte_count?: number | null
   extraction_record_sha256: string
-  canonical_json_path?: string | null
+  canonical_json_available?: boolean
+  canonical_json_id?: string | null
   error_code?: string | null
   error_message?: string | null
   warnings_json?: string | null
@@ -65,8 +67,8 @@ export interface StoredTableInfo {
   row_count: number
   column_count: number
   headers_json: string
-  csv_path?: string | null
-  json_path?: string | null
+  csv_available?: boolean
+  json_available?: boolean
   created_at: string
 }
 
@@ -113,10 +115,8 @@ export interface ExtractionTelemetryResponse {
   total_documents: number
   total_extractions: number
   total_tables: number
-  db_path: string
-  sources_dir: string
-  extractions_dir: string
-  tables_dir: string
+  storage_backend: string
+  storage_status: string
   supported_document_formats: string[]
   supported_web_strategies: string[]
   storage_healthy: boolean

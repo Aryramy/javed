@@ -32,6 +32,7 @@ export interface StreamAgentParams {
     tool_call_id?: string;
     server_id?: string;
     description?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
   }) => void;
   onToolStarted?: (data: {
     tool: string;
@@ -39,9 +40,22 @@ export interface StreamAgentParams {
     tool_call_id?: string;
     server_id?: string;
     description?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
   }) => void;
-  onToolCompleted?: (data: { tool: string; output: string; tool_call_id?: string }) => void;
-  onToolFailed?: (data: { tool: string; error: string; tool_call_id?: string }) => void;
+  onToolCompleted?: (data: {
+    tool: string;
+    output: string;
+    tool_call_id?: string;
+    server_id?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
+  }) => void;
+  onToolFailed?: (data: {
+    tool: string;
+    error: string;
+    tool_call_id?: string;
+    server_id?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
+  }) => void;
   onRunCompleted?: (data: {
     run_id: string;
     content: string;
@@ -69,9 +83,22 @@ export interface ResumeApprovalParams {
     tool_call_id?: string;
     server_id?: string;
     description?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
   }) => void;
-  onToolCompleted?: (data: { tool: string; output: string; tool_call_id?: string }) => void;
-  onToolFailed?: (data: { tool: string; error: string; tool_call_id?: string }) => void;
+  onToolCompleted?: (data: {
+    tool: string;
+    output: string;
+    tool_call_id?: string;
+    server_id?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
+  }) => void;
+  onToolFailed?: (data: {
+    tool: string;
+    error: string;
+    tool_call_id?: string;
+    server_id?: string;
+    classification?: 'ALLOWED_READ_ONLY' | 'APPROVAL_REQUIRED' | 'DENIED';
+  }) => void;
   onRunCompleted?: (data: {
     run_id: string;
     content: string;
@@ -286,6 +313,7 @@ export const agentService = {
                   tool_call_id: event.data.tool_call_id,
                   server_id: event.data.server_id,
                   description: event.data.description as string | undefined,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -296,6 +324,7 @@ export const agentService = {
                   tool_call_id: event.data.tool_call_id,
                   server_id: event.data.server_id,
                   description: event.data.description as string | undefined,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -304,6 +333,8 @@ export const agentService = {
                   tool: event.data.tool ?? '',
                   output: event.data.output ?? '',
                   tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -312,6 +343,8 @@ export const agentService = {
                   tool: event.data.tool ?? '',
                   error: event.data.error ?? 'Tool execution failed',
                   tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -551,6 +584,7 @@ export const agentService = {
                   tool_call_id: event.data.tool_call_id,
                   server_id: event.data.server_id,
                   description: event.data.description as string | undefined,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -559,6 +593,8 @@ export const agentService = {
                   tool: event.data.tool ?? '',
                   output: event.data.output ?? '',
                   tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  classification: event.data.classification as any,
                 });
                 break;
 
@@ -567,6 +603,8 @@ export const agentService = {
                   tool: event.data.tool ?? '',
                   error: event.data.error ?? 'Tool execution failed',
                   tool_call_id: event.data.tool_call_id,
+                  server_id: event.data.server_id,
+                  classification: event.data.classification as any,
                 });
                 break;
 

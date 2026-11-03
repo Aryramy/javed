@@ -21,10 +21,8 @@ const mockTelemetry: ExtractionTelemetryResponse = {
   total_documents: 14,
   total_extractions: 28,
   total_tables: 42,
-  db_path: 'data/extractions.db',
-  sources_dir: 'data/sources',
-  extractions_dir: 'data/extractions',
-  tables_dir: 'data/tables',
+  storage_backend: 'sqlite_wal',
+  storage_status: 'healthy',
   supported_document_formats: ['.pdf', '.docx', '.xlsx'],
   supported_web_strategies: ['static', 'rendered'],
   storage_healthy: true,
@@ -43,7 +41,8 @@ const mockDoc1: StoredDocumentSummary = {
   version_count: 1,
   current_version_id: 'v1-hash',
   current_extraction_id: 'ext-001',
-  raw_artifact_path: 'data/sources/annual_report.pdf',
+  artifact_available: true,
+  artifact_id: 'a1b2c3d4e5f6',
 }
 
 const mockDoc2: StoredDocumentSummary = {
@@ -59,6 +58,8 @@ const mockDoc2: StoredDocumentSummary = {
   version_count: 1,
   current_version_id: 'v1-web',
   current_extraction_id: 'ext-002',
+  artifact_available: false,
+  artifact_id: null,
 }
 
 const mockDetail: DocumentDetailResponse = {

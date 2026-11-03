@@ -495,6 +495,7 @@ export const ChatView: React.FC = () => {
                     status: 'AWAITING_APPROVAL',
                     approval_id: approval.approval_id,
                     server_id: approval.server_id || copy[existingIndex].server_id,
+                    classification: 'APPROVAL_REQUIRED',
                     arguments: approval.arguments,
                     tool_call_id: approval.tool_call_id || copy[existingIndex].tool_call_id,
                   };
@@ -506,6 +507,7 @@ export const ChatView: React.FC = () => {
                     tool_call_id: approval.tool_call_id || `tc-${Date.now()}`,
                     tool_id: approval.tool_id,
                     server_id: approval.server_id,
+                    classification: 'APPROVAL_REQUIRED',
                     tool_name: approval.tool_id,
                     arguments: approval.arguments,
                     status: 'AWAITING_APPROVAL',
@@ -564,6 +566,7 @@ export const ChatView: React.FC = () => {
                   tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                   tool_id: data.tool,
                   server_id: data.server_id || 'unknown',
+                  classification: data.classification || 'DENIED',
                   tool_name: data.tool,
                   description: data.description,
                   arguments: data.input,
@@ -599,7 +602,8 @@ export const ChatView: React.FC = () => {
                     ...copy[existingIndex],
                     status: isTerminal ? existingStatus : 'EXECUTING',
                     started_at: copy[existingIndex].started_at || now,
-                    server_id: data.server_id || copy[existingIndex].server_id,
+                    server_id: data.server_id || copy[existingIndex].server_id || 'unknown',
+                    classification: data.classification || copy[existingIndex].classification || 'DENIED',
                     description: data.description || copy[existingIndex].description,
                     arguments:
                       data.input && Object.keys(data.input).length > 0
@@ -614,6 +618,7 @@ export const ChatView: React.FC = () => {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
                     server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     description: data.description,
                     arguments: data.input,
@@ -645,6 +650,8 @@ export const ChatView: React.FC = () => {
                   copy[existingIndex] = {
                     ...current,
                     status: 'COMPLETED',
+                    server_id: data.server_id || current.server_id || 'unknown',
+                    classification: data.classification || current.classification || 'DENIED',
                     result_summary: data.output,
                     completed_at: now,
                     elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -656,7 +663,8 @@ export const ChatView: React.FC = () => {
                   {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
-                    server_id: 'unknown',
+                    server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     arguments: {},
                     status: 'COMPLETED',
@@ -688,6 +696,8 @@ export const ChatView: React.FC = () => {
                   copy[existingIndex] = {
                     ...current,
                     status: 'FAILED',
+                    server_id: data.server_id || current.server_id || 'unknown',
+                    classification: data.classification || current.classification || 'DENIED',
                     error_message: data.error,
                     completed_at: now,
                     elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -699,7 +709,8 @@ export const ChatView: React.FC = () => {
                   {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
-                    server_id: 'unknown',
+                    server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     arguments: {},
                     status: 'FAILED',
@@ -989,6 +1000,7 @@ export const ChatView: React.FC = () => {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
                 server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 description: data.description,
                 arguments: data.input,
@@ -1021,6 +1033,8 @@ export const ChatView: React.FC = () => {
               copy[existingIndex] = {
                 ...current,
                 status: 'COMPLETED',
+                server_id: data.server_id || current.server_id || 'unknown',
+                classification: data.classification || current.classification || 'DENIED',
                 result_summary: data.output,
                 completed_at: now,
                 elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -1032,7 +1046,8 @@ export const ChatView: React.FC = () => {
               {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
-                server_id: 'unknown',
+                server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 arguments: {},
                 status: 'COMPLETED',
@@ -1065,6 +1080,8 @@ export const ChatView: React.FC = () => {
               copy[existingIndex] = {
                 ...current,
                 status: 'FAILED',
+                server_id: data.server_id || current.server_id || 'unknown',
+                classification: data.classification || current.classification || 'DENIED',
                 error_message: data.error,
                 completed_at: now,
                 elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -1076,7 +1093,8 @@ export const ChatView: React.FC = () => {
               {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
-                server_id: 'unknown',
+                server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 arguments: {},
                 status: 'FAILED',

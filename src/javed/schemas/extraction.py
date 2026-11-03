@@ -136,10 +136,14 @@ class ExtractionTelemetryResponse(BaseModel):
     total_documents: int = Field(description="Total unique documents stored in SQLite.")
     total_extractions: int = Field(description="Total extraction runs recorded.")
     total_tables: int = Field(description="Total extracted table artifacts stored.")
-    db_path: str = Field(description="SQLite database path.")
-    sources_dir: str = Field(description="Raw source storage directory.")
-    extractions_dir: str = Field(description="Canonical JSON extractions directory.")
-    tables_dir: str = Field(description="Exported tables directory.")
+    storage_backend: str = Field(
+        default="sqlite_wal",
+        description="Storage engine backend type.",
+    )
+    storage_status: str = Field(
+        default="healthy",
+        description="Operational health status of the storage subsystem.",
+    )
     supported_document_formats: list[str] = Field(
         default_factory=lambda: [".pdf", ".docx", ".xlsx"],
         description="Supported local document extensions.",

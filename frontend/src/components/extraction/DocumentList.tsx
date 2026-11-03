@@ -227,7 +227,7 @@ export const DocumentList = ({
                           <Eye className="w-4 h-4" />
                         </button>
 
-                        {doc.raw_artifact_path && (
+                        {doc.artifact_available && (
                           <button
                             type="button"
                             onClick={() => onDownloadDocument(doc)}

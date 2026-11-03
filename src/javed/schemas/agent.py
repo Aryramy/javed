@@ -156,6 +156,9 @@ class ToolActivityRecord(BaseModel):
     tool_call_id: str = Field(description="Unique tool call or invocation ID")
     tool_id: str = Field(description="Canonical namespaced tool ID (e.g. time__get_current_time)")
     server_id: str = Field(default="unknown", description="MCP server identity")
+    classification: Literal["ALLOWED_READ_ONLY", "APPROVAL_REQUIRED", "DENIED"] = Field(
+        default="DENIED", description="Authoritative tool permission tier"
+    )
     tool_name: str | None = Field(default=None, description="Human friendly display name")
     description: str | None = Field(default=None, description="Tool purpose or summary")
     arguments: dict[str, Any] = Field(default_factory=dict, description="Input arguments")

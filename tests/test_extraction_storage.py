@@ -224,8 +224,10 @@ def test_store_and_load_document(
     assert summary.source_sha256 == doc.source_sha256
     assert summary.normalized_content_sha256 == doc.normalized_content_sha256
     assert summary.original_display_name == "report.pdf"
-    assert summary.raw_artifact_path is not None
-    assert Path(summary.raw_artifact_path).is_file()
+    assert summary.artifact_available is True
+    raw_file = manager.get_raw_artifact_path(doc.document_id)
+    assert raw_file is not None
+    assert raw_file.is_file()
 
     # Verify raw artifact content
     raw_saved = manager.get_raw_source_bytes(doc.document_id)
@@ -263,9 +265,10 @@ def test_quarantine_promotion(
     assert res.document_id == doc.document_id
     summary = manager.get_document(doc.document_id)
     assert summary is not None
-    assert summary.raw_artifact_path is not None
+    assert summary.artifact_available is True
 
-    promoted_file = Path(summary.raw_artifact_path)
+    promoted_file = manager.get_raw_artifact_path(doc.document_id)
+    assert promoted_file is not None
     assert promoted_file.is_file()
     assert promoted_file.read_bytes() == raw_bytes
 
@@ -377,16 +380,20 @@ def test_table_artifact_persistence(
     assert tbl.row_count == 2
     assert tbl.column_count == 2
     assert tbl.sheet_name == "SummarySheet"
-    assert tbl.csv_path is not None
-    assert tbl.json_path is not None
+    assert tbl.csv_available is True
+    assert tbl.json_available is True
 
     # Inspect CSV content
-    csv_text = Path(tbl.csv_path).read_text(encoding="utf-8")
+    csv_file = manager.get_table_artifact_path(tbl.table_id, "csv")
+    assert csv_file is not None
+    csv_text = csv_file.read_text(encoding="utf-8")
     assert "Header 1,Header 2" in csv_text
     assert "Val 1,Val 2" in csv_text
 
     # Inspect JSON content
-    json_text = Path(tbl.json_path).read_text(encoding="utf-8")
+    json_file = manager.get_table_artifact_path(tbl.table_id, "json")
+    assert json_file is not None
+    json_text = json_file.read_text(encoding="utf-8")
     table_data = json.loads(json_text)
     assert table_data["headers"] == ["Header 1", "Header 2"]
 
@@ -419,7 +426,8 @@ def test_trust_boundary_rejection_tampered_json(
     # Locate canonical JSON and tamper with content
     rec = manager.get_extraction_record(doc.ingestion_id)
     assert rec is not None
-    json_path = Path(rec.canonical_json_path)
+    json_path = manager.get_canonical_json_path(doc.ingestion_id)
+    assert json_path is not None
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     payload["full_text"] = "MALICIOUS TAMPERED TEXT"
@@ -464,12 +472,14 @@ def test_document_deletion_cascading(
 
     summary = manager.get_document(doc.document_id)
     assert summary is not None
-    raw_path = Path(summary.raw_artifact_path)
+    raw_path = manager.get_raw_artifact_path(doc.document_id)
+    assert raw_path is not None
     assert raw_path.is_file()
 
     tables = manager.list_tables(doc.ingestion_id)
     assert len(tables) == 1
-    csv_path = Path(tables[0].csv_path)
+    csv_path = manager.get_table_artifact_path(tables[0].table_id, "csv")
+    assert csv_path is not None
     assert csv_path.is_file()
 
     # Delete with artifact cleanup

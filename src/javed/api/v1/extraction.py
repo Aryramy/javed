@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -555,33 +556,24 @@ async def get_table_data(
         )
 
     fmt = format.strip().lower()
-    if fmt == "csv":
-        if not table.csv_path or not Path(table.csv_path).is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="CSV artifact for table not found on disk",
-            )
-        return FileResponse(
-            path=table.csv_path,
-            media_type="text/csv",
-            filename=f"{table_id}.csv",
+    if fmt not in ("csv", "json"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported format '{format}'. Supported formats: ['json', 'csv']",
         )
 
-    if fmt == "json":
-        if not table.json_path or not Path(table.json_path).is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="JSON artifact for table not found on disk",
-            )
-        return FileResponse(
-            path=table.json_path,
-            media_type="application/json",
-            filename=f"{table_id}.json",
+    table_path = await asyncio.to_thread(storage.get_table_artifact_path, table_id, fmt)
+    if not table_path or not table_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{fmt.upper()} artifact for table not found on disk",
         )
 
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unsupported format '{format}'. Supported formats: ['json', 'csv']",
+    media_type = "text/csv" if fmt == "csv" else "application/json"
+    return FileResponse(
+        path=str(table_path),
+        media_type=media_type,
+        filename=f"{table_id}.{fmt}",
     )
 
 
@@ -601,14 +593,14 @@ async def download_raw_document(
             detail=f"Document '{document_id}' not found",
         )
 
-    if not doc.raw_artifact_path:
+    if not doc.artifact_available:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Raw source artifact not stored for this document (e.g. web page)",
         )
 
-    raw_path = Path(doc.raw_artifact_path)
-    if not raw_path.is_file():
+    raw_path = await asyncio.to_thread(storage.get_raw_artifact_path, document_id)
+    if not raw_path or not raw_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Source artifact file not found on disk",
@@ -667,10 +659,8 @@ async def get_extraction_telemetry(
         total_documents=total_docs,
         total_extractions=total_exts,
         total_tables=total_tbls,
-        db_path=str(storage.db_path),
-        sources_dir=str(storage.sources_dir),
-        extractions_dir=str(storage.extractions_dir),
-        tables_dir=str(storage.tables_dir),
+        storage_backend="sqlite_wal",
+        storage_status="healthy" if is_healthy else "degraded",
         supported_document_formats=sorted(list(PERMITTED_DOCUMENT_EXTENSIONS)),
         supported_web_strategies=["static", "rendered"],
         storage_healthy=is_healthy,
