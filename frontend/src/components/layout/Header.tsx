@@ -44,10 +44,10 @@ export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpe
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tight text-base text-foreground">
-                JARVIS
+                JAVED
               </span>
               <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">
-                Javed
+                AI Assistant
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground font-medium hidden sm:block">

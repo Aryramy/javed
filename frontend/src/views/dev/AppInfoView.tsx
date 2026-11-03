@@ -2,7 +2,7 @@ import { Layers, Package, Terminal } from 'lucide-react'
 
 export const AppInfoView: React.FC = () => {
   const metadata = [
-    { label: 'Project Name', value: 'Javed (JARVIS)' },
+    { label: 'Project Name', value: 'JAVED' },
     { label: 'Current Stage', value: 'Stage 1 — Foundations & Core Capabilities' },
     { label: 'Active Brick', value: 'BRICK-001: Reproducible Foundation & Real React UI Shell' },
     { label: 'Last Verified Milestone', value: 'BRICK-000: Master Architecture & Planning (2026-10-22)' },

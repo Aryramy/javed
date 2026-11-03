@@ -90,3 +90,8 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+dialog:not([open]) {
+  display: none !important;
+}
+

@@ -84,7 +84,11 @@ export const ExtractionViewer = ({
 
     if (isOpen) {
       if (!dialog.open) {
-        dialog.showModal()
+        try {
+          dialog.showModal()
+        } catch {
+          // ignore if test environment doesn't implement showModal
+        }
       }
     } else {
       if (dialog.open) {
@@ -92,6 +96,14 @@ export const ExtractionViewer = ({
       }
     }
   }, [isOpen])
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    if (e.target === dialogRef.current) {
+      onClose()
+    }
+  }
+
+  if (!isOpen) return null
 
   const handleCopyText = async (content: string) => {
     await navigator.clipboard.writeText(content)
@@ -167,6 +179,7 @@ export const ExtractionViewer = ({
     <dialog
       ref={dialogRef}
       onClose={onClose}
+      onClick={handleBackdropClick}
       aria-labelledby="viewer-title"
       className="fixed inset-0 m-auto z-50 w-full max-w-4xl h-[85vh] max-h-[85vh] p-0 rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl flex flex-col overflow-hidden backdrop:bg-black/75 backdrop:backdrop-blur-sm"
       style={{ overscrollBehavior: 'contain' }}
@@ -326,6 +339,14 @@ export const ExtractionViewer = ({
               <p className="font-semibold">Unable to load document</p>
               <p className="text-xs mt-1 opacity-90">{error}</p>
             </div>
+          </div>
+        )}
+
+        {!loading && !error && !detail && (
+          <div className="py-12 flex flex-col items-center justify-center text-muted-foreground text-xs space-y-2">
+            <FileText className="w-8 h-8 opacity-40 mb-2" />
+            <p className="font-medium text-foreground">No document details available</p>
+            <p>Please select a document from the registry.</p>
           </div>
         )}
 

@@ -30,7 +30,11 @@ export const WebCrawlModal = ({
 
     if (isOpen) {
       if (!dialog.open) {
-        dialog.showModal()
+        try {
+          dialog.showModal()
+        } catch {
+          // ignore if test environment doesn't implement showModal
+        }
       }
     } else {
       if (dialog.open) {
@@ -38,6 +42,14 @@ export const WebCrawlModal = ({
       }
     }
   }, [isOpen])
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    if (e.target === dialogRef.current) {
+      handleDialogClose()
+    }
+  }
+
+  if (!isOpen) return null
 
   // Handle native backdrop and Esc cancellation
   const handleDialogClose = () => {
@@ -108,6 +120,7 @@ export const WebCrawlModal = ({
     <dialog
       ref={dialogRef}
       onClose={handleDialogClose}
+      onClick={handleBackdropClick}
       aria-labelledby="crawl-modal-title"
       className="fixed inset-0 m-auto z-50 w-full max-w-lg p-0 rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl overflow-hidden backdrop:bg-black/75 backdrop:backdrop-blur-sm"
       style={{ overscrollBehavior: 'contain' }}

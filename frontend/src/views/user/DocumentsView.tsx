@@ -187,21 +187,25 @@ export const DocumentsView = () => {
       </div>
 
       {/* Extraction Detail Viewer Modal */}
-      <ExtractionViewer
-        documentId={viewerDocId}
-        isOpen={isViewerOpen}
-        onClose={() => {
-          setIsViewerOpen(false)
-          setViewerDocId(null)
-        }}
-      />
+      {isViewerOpen && (
+        <ExtractionViewer
+          documentId={viewerDocId}
+          isOpen={isViewerOpen}
+          onClose={() => {
+            setIsViewerOpen(false)
+            setViewerDocId(null)
+          }}
+        />
+      )}
 
       {/* Web Crawl Modal */}
-      <WebCrawlModal
-        isOpen={isCrawlModalOpen}
-        onClose={() => setIsCrawlModalOpen(false)}
-        onCrawlSuccess={handleCrawlSuccess}
-      />
+      {isCrawlModalOpen && (
+        <WebCrawlModal
+          isOpen={isCrawlModalOpen}
+          onClose={() => setIsCrawlModalOpen(false)}
+          onCrawlSuccess={handleCrawlSuccess}
+        />
+      )}
     </div>
   )
 }

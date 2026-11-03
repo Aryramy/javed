@@ -255,6 +255,19 @@ class IngestionResult(ExtractionBaseModel):
 # -----------------------------------------------------------------------------
 
 
+_DB_PATH_LOCKS: dict[str, threading.Lock] = {}
+_PATH_LOCK_MUTEX = threading.Lock()
+
+
+def _get_db_path_lock(db_path: Path) -> threading.Lock:
+    """Retrieve or create a process-wide thread lock for a specific SQLite database path."""
+    key = str(db_path.resolve())
+    with _PATH_LOCK_MUTEX:
+        if key not in _DB_PATH_LOCKS:
+            _DB_PATH_LOCKS[key] = threading.Lock()
+        return _DB_PATH_LOCKS[key]
+
+
 class ExtractionStorageManager:
     """Manages persistent SQLite registry and canonical disk artifacts for extracted documents."""
 
@@ -273,16 +286,17 @@ class ExtractionStorageManager:
         """Synchronously initialize storage directories and SQLite tables."""
         if self._is_initialized:
             return
-        with self._sync_init_lock:
+        path_lock = _get_db_path_lock(self.db_path)
+        with path_lock:
             if self._is_initialized:
                 return
             self._ensure_directories()
             import sqlite3
 
             with sqlite3.connect(
-                self.db_path, timeout=self.config.busy_timeout_ms / 1000.0
+                self.db_path, timeout=max(self.config.busy_timeout_ms / 1000.0, 10.0)
             ) as conn:
-                conn.execute(f"PRAGMA busy_timeout = {self.config.busy_timeout_ms};")
+                conn.execute(f"PRAGMA busy_timeout = {max(self.config.busy_timeout_ms, 10000)};")
                 if self.config.enable_wal:
                     conn.execute("PRAGMA journal_mode = WAL;")
                 conn.execute(CREATE_DOCUMENTS_TABLE)

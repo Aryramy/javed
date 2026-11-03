@@ -163,11 +163,15 @@ class GetDocumentDetailsInput(BaseModel):
     )
     include_text: bool = Field(
         default=True,
-        description="Whether to include full extracted text and markdown content.",
+        description="Whether to include extracted text and markdown content.",
+    )
+    offset: int = Field(
+        default=0,
+        description="Character offset index for chunked content retrieval.",
     )
     max_chars: int = Field(
         default=DEFAULT_DETAILS_MAX_CHARS,
-        description="Maximum characters of text/markdown to return if include_text is True.",
+        description="Maximum characters of text/markdown to return (capped at 30,000).",
     )
 
     @field_validator("document_id")
@@ -177,6 +181,20 @@ class GetDocumentDetailsInput(BaseModel):
         if not s:
             raise ValueError("document_id cannot be empty")
         return s
+
+    @field_validator("offset")
+    @classmethod
+    def validate_offset(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("offset cannot be negative")
+        return v
+
+    @field_validator("max_chars")
+    @classmethod
+    def validate_max_chars(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("max_chars must be strictly positive")
+        return min(v, 30000)
 
 
 # -----------------------------------------------------------------------------
@@ -562,6 +580,7 @@ class ExtractionToolsManager:
         self,
         document_id: str,
         include_text: bool = True,
+        offset: int = 0,
         max_chars: int = DEFAULT_DETAILS_MAX_CHARS,
     ) -> dict[str, Any]:
         """Retrieve detailed metadata, structured tables, and content for an ingested document."""
@@ -584,8 +603,8 @@ class ExtractionToolsManager:
             result: dict[str, Any] = {
                 "success": True,
                 "document_id": doc_summary.document_id,
+                "title": doc_summary.original_display_name,
                 "source_type": doc_summary.source_type.value,
-                "original_display_name": doc_summary.original_display_name,
                 "source_uri": doc_summary.source_uri,
                 "source_title": doc_summary.source_title,
                 "mime_type": doc_summary.mime_type,
@@ -597,6 +616,12 @@ class ExtractionToolsManager:
                 "first_ingested_at": doc_summary.first_ingested_at.isoformat(),
                 "last_ingested_at": doc_summary.last_ingested_at.isoformat(),
                 "metadata": meta_dict,
+                "provenance": {
+                    "source_sha256": doc_summary.source_sha256,
+                    "normalized_content_sha256": doc_summary.normalized_content_sha256,
+                    "ingested_at": doc_summary.last_ingested_at.isoformat(),
+                    "version": doc_summary.version_count,
+                },
             }
 
             # Retrieve extraction record details
@@ -619,9 +644,17 @@ class ExtractionToolsManager:
 
             # Retrieve standalone table exports
             tables = await asyncio.to_thread(self.storage.list_tables, doc_summary.document_id)
-            result["tables"] = [tbl.model_dump(mode="json") for tbl in tables]
+            result["tables"] = [
+                {
+                    "table_id": tbl.table_id,
+                    "sheet_name": tbl.sheet_name,
+                    "row_count": tbl.row_count,
+                    "column_count": tbl.column_count,
+                }
+                for tbl in tables
+            ]
 
-            # Optionally reload full document and include text/markdown
+            # Optionally reload full document and include bounded text/markdown slice
             if include_text and doc_summary.current_extraction_id:
                 normalized_doc = await self.storage.load_normalized_document_async(
                     doc_summary.current_extraction_id
@@ -629,9 +662,21 @@ class ExtractionToolsManager:
                 if normalized_doc:
                     full_txt = normalized_doc.full_text or ""
                     full_md = normalized_doc.full_markdown or ""
-                    result["text_content"] = full_txt[:max_chars]
-                    result["markdown_content"] = full_md[:max_chars]
-                    result["is_truncated"] = len(full_txt) > max_chars or len(full_md) > max_chars
+                    txt_slice = full_txt[offset : offset + max_chars]
+                    md_slice = full_md[offset : offset + max_chars]
+                    total_chars = max(len(full_txt), len(full_md))
+                    returned_chars = max(len(txt_slice), len(md_slice))
+                    truncated = (offset + returned_chars) < total_chars
+                    next_offset = (offset + returned_chars) if truncated else None
+
+                    result["text_content"] = txt_slice
+                    result["markdown_content"] = md_slice
+                    result["returned_characters"] = returned_chars
+                    result["total_characters"] = total_chars
+                    result["offset"] = offset
+                    result["next_offset"] = next_offset
+                    result["is_truncated"] = truncated
+                    result["truncated"] = truncated
 
             return result
 
@@ -681,10 +726,14 @@ def create_extraction_tools(manager: ExtractionToolsManager) -> list[StructuredT
     async def _get_document_details(
         document_id: str,
         include_text: bool = True,
+        offset: int = 0,
         max_chars: int = DEFAULT_DETAILS_MAX_CHARS,
     ) -> dict[str, Any]:
         return await manager.get_document_details(
-            document_id=document_id, include_text=include_text, max_chars=max_chars
+            document_id=document_id,
+            include_text=include_text,
+            offset=offset,
+            max_chars=max_chars,
         )
 
     return [
