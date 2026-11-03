@@ -109,7 +109,7 @@ export const WebCrawlModal = ({
       ref={dialogRef}
       onClose={handleDialogClose}
       aria-labelledby="crawl-modal-title"
-      className="backdrop:bg-black/60 backdrop:backdrop-blur-sm bg-card border border-border text-card-foreground rounded-2xl p-0 w-full max-w-lg shadow-2xl overflow-hidden m-auto"
+      className="fixed inset-0 m-auto z-50 w-full max-w-lg p-0 rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl overflow-hidden backdrop:bg-black/75 backdrop:backdrop-blur-sm"
       style={{ overscrollBehavior: 'contain' }}
     >
       <div className="p-6 space-y-5">

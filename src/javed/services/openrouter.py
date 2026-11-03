@@ -229,7 +229,10 @@ class OpenRouterService:
         if needs_refresh:
             try:
                 url = f"{self.base_url}/models"
-                client = self._external_client or httpx.AsyncClient(timeout=10.0)
+                client = self._external_client or httpx.AsyncClient(
+                    timeout=10.0,
+                    transport=httpx.AsyncHTTPTransport(retries=2),
+                )
                 should_close = self._external_client is None
                 try:
                     resp = await client.get(url, headers=self._get_headers())
@@ -587,7 +590,10 @@ class OpenRouterService:
         inside_think = False
 
         try:
-            client = self._external_client or httpx.AsyncClient(timeout=self.timeout)
+            client = self._external_client or httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=httpx.AsyncHTTPTransport(retries=3),
+            )
             should_close = self._external_client is None
 
             try:
@@ -841,6 +847,15 @@ class OpenRouterService:
                 type="error",
                 error=f"Inference timed out after {self.timeout}s waiting for OpenRouter response.",
             )
+        except httpx.ConnectError as ce:
+            logger.error("OpenRouter connection error: %s", ce)
+            yield ChatStreamEvent(
+                type="error",
+                error=(
+                    f"Connection failed: unable to reach AI gateway at {self.base_url}. "
+                    "Please check your network or DNS connectivity."
+                ),
+            )
         except Exception as e:
             logger.exception(f"Unexpected error in OpenRouter stream: {e}")
             yield ChatStreamEvent(type="error", error=f"Internal streaming error: {e!s}")
@@ -880,7 +895,10 @@ class OpenRouterService:
         url = f"{self.base_url}/chat/completions"
         headers = self._get_headers()
 
-        client = self._external_client or httpx.AsyncClient(timeout=self.timeout)
+        client = self._external_client or httpx.AsyncClient(
+            timeout=self.timeout,
+            transport=httpx.AsyncHTTPTransport(retries=3),
+        )
         should_close = self._external_client is None
 
         try:

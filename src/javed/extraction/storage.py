@@ -19,6 +19,7 @@ import io
 import json
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -265,25 +266,31 @@ class ExtractionStorageManager:
         self.tables_dir = Path(self.config.tables_dir).resolve()
         self._is_initialized = False
         self._lock = asyncio.Lock()
+        self._sync_init_lock = threading.Lock()
         self._closed = False
 
     def initialize(self) -> None:
         """Synchronously initialize storage directories and SQLite tables."""
         if self._is_initialized:
             return
-        self._ensure_directories()
-        import sqlite3
+        with self._sync_init_lock:
+            if self._is_initialized:
+                return
+            self._ensure_directories()
+            import sqlite3
 
-        with sqlite3.connect(self.db_path, timeout=self.config.busy_timeout_ms / 1000.0) as conn:
-            if self.config.enable_wal:
-                conn.execute("PRAGMA journal_mode = WAL;")
-            conn.execute(f"PRAGMA busy_timeout = {self.config.busy_timeout_ms};")
-            conn.execute(CREATE_DOCUMENTS_TABLE)
-            conn.execute(CREATE_RECORDS_TABLE)
-            conn.execute(CREATE_TABLES_TABLE)
-            conn.executescript(CREATE_INDICES)
-            conn.commit()
-        self._is_initialized = True
+            with sqlite3.connect(
+                self.db_path, timeout=self.config.busy_timeout_ms / 1000.0
+            ) as conn:
+                conn.execute(f"PRAGMA busy_timeout = {self.config.busy_timeout_ms};")
+                if self.config.enable_wal:
+                    conn.execute("PRAGMA journal_mode = WAL;")
+                conn.execute(CREATE_DOCUMENTS_TABLE)
+                conn.execute(CREATE_RECORDS_TABLE)
+                conn.execute(CREATE_TABLES_TABLE)
+                conn.executescript(CREATE_INDICES)
+                conn.commit()
+            self._is_initialized = True
 
     async def initialize_async(self) -> None:
         """Asynchronously initialize storage directories and SQLite tables."""

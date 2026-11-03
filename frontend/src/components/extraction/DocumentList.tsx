@@ -296,7 +296,7 @@ export const DocumentList = ({
           aria-labelledby="delete-dialog-title"
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
         >
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-start gap-3 text-destructive">
               <div className="p-2 rounded-full bg-destructive/10">
                 <AlertTriangle className="w-5 h-5" />

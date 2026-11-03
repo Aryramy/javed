@@ -168,11 +168,11 @@ export const ExtractionViewer = ({
       ref={dialogRef}
       onClose={onClose}
       aria-labelledby="viewer-title"
-      className="backdrop:bg-black/70 backdrop:backdrop-blur-sm bg-card border border-border text-card-foreground rounded-2xl p-0 w-full max-w-4xl max-h-[88vh] shadow-2xl flex flex-col overflow-hidden m-auto"
+      className="fixed inset-0 m-auto z-50 w-full max-w-4xl h-[85vh] max-h-[85vh] p-0 rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl flex flex-col overflow-hidden backdrop:bg-black/75 backdrop:backdrop-blur-sm"
       style={{ overscrollBehavior: 'contain' }}
     >
       {/* Header */}
-      <div className="p-5 border-b border-border bg-muted/20 flex items-start justify-between gap-4 shrink-0">
+      <div className="p-5 border-b border-zinc-800 bg-zinc-900/90 flex items-start justify-between gap-4 shrink-0">
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-xs px-2 py-0.5 rounded font-mono uppercase font-semibold bg-primary/10 text-primary border border-primary/20">
@@ -231,7 +231,7 @@ export const ExtractionViewer = ({
       </div>
 
       {/* Tabs Bar */}
-      <div className="px-5 border-b border-border bg-card flex items-center justify-between gap-4 shrink-0">
+      <div className="px-5 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between gap-4 shrink-0">
         <nav className="flex space-x-1" aria-label="Viewer tabs">
           <button
             type="button"
@@ -311,7 +311,7 @@ export const ExtractionViewer = ({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
         {loading && (
           <div className="py-12 flex flex-col items-center justify-center text-muted-foreground space-y-2">
             <Clock className="w-6 h-6 animate-spin text-primary" />
@@ -345,7 +345,7 @@ export const ExtractionViewer = ({
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Characters: {detail.text_preview.length.toLocaleString()}</span>
                 </div>
-                <div className="p-4 rounded-xl bg-background border border-border font-mono text-xs whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
+                <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
                   {detail.text_preview || 'No plain text extracted for this document.'}
                 </div>
               </div>
@@ -357,7 +357,7 @@ export const ExtractionViewer = ({
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Markdown Syntax</span>
                 </div>
-                <div className="p-4 rounded-xl bg-background border border-border font-mono text-xs whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
+                <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
                   {detail.markdown_preview || 'No markdown extracted for this document.'}
                 </div>
               </div>
@@ -392,9 +392,9 @@ export const ExtractionViewer = ({
                 <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                   Execution Run Ledger
                 </h3>
-                <div className="divide-y divide-border border border-border rounded-xl overflow-hidden bg-background">
+                <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900">
                   {detail.extractions.map((rec) => (
-                    <div key={rec.extraction_id} className="p-3.5 space-y-2 hover:bg-muted/20 transition-colors">
+                    <div key={rec.extraction_id} className="p-3.5 space-y-2 hover:bg-zinc-800/40 transition-colors">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span

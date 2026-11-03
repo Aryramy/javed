@@ -115,6 +115,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Could not auto-configure time MCP tools for E2E: %s", e)
 
+    # Safely initialize extraction storage on startup to avoid concurrency locks
+    if hasattr(app.state, "extraction_tools_manager") and app.state.extraction_tools_manager:
+        try:
+            await app.state.extraction_tools_manager.storage.initialize_async()
+            logger.info("Extraction storage initialized cleanly on startup")
+        except Exception as e:
+            logger.warning("Extraction storage initialization deferred: %s", e)
+
     # Yield control to run the application
     yield
 
@@ -187,13 +195,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.warning("Could not register default MCP servers: %s", exc)
     app.state.mcp_gateway = SecureMCPGateway(app.state.mcp_registry)
 
+    app.state.extraction_tools_manager = ExtractionToolsManager()
+
     app.state.agent_runtime = AgentRuntimeManager(
         app_settings,
         openrouter_service=app.state.openrouter_service,
         mcp_gateway=app.state.mcp_gateway,
+        enable_extraction=True,
+        extraction_tools_manager=app.state.extraction_tools_manager,
     )
-
-    app.state.extraction_tools_manager = ExtractionToolsManager()
 
     # 1. Body Size Limiter Middleware
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=app_settings.max_request_body_bytes)
