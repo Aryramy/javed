@@ -18,6 +18,7 @@ from javed.api.v1.browser_ws import BrowserWebSocketManager, browser_websocket_e
 from javed.api.v1.router import api_v1_router
 from javed.browser.streamer import BrowserFrameStreamer
 from javed.config import Settings, get_settings
+from javed.extraction.tools import ExtractionToolsManager
 from javed.mcp.gateway import SecureMCPGateway
 from javed.mcp.registry import DynamicMCPRegistry
 from javed.mcp.servers import create_playwright_mcp_config, create_time_server_config
@@ -37,19 +38,30 @@ logger = logging.getLogger("javed.main")
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """Enforce maximum request body size limit on incoming HTTP requests."""
 
-    def __init__(self, app: FastAPI, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: FastAPI,
+        max_bytes: int,
+        max_upload_bytes: int = 25 * 1024 * 1024,
+    ) -> None:
         super().__init__(app)
         self.max_bytes = max_bytes
+        self.max_upload_bytes = max_upload_bytes
 
     async def dispatch(self, request: Request, call_next) -> Response:
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_bytes:
+        limit = (
+            self.max_upload_bytes
+            if request.url.path.startswith("/api/v1/extraction/upload")
+            else self.max_bytes
+        )
+        if content_length and int(content_length) > limit:
             return JSONResponse(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 content={
                     "error": {
                         "code": "REQUEST_ENTITY_TOO_LARGE",
-                        "message": f"Request body exceeds limit of {self.max_bytes} bytes",
+                        "message": f"Request body exceeds limit of {limit} bytes",
                     }
                 },
             )
@@ -121,6 +133,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Error closing agent runtime: %s", e)
 
+    if hasattr(app.state, "extraction_tools_manager") and app.state.extraction_tools_manager:
+        try:
+            await app.state.extraction_tools_manager.close_async()
+            logger.info("Extraction tools manager closed cleanly")
+        except Exception as e:
+            logger.warning("Error closing extraction tools manager: %s", e)
+
     if hasattr(app.state, "browser_ws_manager") and app.state.browser_ws_manager:
         try:
             await app.state.browser_ws_manager.close_all(code=1001, reason="Server shutting down")
@@ -174,6 +193,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mcp_gateway=app.state.mcp_gateway,
     )
 
+    app.state.extraction_tools_manager = ExtractionToolsManager()
+
     # 1. Body Size Limiter Middleware
     app.add_middleware(RequestSizeLimitMiddleware, max_bytes=app_settings.max_request_body_bytes)
 
@@ -182,7 +203,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=app_settings.allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Correlation-ID", "X-Javed-Owner-Token"],
     )
 

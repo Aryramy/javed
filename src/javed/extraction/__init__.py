@@ -61,6 +61,7 @@ from javed.extraction.security import (
     SecurityGuardConfig,
     SecurityValidationDecision,
     sanitize_and_validate_display_name,
+    sanitize_display_name,
 )
 from javed.extraction.storage import (
     DocumentIntegrityError,
@@ -173,6 +174,7 @@ __all__ = [
     "extract_document_async",
     "extract_url",
     "sanitize_and_validate_display_name",
+    "sanitize_display_name",
     "validate_safe_local_document_path",
     "validate_web_url",
     "verify_trust_boundary",

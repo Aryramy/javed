@@ -481,11 +481,11 @@
   - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX) — `VERIFIED`
   - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry — `VERIFIED`
   - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration — `VERIFIED`
-  - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
+  - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry — `VERIFIED`
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 7 Completed and Verified; Awaiting Phase 8 Authorization).
-- **Stop Condition**: Phase 7 LangChain Extraction Tools & Agent Runtime Integration complete. Mandatory Stop: Await explicit Project Owner review and Phase 8 authorization before authoring REST API & Developer Mode Telemetry.
+- **Milestone Status**: **IN PROGRESS** (Phase 8 Completed and Verified; Awaiting Phase 9 Authorization).
+- **Stop Condition**: Phase 8 REST API & Developer Mode Telemetry complete. Mandatory Stop: Await explicit Project Owner review and Phase 9 authorization before authoring React Document Ingestion UI & Extraction Viewer components.
 
 
 ---

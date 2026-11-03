@@ -763,8 +763,12 @@ class ExtractionStorageManager:
             rows = cursor.fetchall()
             return [self._row_to_extraction_record(r) for r in rows]
 
-    def list_tables(self, extraction_id: str) -> list[StoredTableInfo]:
-        """List exported tables for an extraction run."""
+    async def list_extractions_async(self, document_id: str) -> list[StoredExtractionRecord]:
+        """Asynchronously list all extraction runs for a document."""
+        return await asyncio.to_thread(self.list_extractions, document_id)
+
+    def list_tables(self, identifier: str) -> list[StoredTableInfo]:
+        """List exported tables for an extraction run or document."""
         self.initialize()
         import sqlite3
 
@@ -772,8 +776,8 @@ class ExtractionStorageManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM extraction_tables WHERE extraction_id = ?",
-                (extraction_id,),
+                "SELECT * FROM extraction_tables WHERE extraction_id = ? OR document_id = ?",
+                (identifier, identifier),
             )
             rows = cursor.fetchall()
             return [
@@ -790,6 +794,89 @@ class ExtractionStorageManager:
                 )
                 for r in rows
             ]
+
+    async def list_tables_async(self, identifier: str) -> list[StoredTableInfo]:
+        """Asynchronously list exported tables for an extraction run or document."""
+        return await asyncio.to_thread(self.list_tables, identifier)
+
+    def get_table(self, table_id: str) -> StoredTableInfo | None:
+        """Retrieve stored table metadata by table_id."""
+        self.initialize()
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM extraction_tables WHERE table_id = ?",
+                (table_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return StoredTableInfo(
+                table_id=row["table_id"],
+                extraction_id=row["extraction_id"],
+                document_id=row["document_id"],
+                sheet_name=row["sheet_name"],
+                caption=row["caption"],
+                row_count=row["row_count"],
+                column_count=row["column_count"],
+                csv_path=row["csv_path"],
+                json_path=row["json_path"],
+            )
+
+    async def get_table_async(self, table_id: str) -> StoredTableInfo | None:
+        """Asynchronously retrieve stored table metadata by table_id."""
+        return await asyncio.to_thread(self.get_table, table_id)
+
+    def count_documents(self, source_type: SourceType | None = None) -> int:
+        """Count total stored documents matching optional source_type filter."""
+        self.initialize()
+        import sqlite3
+
+        query = "SELECT COUNT(*) FROM extraction_documents"
+        params: list[Any] = []
+        if source_type:
+            query += " WHERE source_type = ?"
+            params.append(source_type.value)
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return int(cursor.fetchone()[0])
+
+    async def count_documents_async(self, source_type: SourceType | None = None) -> int:
+        """Asynchronously count total stored documents."""
+        return await asyncio.to_thread(self.count_documents, source_type)
+
+    def count_extractions(self) -> int:
+        """Count total extraction runs."""
+        self.initialize()
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM extraction_records")
+            return int(cursor.fetchone()[0])
+
+    async def count_extractions_async(self) -> int:
+        """Asynchronously count total extraction runs."""
+        return await asyncio.to_thread(self.count_extractions)
+
+    def count_tables(self) -> int:
+        """Count total extracted table records."""
+        self.initialize()
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM extraction_tables")
+            return int(cursor.fetchone()[0])
+
+    async def count_tables_async(self) -> int:
+        """Asynchronously count total extracted tables."""
+        return await asyncio.to_thread(self.count_tables)
 
     def get_raw_source_bytes(self, document_id: str) -> bytes | None:
         """Retrieve raw canonical source bytes for a document."""

@@ -36,6 +36,10 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/*.sqlite
+data/quarantine/
+data/extractions/
+data/sources/
+data/tables/
 *.db
 
 # Browser Automation Artifacts & Test Results

@@ -376,6 +376,10 @@ def sanitize_and_validate_display_name(raw_name: str) -> str:
     return name
 
 
+# Backward-compatible convenience alias
+sanitize_display_name = sanitize_and_validate_display_name
+
+
 # -----------------------------------------------------------------------------
 # Extraction Security Guard
 # -----------------------------------------------------------------------------
