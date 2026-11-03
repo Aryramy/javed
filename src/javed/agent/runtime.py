@@ -38,6 +38,7 @@ from javed.agent.security import (
     ALLOWED_TOOLS,
     BROWSER_TOOLS,
     EXCLUDED_TOOLS,
+    EXTRACTION_TOOLS,
     PositiveToolAllowlistMiddleware,
     assert_safe_agent_runtime,
     ensure_agent_security_profile,
@@ -246,6 +247,10 @@ class AgentRuntimeManager:
         enable_browser: bool = False,
         browser_session: BrowserSession | None = None,
         browser_approval_required: bool = True,
+        enable_extraction: bool = False,
+        extraction_tools_manager: Any | None = None,
+        extraction_storage_manager: Any | None = None,
+        extraction_approval_required: bool = True,
     ) -> None:
         self.settings = settings or get_settings()
         self.openrouter_service = openrouter_service or OpenRouterService(self.settings)
@@ -260,6 +265,10 @@ class AgentRuntimeManager:
         self.enable_browser = enable_browser
         self._browser_session = browser_session
         self.browser_approval_required = browser_approval_required
+        self.enable_extraction = enable_extraction
+        self._extraction_tools_manager = extraction_tools_manager
+        self._extraction_storage_manager = extraction_storage_manager
+        self.extraction_approval_required = extraction_approval_required
         self.thread_lock_manager = ThreadLockManager()
         self._is_initialized = False
 
@@ -270,6 +279,18 @@ class AgentRuntimeManager:
         if self._browser_session is None:
             self._browser_session = BrowserSession()
         return self._browser_session
+
+    def get_extraction_tools_manager(self) -> Any | None:
+        """Return active ExtractionToolsManager or instantiate one if enable_extraction is True."""
+        if not self.enable_extraction:
+            return None
+        if self._extraction_tools_manager is None:
+            from javed.extraction.tools import ExtractionToolsManager
+
+            self._extraction_tools_manager = ExtractionToolsManager(
+                storage_manager=self._extraction_storage_manager
+            )
+        return self._extraction_tools_manager
 
     async def initialize(self) -> None:
         """Initialize checkpointer, approval store, and enforce Zero-Trust security profile."""
@@ -306,6 +327,13 @@ class AgentRuntimeManager:
                 logger.warning("Error closing browser session on runtime close: %s", e)
             finally:
                 self._browser_session = None
+        if self._extraction_tools_manager is not None:
+            try:
+                await self._extraction_tools_manager.close_async()
+            except Exception as e:
+                logger.warning("Error closing extraction tools manager on runtime close: %s", e)
+            finally:
+                self._extraction_tools_manager = None
         if hasattr(self.checkpointer_manager, "close"):
             try:
                 await self.checkpointer_manager.close()
@@ -338,7 +366,9 @@ class AgentRuntimeManager:
 
         # Check tool compatibility if tools are executable or visible
         has_executable_tools = bool(
-            (self.mcp_gateway and self.mcp_gateway.get_executable_tools()) or self.enable_browser
+            (self.mcp_gateway and self.mcp_gateway.get_executable_tools())
+            or self.enable_browser
+            or self.enable_extraction
         )
         if has_executable_tools and model_name != AUTO_ROUTER_MODEL_ID:
             if not self.openrouter_service.supports_tools(model_name):
@@ -410,12 +440,17 @@ class AgentRuntimeManager:
             session = self.get_browser_session()
             if session:
                 tools.extend(session.get_tools())
+        if self.enable_extraction:
+            ext_mgr = self.get_extraction_tools_manager()
+            if ext_mgr:
+                tools.extend(ext_mgr.get_tools())
 
         middleware = [
             TodoListMiddleware(),
             PositiveToolAllowlistMiddleware(
                 gateway=self.mcp_gateway,
                 enable_browser=self.enable_browser,
+                enable_extraction=self.enable_extraction,
             ),
         ]
 
@@ -426,6 +461,10 @@ class AgentRuntimeManager:
             for b_tool in ("browser_click", "browser_fill_form"):
                 if b_tool not in approval_tools:
                     approval_tools.append(b_tool)
+        if self.enable_extraction and self.extraction_approval_required:
+            for e_tool in ("extract_document",):
+                if e_tool not in approval_tools:
+                    approval_tools.append(e_tool)
 
         interrupt_on = (
             {tid: {"allowed_decisions": ["approve", "reject"]} for tid in approval_tools}
@@ -448,6 +487,19 @@ class AgentRuntimeManager:
                 "be requested, retained, or handled unnecessarily. "
                 "Call the appropriate tool rather than refusing."
             )
+        if self.enable_extraction:
+            system_prompt = (
+                f"{system_prompt}\n"
+                "5. CONTENT EXTRACTION: Document and web extraction tools are enabled. "
+                "You are authorized to use the provided extraction tools (extract_web_page, "
+                "extract_document, list_ingested_documents, get_document_details) when asked "
+                "to inspect or fetch web pages, parse local documents (PDF, DOCX, XLSX), or "
+                "query previously ingested content. "
+                "Local document extraction accesses host storage and is approval-controlled, "
+                "requiring human authorization before reading files. "
+                "All extractions are validated, deduplicated, and persisted automatically. "
+                "Call the appropriate tool rather than refusing."
+            )
 
         agent = create_deep_agent(
             model=model,
@@ -462,6 +514,7 @@ class AgentRuntimeManager:
             agent,
             gateway=self.mcp_gateway,
             enable_browser=self.enable_browser,
+            enable_extraction=self.enable_extraction,
         )
         return agent
 
@@ -1828,6 +1881,8 @@ class AgentRuntimeManager:
         allowed_set = set(ALLOWED_TOOLS)
         if self.enable_browser:
             allowed_set |= set(BROWSER_TOOLS)
+        if self.enable_extraction:
+            allowed_set |= set(EXTRACTION_TOOLS)
         if self.mcp_gateway is not None:
             allowed_set |= set(self.mcp_gateway.get_executable_tools())
         allowed = sorted(list(allowed_set))

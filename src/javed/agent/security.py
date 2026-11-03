@@ -36,6 +36,16 @@ BROWSER_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Deterministic content extraction tools in BRICK-007
+EXTRACTION_TOOLS: frozenset[str] = frozenset(
+    {
+        "extract_web_page",
+        "extract_document",
+        "list_ingested_documents",
+        "get_document_details",
+    }
+)
+
 # Known privileged tools explicitly excluded via HarnessProfile
 EXCLUDED_TOOLS: frozenset[str] = frozenset(
     {
@@ -78,15 +88,23 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
 
     name: str = "PositiveToolAllowlistMiddleware"
 
-    def __init__(self, gateway: Any | None = None, enable_browser: bool = False) -> None:
+    def __init__(
+        self,
+        gateway: Any | None = None,
+        enable_browser: bool = False,
+        enable_extraction: bool = False,
+    ) -> None:
         super().__init__()
         self.gateway = gateway
         self.enable_browser = enable_browser
+        self.enable_extraction = enable_extraction
 
     def _get_model_visible_tools(self) -> frozenset[str]:
         allowed = set(ALLOWED_TOOLS)
         if self.enable_browser:
             allowed |= set(BROWSER_TOOLS)
+        if self.enable_extraction:
+            allowed |= set(EXTRACTION_TOOLS)
         if self.gateway is not None:
             allowed |= set(self.gateway.get_model_visible_tools(include_approval_required=True))
         return frozenset(allowed)
@@ -95,6 +113,8 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
         allowed = set(ALLOWED_TOOLS)
         if self.enable_browser:
             allowed |= set(BROWSER_TOOLS)
+        if self.enable_extraction:
+            allowed |= set(EXTRACTION_TOOLS)
         if self.gateway is not None:
             allowed |= set(self.gateway.get_executable_tools())
         return frozenset(allowed)
@@ -129,6 +149,10 @@ class PositiveToolAllowlistMiddleware(AgentMiddleware[Any, Any, Any]):
 
         # Deterministic browser tools (when enable_browser is True)
         if self.enable_browser and tool_name in BROWSER_TOOLS:
+            return None
+
+        # Deterministic extraction tools (when enable_extraction is True)
+        if self.enable_extraction and tool_name in EXTRACTION_TOOLS:
             return None
 
         # MCP Gateway execution validation (Layer 2)
@@ -221,6 +245,7 @@ def assert_safe_tools(
     tools_by_name: dict[str, Any],
     gateway: Any | None = None,
     enable_browser: bool = False,
+    enable_extraction: bool = False,
 ) -> None:
     """Verify that only authorized tools exist in the tool registry (Strict Positive Allowlist).
 
@@ -230,6 +255,8 @@ def assert_safe_tools(
     allowed = set(ALLOWED_TOOLS)
     if enable_browser:
         allowed |= set(BROWSER_TOOLS)
+    if enable_extraction:
+        allowed |= set(EXTRACTION_TOOLS)
     if gateway is not None:
         allowed |= set(gateway.get_executable_tools())
     unauthorized = set(tools_by_name.keys()) - allowed
@@ -244,6 +271,7 @@ def assert_safe_agent_runtime(
     agent: CompiledStateGraph,
     gateway: Any | None = None,
     enable_browser: bool = False,
+    enable_extraction: bool = False,
 ) -> None:
     """Fail-closed runtime verification on compiled Deep Agent graph.
 

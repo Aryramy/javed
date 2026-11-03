@@ -452,6 +452,25 @@
     - Complete sync and async APIs: `store_document`/`store_document_async`, `get_document`/`get_document_async`, `load_normalized_document`/`load_normalized_document_async`, `delete_document`/`delete_document_async`.
     - Clean resource management, context managers, zero `os._exit`, zero process/thread leaks, and $0.00 spend.
     - 13/13 targeted storage tests passed, 168 extraction subsystem tests passed, 397/397 full deterministic regression tests passed, 0 ruff errors.
+- **Phase 7 Status**: **COMPLETED & VERIFIED** (2026-11-03):
+  - Implemented `src/javed/extraction/tools.py` (`ExtractionToolsManager`, `create_extraction_tools`, `create_extraction_tools_inventory`):
+    - 4 deterministic LangChain StructuredTools: `extract_web_page`, `extract_document`, `list_ingested_documents`, `get_document_details`.
+    - `extract_web_page`: SSRF and redirect validation, Crawl4AI static/rendered extraction, storage persistence, and content deduplication.
+    - `extract_document`: path traversal and boundary containment enforcement, permitted extension check (`.pdf`, `.docx`, `.xlsx`), native Docling extraction, raw artifact storage, and deduplication.
+    - `list_ingested_documents`: paginated registry query with source_type filtering (`web_page`, `pdf`, `docx`, `xlsx`).
+    - `get_document_details`: retrieves document metadata, tables, extraction records, and canonical text/markdown.
+  - Integrated with `src/javed/agent/security.py`:
+    - Defined `EXTRACTION_TOOLS = frozenset({"extract_web_page", "extract_document", "list_ingested_documents", "get_document_details"})`.
+    - Added `enable_extraction: bool = False` to `PositiveToolAllowlistMiddleware`, `assert_safe_tools`, and `assert_safe_agent_runtime`.
+  - Integrated with `src/javed/agent/runtime.py`:
+    - Added `enable_extraction`, `extraction_tools_manager`, and `extraction_approval_required` to `AgentRuntimeManager`.
+    - Exposed tools to Deep Agents graph when enabled; gated local document extraction (`extract_document`) via HITL `interrupt_on`.
+    - Added clean async lifecycle teardown in `close()`.
+  - Authored comprehensive test suite in `tests/test_extraction_tools.py`:
+    - 15/15 targeted tool and agent integration tests passed.
+    - 183/183 extraction subsystem tests passed.
+    - 412/412 full deterministic regression suite passed.
+    - 0 Ruff errors, 0 process/thread leaks, $0.00 spend.
 - **Phased Implementation Roadmap**:
   - **TASK-070-P1 (Phase 1)**: Dependency Installation & Hardware Sandbox — `VERIFIED`
   - **TASK-070-P2 (Phase 2)**: Normalized Extraction Schema & Pydantic Data Models — `VERIFIED`
@@ -461,12 +480,12 @@
   - **TASK-070-P4 (Phase 4)**: Crawl4AI Web Extraction Subsystem — `VERIFIED`
   - **TASK-070-P5 (Phase 5)**: Docling Document Extraction Subsystem (PDF, DOCX, XLSX) — `VERIFIED`
   - **TASK-070-P6 (Phase 6)**: Storage Manager, Deduplication & Metadata Registry — `VERIFIED`
-  - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration
+  - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration — `VERIFIED`
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer
   - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 6 Completed and Verified; Awaiting Phase 7 Authorization).
-- **Stop Condition**: Phase 6 Storage Manager, Deduplication & Metadata Registry complete. Mandatory Stop: Await explicit Project Owner review and Phase 7 authorization before authoring LangChain Extraction Tools & Agent Runtime Integration.
+- **Milestone Status**: **IN PROGRESS** (Phase 7 Completed and Verified; Awaiting Phase 8 Authorization).
+- **Stop Condition**: Phase 7 LangChain Extraction Tools & Agent Runtime Integration complete. Mandatory Stop: Await explicit Project Owner review and Phase 8 authorization before authoring REST API & Developer Mode Telemetry.
 
 
 ---

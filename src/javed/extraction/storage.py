@@ -734,6 +734,20 @@ class ExtractionStorageManager:
             rows = cursor.fetchall()
             return [self._row_to_document_summary(r) for r in rows]
 
+    async def list_documents_async(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        source_type: SourceType | None = None,
+    ) -> list[StoredDocumentSummary]:
+        """List stored documents asynchronously ordered by last ingested timestamp."""
+        return await asyncio.to_thread(
+            self.list_documents,
+            limit=limit,
+            offset=offset,
+            source_type=source_type,
+        )
+
     def list_extractions(self, document_id: str) -> list[StoredExtractionRecord]:
         """List all extraction runs for a document ordered chronologically."""
         self.initialize()

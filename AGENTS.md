@@ -1,10 +1,10 @@
 # AGENTS.md — Agent Onboarding and Operating Protocol
 
 > **Project**: Javed — New JARVIS<br/>
-> **Status**: STAGE 4 IN PROGRESS (BRICK-007 Phase 6 Storage Manager & Deduplication Completed; Awaiting Phase 7 Authorization)<br/>
+> **Status**: STAGE 4 IN PROGRESS (BRICK-007 Phase 7 LangChain Extraction Tools & HITL Ingestion Gating Completed; Awaiting Phase 8 Authorization)<br/>
 > **Current Stage**: Stage 4 — Crawl4AI & Docling Extraction Pipeline<br/>
-> **Active Brick**: BRICK-007 (IN PROGRESS — Phase 6 Storage Manager & Deduplication Completed; Awaiting Phase 7 Authorization)<br/>
-> **Last Revision**: 2026-10-29
+> **Active Brick**: BRICK-007 (IN PROGRESS — Phase 7 LangChain Extraction Tools & HITL Ingestion Gating Completed; Awaiting Phase 8 Authorization)<br/>
+> **Last Revision**: 2026-11-03
 
 ---
 
@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: BRICK-001 through BRICK-006 are **VERIFIED**. The active milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently in Phase 6 completion. Do not write production implementation code or install dependencies for Phase 7 until explicitly authorized by the Project Owner.
+- **Strict Stage Boundaries**: BRICK-001 through BRICK-006 are **VERIFIED**. The active milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently in Phase 7 completion. Do not write production implementation code or install dependencies for Phase 8 until explicitly authorized by the Project Owner.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.
