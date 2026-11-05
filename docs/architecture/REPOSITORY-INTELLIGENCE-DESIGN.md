@@ -126,3 +126,48 @@ The following paths and patterns are **strictly excluded** from Graphify indexin
 ### Recommendation: **GO FOR PILOT**
 - **Recommendation**: **GO** for a bounded, read-only developer-tooling pilot of **Graphify** in **Milestone 2**.
 - **Constraint**: Do not install Graphify during this assessment. Do not modify production source code. Graphify must be evaluated in an isolated branch (`feat/graphify-pilot`) with dedicated evaluation tasks.
+
+---
+
+## 7. Developer Orientation CLI Specification (`scripts/repo_intel.py`)
+
+Implemented in **Milestone 3**, `scripts/repo_intel.py` serves as the bounded developer-facing interface between autonomous coding agents and the Graphify codebase graph.
+
+### 7.1 Commands and Core Signatures
+
+| Command | Signature | Primary Return Elements | Output Bounding |
+|---|---|---|---|
+| **`find-symbol`** | `find-symbol <Symbol>` | Definition file, line range, AST kind, signature/fields, alternatives | Max 30 alternatives |
+| **`find-callers`** | `find-callers <Symbol>` | Direct callers, caller locations, relationship types (`calls`, `uses`) | Max 30 callers |
+| **`find-references`** | `find-references <Symbol>` | Inbound imports, uses, inheritance links, line ranges | Max 30 references |
+| **`find-tests`** | `find-tests <SymbolOrPath>` | Directly referencing tests, module-import tests, naming fallbacks | Max 12 tests |
+| **`impact`** | `impact <SymbolOrPath>` | Owning file, direct callers, dependencies, related tests, candidate edits | Max 12 candidate edit files |
+| **`status`** | `status` | Graphify binary, version, indexed commit, current HEAD, freshness state | N/A |
+| **`update`** | `update [--force]` | Incremental AST rebuild under `GRAPHIFY_BACKEND=none`, git HEAD update | Timeout: 120s |
+
+### 7.2 Freshness Rules and Drift Policy
+1. **Commit Pinning**: Every built graph records `built_at_commit` in `graphify-out/graph.json`.
+2. **Freshness Assessment**:
+   - `FRESH`: Indexed commit matches current `git rev-parse HEAD`, or git diff between commits contains only documentation/markdown changes.
+   - `STALE`: Source code files (`.py`, `.ts`, `.tsx`, `.js`) were modified between indexed commit and current HEAD.
+   - `UPDATE_REQUIRED`: Graph lacks build commit metadata.
+   - `GRAPH_UNAVAILABLE`: `graphify-out/graph.json` is missing.
+3. **Execution Gating**: If the graph is `STALE`, `repo_intel.py` fails closed with warning exit code 2 unless the agent explicitly passes `--allow-stale` or runs `scripts/repo_intel.py update`.
+
+### 7.3 Multi-Strategy Test Discovery Heuristics
+To bridge the semantic gap where test files do not share high-level conceptual tokens with production code, `find-tests` executes three prioritized strategies:
+1. **Strategy 1 (Direct Symbol References)**: Searches for AST call or usage edges originating from test files (`tests/*.py`, `frontend/src/test/*.test.tsx`) targeting the symbol. Confidence: `EXTRACTED`. Reason: `direct_symbol_reference`.
+2. **Strategy 2 (Module Import Links)**: Traces whether any test module imports the symbol's owning file. Confidence: `EXTRACTED`. Reason: `module_import_link`.
+3. **Strategy 3 (Naming Convention Fallbacks)**: Tokenizes symbol names and owning paths using CamelCase and snake_case stemmers (e.g. `ExtractionViewer` -> `['extraction', 'viewer']`), filters language stop words (`src`, `frontend`, `components`), and searches for overlap in test file stems. Confidence: `INFERRED`. Reason: `naming_convention_fallback (matched: <tokens>)`.
+
+### 7.4 Task-Local Cache Policy
+- **Storage**: `.graphify/cache/task_cache.json` (gitignored).
+- **Cache Key**: SHA-256 hash of `(command, target, git_head, budget)`.
+- **Invalidation**: Cache entries automatically invalidate when `git_head` drifts. Explicit bypass is supported via `--no-cache`. Graph update operations purge the cache immediately.
+
+### 7.5 Security and Sandboxing Guardrails
+- **Subprocess Isolation**: All invocations of the `graphify` binary utilize structured argument lists (`list[str]`) with explicit timeouts (30s status/query, 120s update). Shell string execution is strictly prohibited.
+- **Path Redaction**: All model-facing outputs automatically sanitize user home directories (e.g., `C:\Users\...` -> `~`).
+- **Path Traversal Defense**: Query targets containing `..` are rejected fail-closed.
+- **Zero External Inference**: Subprocess calls explicitly enforce `$env:GRAPHIFY_BACKEND = "none"` and `$env:GRAPHIFY_QUERY_LOG_DISABLE = "1"`.
+

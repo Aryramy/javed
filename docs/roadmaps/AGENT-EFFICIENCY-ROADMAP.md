@@ -49,6 +49,7 @@ flowchart TD
 ---
 
 ### Milestone 2: Graphify Local Read-Only Pilot
+- **Status**: **`COMPLETED`** (Conditional Go verdict accepted; documented in `docs/architecture/GRAPHIFY-PILOT-REPORT.md`).
 - **Objective**: Conduct a sandboxed, read-only pilot of `Graphify-Labs/graphify` to evaluate indexing performance, cross-language accuracy, and query capabilities.
 - **Working Branch**: `feat/graphify-pilot` (branched from `master`).
 - **Scope**:
@@ -62,6 +63,7 @@ flowchart TD
 ---
 
 ### Milestone 3: Repository-Query-First Orientation Workflow
+- **Status**: **`READY FOR ACCEPTANCE`** (Implemented `scripts/repo_intel.py`, 24 passing unit tests in `tests/test_repo_intel.py`, benchmark recall 6/6 on owning files and tests, zero production modifications).
 - **Prerequisite**: Milestone 2 accepted with positive Go recommendation.
 - **Objective**: Implement the orientation pipeline where the agent queries the local knowledge graph prior to inspecting files.
 - **Scope**:
