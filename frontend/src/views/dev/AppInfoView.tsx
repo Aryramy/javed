@@ -1,11 +1,15 @@
 import { Layers, Package, Terminal } from 'lucide-react'
+import { useBackend } from '@/context'
 
 export const AppInfoView: React.FC = () => {
+  const { systemStatus } = useBackend()
   const metadata = [
     { label: 'Project Name', value: 'JAVED' },
-    { label: 'Current Stage', value: 'Stage 1 — Foundations & Core Capabilities' },
-    { label: 'Active Brick', value: 'BRICK-001: Reproducible Foundation & Real React UI Shell' },
-    { label: 'Last Verified Milestone', value: 'BRICK-000: Master Architecture & Planning (2026-10-22)' },
+    { label: 'Current Stage', value: systemStatus?.stage ?? 'Stage 4' },
+    { label: 'Active Brick', value: systemStatus?.active_brick ?? 'BRICK-007 In Progress' },
+    { label: 'Provider Gateway', value: systemStatus?.provider_gateway_status ?? 'Provider Gateway Active' },
+    { label: 'Agent Runtime', value: systemStatus?.runtime_status ?? 'Deep Agents Runtime Active' },
+    { label: 'Last Verified Milestone', value: 'BRICK-006: Playwright Browser Automation & Web Interaction' },
     { label: 'Frontend Framework', value: 'React 19.3.1 + TypeScript (Strict Mode)' },
     { label: 'Bundler & Dev Server', value: 'Vite 8.3.4 with @tailwindcss/vite' },
     { label: 'Styling & Design System', value: 'Tailwind CSS v4.0 + shadcn/ui Design Tokens' },

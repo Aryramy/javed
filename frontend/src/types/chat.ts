@@ -5,6 +5,71 @@
 export type CostTier = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export const COST_TIERS: CostTier[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
+export type ProviderId = 'auto' | 'openrouter' | 'cheaper_inference';
+
+export type ProviderHealthState =
+  | 'available'
+  | 'degraded'
+  | 'unavailable'
+  | 'not_configured'
+  | 'model_unavailable'
+  | 'capability_mismatch';
+
+export interface ProviderCapabilities {
+  chat: boolean;
+  agent: boolean;
+  transcription?: boolean;
+  translation?: boolean;
+  speech?: boolean;
+  realtime_voice?: boolean;
+  live_voice?: boolean;
+}
+
+export interface ProviderInfo {
+  id: ProviderId;
+  display_name: string;
+  configured: boolean;
+  health: ProviderHealthState;
+  chat_model: string | null;
+  capabilities: ProviderCapabilities;
+  safe_failure_code?: string | null;
+}
+
+export interface ProvidersResponse {
+  default_provider: ProviderId;
+  selection_enabled: boolean;
+  providers: ProviderInfo[];
+}
+
+export interface ProviderSelectionRequest {
+  provider_id: ProviderId;
+  cost_tier?: CostTier;
+  interaction_mode?: 'chat' | 'agent';
+  current_thread_id?: string | null;
+  create_new_thread?: boolean;
+}
+
+export interface ProviderBindingResponse {
+  thread_id: string;
+  provider_id: ProviderId;
+  provider_mode: 'explicit' | 'auto';
+  effective_model_id: string;
+  configuration_version: string;
+  display_name: string;
+  capabilities: ProviderCapabilities;
+}
+
+export interface ChatRequest {
+  messages: Array<{ role: string; content: string }>;
+  model?: string;
+  cost_tier?: CostTier;
+  session_id?: string;
+  stream?: boolean;
+  provider_id?: ProviderId;
+  thread_id?: string;
+  configuration_version?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -19,6 +84,7 @@ export interface ChatMessage {
   selected_model?: string;
   requested_model?: string;
   cost_tier?: CostTier;
+  provider_id?: ProviderId;
 }
 
 export interface ModelInfo {
@@ -59,6 +125,7 @@ export interface StreamUsage {
   requested_model?: string;
   cost_tier?: CostTier;
   session_id?: string;
+  provider_id?: ProviderId;
 }
 
 export interface ChatStreamEvent {
@@ -71,6 +138,7 @@ export interface ChatStreamEvent {
   selected_model?: string;
   requested_model?: string;
   cost_tier?: CostTier;
+  provider_id?: ProviderId;
 }
 
 export interface ConversationTotals {

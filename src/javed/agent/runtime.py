@@ -251,6 +251,8 @@ class AgentRuntimeManager:
         extraction_tools_manager: Any | None = None,
         extraction_storage_manager: Any | None = None,
         extraction_approval_required: bool = True,
+        inference_router: Any | None = None,
+        provider_registry: Any | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.openrouter_service = openrouter_service or OpenRouterService(self.settings)
@@ -269,8 +271,199 @@ class AgentRuntimeManager:
         self._extraction_tools_manager = extraction_tools_manager
         self._extraction_storage_manager = extraction_storage_manager
         self.extraction_approval_required = extraction_approval_required
+        self.inference_router = inference_router
+        self.provider_registry = provider_registry
         self.thread_lock_manager = ThreadLockManager()
+        self._thread_bindings: dict[str, dict[str, Any]] = {}
+        self._active_threads: set[str] = set()
+        self._graph_cache: dict[tuple[str, str, str, str, str, str], CompiledStateGraph] = {}
         self._is_initialized = False
+
+    def get_thread_provider(self, thread_id: str) -> str | None:
+        """Return the active provider ID bound to this thread, if any."""
+        binding = self._thread_bindings.get(thread_id)
+        if binding:
+            return binding.get("active_provider")
+        return None
+
+    def get_thread_binding(self, thread_id: str) -> dict[str, Any] | None:
+        """Return the complete binding record for a thread."""
+        return self._thread_bindings.get(thread_id)
+
+    def bind_thread_atomic(
+        self,
+        thread_id: str,
+        provider_id: str,
+        provider_mode: str,
+        effective_model_id: str,
+        configuration_version: str | None = None,
+        reason: str = "explicit_bind",
+        selected_provider_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Atomically set or update provider, model, and configuration version for a thread."""
+        config_version = configuration_version or f"v-{uuid.uuid4().hex[:8]}"
+        current_record = self._thread_bindings.get(thread_id)
+        current_provider = current_record.get("active_provider") if current_record else None
+
+        concrete_provider = selected_provider_id or (
+            provider_id if provider_id != "auto" else "cheaper_inference"
+        )
+
+        history = list(current_record.get("provider_switch_history", [])) if current_record else []
+        if current_provider and current_provider != concrete_provider:
+            history.append(
+                {
+                    "from_provider": current_provider,
+                    "to_provider": concrete_provider,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "reason": reason,
+                }
+            )
+
+        record = {
+            "thread_id": thread_id,
+            "active_provider": concrete_provider,
+            "requested_provider": provider_id,
+            "provider_mode": provider_mode,
+            "selected_provider_id": concrete_provider,
+            "effective_model_id": effective_model_id,
+            "configuration_version": config_version,
+            "provider_switch_history": history,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        self._thread_bindings[thread_id] = record
+        return record
+
+    def _compute_capability_profile(self) -> str:
+        """Compute stable capability fingerprint for active tool subsystems."""
+        parts = []
+        if self.mcp_gateway:
+            parts.extend(sorted(self.mcp_gateway.get_executable_tools()))
+        if self.enable_browser:
+            parts.append("browser")
+        if self.enable_extraction:
+            parts.append("extraction")
+        return ":".join(parts)
+
+    def get_or_compile_agent_graph(
+        self,
+        thread_id: str,
+        provider_id: str,
+        effective_model_id: str,
+        configuration_version: str,
+        model: BaseChatModel,
+        checkpointer: BaseCheckpointSaver,
+        routing_mode: str = "explicit",
+    ) -> CompiledStateGraph:
+        """Retrieve cached compiled graph or compile a new graph keyed by atomic 6-tuple.
+
+        Enforces that a graph compiled for openrouter/auto is never reused for
+        cheaper_inference/deepseek-v4.1-flash-1017 or any other configuration version.
+        Key: (thread_id, routing_mode, selected_provider_id, effective_model_id,
+              capability_profile, configuration_version)
+        """
+        cap_profile = self._compute_capability_profile()
+        cache_key = (
+            thread_id,
+            routing_mode,
+            provider_id,
+            effective_model_id,
+            cap_profile,
+            configuration_version,
+        )
+        if cache_key in self._graph_cache:
+            return self._graph_cache[cache_key]
+
+        agent = self.create_agent(model=model, checkpointer=checkpointer)
+        self._graph_cache[cache_key] = agent
+        return agent
+
+    async def bind_thread_provider(
+        self,
+        thread_id: str,
+        requested_provider_id: str | None,
+        reason: str = "request",
+    ) -> str:
+        """Bind or switch provider for a thread, enforcing isolation and lock rules."""
+        if not self._is_initialized:
+            await self.initialize()
+
+        # 1. Check if thread is currently actively executing
+        if thread_id in self._active_threads:
+            current_provider = self.get_thread_provider(thread_id) or "auto"
+            if requested_provider_id and requested_provider_id != current_provider:
+                raise ValueError(
+                    f"Cannot switch provider to '{requested_provider_id}' while an "
+                    f"agent run is actively executing on thread '{thread_id}'."
+                )
+            return current_provider
+
+        # 2. Check if thread has pending approvals
+        if self.approval_store:
+            pending = await self.approval_store.get_pending_approvals(thread_id=thread_id)
+            if pending:
+                current_provider = self.get_thread_provider(thread_id) or "auto"
+                if requested_provider_id and requested_provider_id != current_provider:
+                    raise ValueError(
+                        f"Cannot switch provider to '{requested_provider_id}' while an "
+                        f"approval is pending on thread '{thread_id}'. "
+                        "Execution must resume under the bound provider."
+                    )
+                return current_provider
+
+        current_record = self._thread_bindings.get(thread_id)
+        current_provider = current_record.get("active_provider") if current_record else None
+        target_provider = (requested_provider_id or current_provider or "auto").strip().lower()
+
+        # Resolve authoritative effective model for this provider
+        effective_model: str
+        provider_mode: str
+        selected_provider: str
+        if self.inference_router:
+            decision = self.inference_router.resolve_provider_for_agent(
+                requested_provider_id=target_provider,
+                has_tools=True,
+            )
+            selected_provider = decision.selected_provider
+            effective_model = decision.selected_model
+            provider_mode = decision.routing_mode
+        else:
+            if target_provider == "cheaper_inference":
+                selected_provider = "cheaper_inference"
+                effective_model = (
+                    self.settings.cheaper_inference_model or "deepseek-v4.1-flash-1017"
+                )
+                provider_mode = "explicit"
+            elif target_provider == "openrouter":
+                selected_provider = "openrouter"
+                effective_model = self.settings.openrouter_model or "openrouter/auto"
+                provider_mode = "explicit"
+            else:
+                selected_provider = (
+                    "cheaper_inference" if self.settings.cheaper_inference_api_key else "openrouter"
+                )
+                effective_model = (
+                    self.settings.cheaper_inference_model or "deepseek-v4.1-flash-1017"
+                    if selected_provider == "cheaper_inference"
+                    else "openrouter/auto"
+                )
+                provider_mode = "auto"
+
+        config_version = current_record.get("configuration_version") if current_record else None
+        if not config_version or current_provider != target_provider:
+            config_version = f"v-{uuid.uuid4().hex[:8]}"
+
+        self.bind_thread_atomic(
+            thread_id=thread_id,
+            provider_id=target_provider,
+            provider_mode=provider_mode,
+            effective_model_id=effective_model,
+            configuration_version=config_version,
+            reason=reason,
+            selected_provider_id=selected_provider,
+        )
+
+        return target_provider
 
     def get_browser_session(self) -> BrowserSession | None:
         """Return the active BrowserSession or instantiate one if enable_browser is True."""
@@ -370,6 +563,16 @@ class AgentRuntimeManager:
             or self.enable_browser
             or self.enable_extraction
         )
+
+        if self.inference_router is not None:
+            # Delegate model instantiation and capability gating to InferenceRouter
+            model, decision = self.inference_router.create_agent_chat_model(
+                request,
+                provider_id=request.provider_id,
+                has_tools=has_executable_tools,
+            )
+            return model
+
         if has_executable_tools and model_name != AUTO_ROUTER_MODEL_ID:
             if not self.openrouter_service.supports_tools(model_name):
                 cheapest = self.openrouter_service.get_best_tool_capable_model()
@@ -469,7 +672,11 @@ class AgentRuntimeManager:
         if tool_name == "write_todos":
             return "system", "ALLOWED_READ_ONLY"
 
-        # 4. MCP Gateway tools
+        # 4. Mandatory Read-Only Tool Policies
+        if tool_name == "time__get_current_time":
+            return "time", "ALLOWED_READ_ONLY"
+
+        # 5. MCP Gateway tools
         if self.mcp_gateway is not None:
             try:
                 server_id, _ = parse_namespaced_tool_id(tool_name)
@@ -485,7 +692,7 @@ class AgentRuntimeManager:
                 else:
                     return server_id, "DENIED"
 
-        # 5. Fail closed for any unknown or unclassified tool
+        # 6. Fail closed for any unknown or unclassified tool
         return "unknown", "DENIED"
 
     def create_agent(
@@ -517,9 +724,13 @@ class AgentRuntimeManager:
             ),
         ]
 
-        approval_tools: list[str] = (
-            list(self.mcp_gateway.get_approval_required_tools()) if self.mcp_gateway else []
-        )
+        approval_tools: list[str] = [
+            t
+            for t in (
+                list(self.mcp_gateway.get_approval_required_tools()) if self.mcp_gateway else []
+            )
+            if t != "time__get_current_time"
+        ]
         if self.enable_browser and self.browser_approval_required:
             for b_tool in ("browser_click", "browser_fill_form"):
                 if b_tool not in approval_tools:
@@ -615,29 +826,118 @@ class AgentRuntimeManager:
             await self.initialize()
 
         run_id = f"run_{uuid.uuid4().hex[:12]}"
-        model_name = request.model or self.settings.openrouter_default_model
         effective_cost_tier = (
             request.cost_tier or self.settings.openrouter_auto_router_cost_tier or "low"
         )
         session_id = request.session_id or validated_thread_id
 
+        # Look up authoritative atomic thread binding
+        binding = self._thread_bindings.get(validated_thread_id)
+        if binding is None:
+            # Bind thread if not yet bound
+            target_provider = await self.bind_thread_provider(
+                validated_thread_id,
+                request.provider_id,
+                reason="agent_stream_start",
+            )
+            binding = self._thread_bindings.get(validated_thread_id)
+            if not binding:
+                raise ValueError(
+                    f"No atomic provider binding exists for thread '{validated_thread_id}'."
+                )
+        else:
+            # 1. Verify request provider matches thread provider
+            bound_provider = binding["active_provider"]
+            bound_mode = binding.get("provider_mode", "explicit")
+            bound_req = binding.get("requested_provider", bound_provider)
+            if bound_mode == "auto":
+                if request.provider_id and request.provider_id.strip().lower() not in (
+                    "auto",
+                    bound_provider,
+                ):
+                    raise ValueError(
+                        f"Request provider '{request.provider_id}' does not match "
+                        f"thread bound provider '{bound_req}'."
+                    )
+                target_provider = bound_provider
+            else:
+                if request.provider_id and request.provider_id.strip().lower() != bound_provider:
+                    raise ValueError(
+                        f"Request provider '{request.provider_id}' does not match "
+                        f"thread bound provider '{bound_provider}'."
+                    )
+                target_provider = bound_provider
+
+        request.provider_id = target_provider
+        bound_provider = binding["active_provider"]
+        bound_mode = binding.get("provider_mode", "explicit")
+        effective_model = binding["effective_model_id"]
+        config_version = binding.get("configuration_version", "v1")
+
+        # Configuration version validation if provided by client
+        if request.configuration_version and request.configuration_version != config_version:
+            raise ValueError(
+                f"Configuration version mismatch: request '{request.configuration_version}' "
+                f"does not match thread version '{config_version}'."
+            )
+
+        # 2. Verify request model matches thread effective model
+        cheaper_model_name = (
+            self.settings.cheaper_inference_model or "deepseek-v4.1-flash-1017"
+        ).lower()
+        if request.model and request.model.strip():
+            req_m = request.model.strip()
+            if bound_mode == "auto" and req_m.lower() == "openrouter/auto":
+                logger.warning(
+                    "Stale 'openrouter/auto' on thread '%s'. Sanitizing to '%s'.",
+                    validated_thread_id,
+                    effective_model,
+                )
+                request.model = effective_model
+            elif bound_provider == "cheaper_inference" and req_m.lower() != effective_model.lower():
+                raise ValueError(
+                    f"Cross-provider model error: Request model '{req_m}' does not match "
+                    f"thread bound model '{effective_model}' for provider 'cheaper_inference'."
+                )
+            elif bound_provider == "openrouter" and req_m.lower() == cheaper_model_name:
+                raise ValueError(
+                    f"Cross-provider model error: Model '{req_m}' belongs to Cheaper Inference "
+                    "and cannot be used with OpenRouter."
+                )
+        else:
+            request.model = effective_model
+
+        if bound_provider == "cheaper_inference" and (request.model or "").lower().startswith(
+            "openrouter/"
+        ):
+            raise ValueError(
+                f"Protocol violation: Model '{request.model}' cannot be dispatched to "
+                "Cheaper Inference."
+            )
+
+        model_name = request.model or effective_model
+
         from javed.extraction.tools import CURRENT_RUN_ID
 
         run_token = CURRENT_RUN_ID.set(run_id)
+        # 2. Serialize runs on the same thread ID using ThreadLockManager
+        thread_lock = await self.thread_lock_manager.get_lock(validated_thread_id)
+        await thread_lock.acquire()
+        self._active_threads.add(validated_thread_id)
         try:
-            # 2. Serialize runs on the same thread ID using ThreadLockManager
-            async with self.thread_lock_manager.lock_thread(validated_thread_id):
-                # Emit run_started
-                yield AgentStreamEvent(
-                    event="run_started",
-                    data={
-                        "run_id": run_id,
-                        "thread_id": validated_thread_id,
-                        "model": model_name,
-                        "cost_tier": effective_cost_tier,
-                        "session_id": session_id,
-                    },
-                )
+            # Emit run_started
+            yield AgentStreamEvent(
+                event="run_started",
+                data={
+                    "run_id": run_id,
+                    "thread_id": validated_thread_id,
+                    "model": model_name,
+                    "provider_id": target_provider,
+                    "cost_tier": effective_cost_tier,
+                    "session_id": session_id,
+                    "configuration_version": config_version,
+                },
+            )
 
             start_time = time.time()
             accumulated_chunks: list[str] = []
@@ -654,8 +954,31 @@ class AgentRuntimeManager:
 
             try:
                 model = self.create_model(request)
+
+                # 3. Verify runtime model and provider match thread bindings
+                runtime_model_name = getattr(model, "_effective_model_name", None) or getattr(
+                    model, "model_name", None
+                )
+                if (
+                    bound_provider == "cheaper_inference"
+                    and runtime_model_name
+                    and runtime_model_name.lower() != effective_model.lower()
+                ):
+                    raise ValueError(
+                        f"Runtime model mismatch: expected '{effective_model}', "
+                        f"got '{runtime_model_name}'"
+                    )
+
                 checkpointer = await self.checkpointer_manager.get_async_checkpointer()
-                agent = self.create_agent(model=model, checkpointer=checkpointer)
+                agent = self.get_or_compile_agent_graph(
+                    thread_id=validated_thread_id,
+                    provider_id=bound_provider,
+                    effective_model_id=effective_model,
+                    configuration_version=config_version,
+                    model=model,
+                    checkpointer=checkpointer,
+                    routing_mode=bound_mode,
+                )
 
                 config = {"configurable": {"thread_id": validated_thread_id}}
 
@@ -928,9 +1251,7 @@ class AgentRuntimeManager:
                                         and "cost_details" in rm
                                         and isinstance(rm["cost_details"], dict)
                                     ):
-                                        cost_val = rm["cost_details"].get(
-                                            "upstream_inference_cost"
-                                        )
+                                        cost_val = rm["cost_details"].get("upstream_inference_cost")
                                     if cost_val is not None:
                                         try:
                                             turn_cost = float(cost_val)
@@ -1123,13 +1444,25 @@ class AgentRuntimeManager:
                     completion_tokens = total_completion_tokens
                     total_tokens = prompt_tokens + completion_tokens
                     up_cost = total_upstream_cost if total_upstream_cost > 0.0 else None
-                    cost_usd = self.openrouter_service.calculate_cost(
-                        model_id=effective_model,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        upstream_cost=up_cost,
-                        selected_model=effective_model,
-                    )
+                    if bound_provider == "cheaper_inference":
+                        # Cheaper Inference rate card: $0.15/1M prompt, $0.60/1M completion
+                        cost_usd = (
+                            up_cost
+                            if up_cost is not None
+                            else round(
+                                (prompt_tokens * (0.15 / 1_000_000.0))
+                                + (completion_tokens * (0.60 / 1_000_000.0)),
+                                6,
+                            )
+                        )
+                    else:
+                        cost_usd = self.openrouter_service.calculate_cost(
+                            model_id=effective_model,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            upstream_cost=up_cost,
+                            selected_model=effective_model,
+                        )
                     usage = StreamUsage(
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
@@ -1142,16 +1475,24 @@ class AgentRuntimeManager:
                         requested_model=model_name,
                         cost_tier=effective_cost_tier,
                         session_id=session_id,
+                        provider_id=bound_provider,
                     )
                 else:
                     prompt_tokens = max(1, len(request.message) // 4)
                     completion_tokens = max(1, len(final_content) // 4)
-                    cost_usd = self.openrouter_service.calculate_cost(
-                        model_id=effective_model,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        selected_model=effective_model,
-                    )
+                    if bound_provider == "cheaper_inference":
+                        cost_usd = round(
+                            (prompt_tokens * (0.15 / 1_000_000.0))
+                            + (completion_tokens * (0.60 / 1_000_000.0)),
+                            6,
+                        )
+                    else:
+                        cost_usd = self.openrouter_service.calculate_cost(
+                            model_id=effective_model,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            selected_model=effective_model,
+                        )
                     usage = StreamUsage(
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
@@ -1164,6 +1505,7 @@ class AgentRuntimeManager:
                         requested_model=model_name,
                         cost_tier=effective_cost_tier,
                         session_id=session_id,
+                        provider_id=bound_provider,
                     )
 
                 # Emit run_completed
@@ -1203,7 +1545,9 @@ class AgentRuntimeManager:
                     },
                 )
         finally:
+            self._active_threads.discard(validated_thread_id)
             CURRENT_RUN_ID.reset(run_token)
+            thread_lock.release()
 
     async def resume_agent(
         self,
@@ -1321,6 +1665,7 @@ class AgentRuntimeManager:
                 dec_item["message"] = reason
             command = Command(resume={"decisions": [dec_item]})
 
+            self._active_threads.add(validated_thread_id)
             try:
                 # Bind validated approval record to current execution context
                 token = current_approval_context.set(updated_approval)
@@ -1329,13 +1674,37 @@ class AgentRuntimeManager:
                 run_token = CURRENT_RUN_ID.set(run_id)
                 try:
                     checkpointer = await self.checkpointer_manager.get_async_checkpointer()
+                    binding = self._thread_bindings.get(validated_thread_id)
+                    bound_provider = (
+                        binding.get("active_provider")
+                        if binding
+                        else (self.get_thread_provider(validated_thread_id) or "auto")
+                    )
+                    effective_model = (
+                        binding.get("effective_model_id")
+                        if binding
+                        else (model_name_override or self.settings.openrouter_default_model)
+                    )
+                    config_version = binding.get("configuration_version", "v1") if binding else "v1"
+
+                    bound_mode = binding.get("provider_mode", "explicit") if binding else "explicit"
                     model_req = AgentStreamRequest(
                         thread_id=validated_thread_id,
                         message="[resumed approval invocation]",
-                        model=model_name_override,
+                        model=effective_model,
+                        provider_id=bound_provider,
+                        configuration_version=config_version,
                     )
                     model = self.create_model(model_req)
-                    agent = self.create_agent(model=model, checkpointer=checkpointer)
+                    agent = self.get_or_compile_agent_graph(
+                        thread_id=validated_thread_id,
+                        provider_id=bound_provider,
+                        effective_model_id=effective_model,
+                        configuration_version=config_version,
+                        model=model,
+                        checkpointer=checkpointer,
+                        routing_mode=bound_mode,
+                    )
                     config = {"configurable": {"thread_id": validated_thread_id}}
 
                     async for ev in agent.astream_events(command, config=config, version="v2"):
@@ -1616,13 +1985,24 @@ class AgentRuntimeManager:
                         completion_tokens = total_completion_tokens
                         total_tokens = prompt_tokens + completion_tokens
                         up_cost = total_upstream_cost if total_upstream_cost > 0.0 else None
-                        cost_usd = self.openrouter_service.calculate_cost(
-                            model_id=effective_model,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            upstream_cost=up_cost,
-                            selected_model=effective_model,
-                        )
+                        if bound_provider == "cheaper_inference":
+                            cost_usd = (
+                                up_cost
+                                if up_cost is not None
+                                else round(
+                                    (prompt_tokens * (0.15 / 1_000_000.0))
+                                    + (completion_tokens * (0.60 / 1_000_000.0)),
+                                    6,
+                                )
+                            )
+                        else:
+                            cost_usd = self.openrouter_service.calculate_cost(
+                                model_id=effective_model,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
+                                upstream_cost=up_cost,
+                                selected_model=effective_model,
+                            )
                         usage = StreamUsage(
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
@@ -1635,16 +2015,24 @@ class AgentRuntimeManager:
                             requested_model=model_name,
                             cost_tier=effective_cost_tier,
                             session_id=None,
+                            provider_id=bound_provider,
                         )
                     else:
                         prompt_tokens = max(1, len(model_req.message) // 4)
                         completion_tokens = max(1, len(final_content) // 4)
-                        cost_usd = self.openrouter_service.calculate_cost(
-                            model_id=effective_model,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            selected_model=effective_model,
-                        )
+                        if bound_provider == "cheaper_inference":
+                            cost_usd = round(
+                                (prompt_tokens * (0.15 / 1_000_000.0))
+                                + (completion_tokens * (0.60 / 1_000_000.0)),
+                                6,
+                            )
+                        else:
+                            cost_usd = self.openrouter_service.calculate_cost(
+                                model_id=effective_model,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
+                                selected_model=effective_model,
+                            )
                         usage = StreamUsage(
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
@@ -1657,6 +2045,7 @@ class AgentRuntimeManager:
                             requested_model=model_name,
                             cost_tier=effective_cost_tier,
                             session_id=None,
+                            provider_id=bound_provider,
                         )
 
                     yield AgentStreamEvent(
@@ -1702,6 +2091,8 @@ class AgentRuntimeManager:
                         "error": str(e),
                     },
                 )
+            finally:
+                self._active_threads.discard(validated_thread_id)
 
     async def resume_agent_execution(
         self,
@@ -1759,6 +2150,11 @@ class AgentRuntimeManager:
         config = {"configurable": {"thread_id": validated_thread_id}}
         tuple_ = await checkpointer.aget_tuple(config)
 
+        bound_provider = self.get_thread_provider(validated_thread_id)
+        binding_record = self._thread_bindings.get(validated_thread_id)
+        switch_history = binding_record.get("provider_switch_history", []) if binding_record else []
+        config_version = binding_record.get("configuration_version") if binding_record else None
+
         if tuple_ is None or not tuple_.checkpoint:
             return AgentThreadStateResponse(
                 thread_id=validated_thread_id,
@@ -1767,6 +2163,9 @@ class AgentRuntimeManager:
                 checkpoint_id=None,
                 exists=False,
                 active_model=None,
+                active_provider=bound_provider,
+                configuration_version=config_version,
+                provider_switch_history=switch_history,
             )
 
         reader_model = self.model_override or _StateReaderDummyModel()
@@ -1958,6 +2357,28 @@ class AgentRuntimeManager:
                     )
                 )
 
+        thread_tokens = 0
+        thread_cost = 0.0
+        thread_prompt = 0
+        thread_completion = 0
+        for msg in raw_messages:
+            if isinstance(msg, AIMessage):
+                if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                    um = msg.usage_metadata
+                    p = um.get("input_tokens", 0) or 0
+                    c = um.get("output_tokens", 0) or 0
+                    thread_prompt += p
+                    thread_completion += c
+                    thread_tokens += um.get("total_tokens", p + c) or 0
+                if hasattr(msg, "response_metadata") and msg.response_metadata:
+                    rm = msg.response_metadata
+                    cost_val = rm.get("cost")
+                    if cost_val is not None:
+                        try:
+                            thread_cost += float(cost_val)
+                        except (ValueError, TypeError):
+                            pass
+
         return AgentThreadStateResponse(
             thread_id=validated_thread_id,
             messages=messages,
@@ -1965,7 +2386,14 @@ class AgentRuntimeManager:
             checkpoint_id=str(checkpoint_id) if checkpoint_id else None,
             exists=True,
             active_model=active_model,
+            active_provider=bound_provider,
+            configuration_version=config_version,
+            provider_switch_history=switch_history,
             tool_calls=tool_activities,
+            total_tokens=thread_tokens,
+            total_cost_usd=round(thread_cost, 6),
+            total_prompt_tokens=thread_prompt,
+            total_completion_tokens=thread_completion,
         )
 
     async def get_status(self) -> AgentRuntimeStatusResponse:

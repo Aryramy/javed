@@ -54,6 +54,7 @@ describe('ModelSelector Component', () => {
       <ModelSelector
         models={MOCK_MODELS}
         selectedModelId="openai/gpt-4o-mini"
+        selectedProviderId="openrouter"
         onSelectModel={onSelect}
       />
     );
@@ -69,6 +70,7 @@ describe('ModelSelector Component', () => {
       <ModelSelector
         models={MOCK_MODELS}
         selectedModelId="openai/gpt-4o-mini"
+        selectedProviderId="openrouter"
         onSelectModel={onSelect}
       />
     );
@@ -76,7 +78,7 @@ describe('ModelSelector Component', () => {
     const trigger = screen.getByRole('button', { name: /OpenAI GPT-4o Mini/i });
     await user.click(trigger);
 
-    expect(screen.getByText('OpenRouter')).toBeInTheDocument();
+    expect(screen.getAllByText('OpenRouter Catalog').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
 
     const claudeButton = screen.getByRole('button', { name: /Claude Sonnet 4.5/i });
@@ -106,8 +108,8 @@ describe('TokenCostMeter Component', () => {
 
   it('renders zero state cleanly when empty', () => {
     render(<TokenCostMeter />);
-    expect(screen.getByText('0')).toBeInTheDocument();
-    expect(screen.getByText('$0.0000')).toBeInTheDocument();
+    expect(screen.getByTestId('meter-display-tokens')).toHaveTextContent('—');
+    expect(screen.getByTestId('meter-display-cost')).toHaveTextContent('—');
   });
 });
 
@@ -242,7 +244,7 @@ describe('ChatView Full-Stack Integration', () => {
 
     // Verify Auto Router trigger and default 'low' tier badge
     await waitFor(() => {
-      expect(screen.getByText('Auto Router')).toBeInTheDocument();
+      expect(screen.getAllByText('Auto Router')[0]).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'low' })).toBeInTheDocument();
     });
 
@@ -256,10 +258,10 @@ describe('ChatView Full-Stack Integration', () => {
     const sendButton = screen.getByRole('button', { name: /send message/i });
     await user.click(sendButton);
 
-    // Verify streamChat was called with cost_tier 'medium' and model 'openrouter/auto'
+    // Verify streamChat was called with cost_tier 'medium' and model undefined (Auto Router dynamic resolution)
     await waitFor(() => {
       expect(capturedParams).not.toBeNull();
-      expect(capturedParams.model).toBe('openrouter/auto');
+      expect(capturedParams.model).toBeUndefined();
       expect(capturedParams.cost_tier).toBe('medium');
     });
 

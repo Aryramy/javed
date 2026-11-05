@@ -303,7 +303,7 @@ describe('BRICK-007 Phase 9: React Extraction UI Components', () => {
 
       // Switch to Markdown Tab
       fireEvent.click(screen.getByRole('button', { name: /Markdown/i }))
-      expect(screen.getByText(/# Quarterly Financial Summary 2026/i)).toBeInTheDocument()
+      expect(screen.getByText(/Quarterly Financial Summary 2026/i)).toBeInTheDocument()
 
       // Switch to Tables Tab
       fireEvent.click(screen.getByRole('button', { name: /Tables/i }))
@@ -312,7 +312,7 @@ describe('BRICK-007 Phase 9: React Extraction UI Components', () => {
       // Switch to History Tab
       fireEvent.click(screen.getByRole('button', { name: /Extractions/i }))
       expect(screen.getByText(/IBM Docling \(NativePdfPipeline\)/i)).toBeInTheDocument()
-      expect(screen.getByText(/1240ms/i)).toBeInTheDocument()
+      expect(screen.getByText(/1\.24 s/i)).toBeInTheDocument()
     })
 
     it('supports copying text preview to clipboard', async () => {

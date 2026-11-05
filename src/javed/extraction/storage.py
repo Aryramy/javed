@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS extraction_records (
     page_count INTEGER,
     warning_count INTEGER NOT NULL,
     error_count INTEGER NOT NULL,
+    duration_ms INTEGER,
     canonical_json_path TEXT,
     full_text TEXT,
     full_markdown TEXT,
@@ -215,6 +216,8 @@ class StoredExtractionRecord(ExtractionBaseModel):
     page_count: int | None = None
     warning_count: int = 0
     error_count: int = 0
+    duration_ms: int | None = None
+    extraction_timestamp: str | None = None
     canonical_json_available: bool = False
     canonical_json_id: str | None = None
     full_text: str | None = None
@@ -306,6 +309,10 @@ class ExtractionStorageManager:
                 conn.execute(CREATE_RECORDS_TABLE)
                 conn.execute(CREATE_TABLES_TABLE)
                 conn.executescript(CREATE_INDICES)
+                try:
+                    conn.execute("ALTER TABLE extraction_records ADD COLUMN duration_ms INTEGER;")
+                except Exception:
+                    pass
                 conn.commit()
             self._is_initialized = True
 
@@ -327,6 +334,12 @@ class ExtractionStorageManager:
                 await db.execute(CREATE_RECORDS_TABLE)
                 await db.execute(CREATE_TABLES_TABLE)
                 await db.executescript(CREATE_INDICES)
+                try:
+                    await db.execute(
+                        "ALTER TABLE extraction_records ADD COLUMN duration_ms INTEGER;"
+                    )
+                except Exception:
+                    pass
                 await db.commit()
             self._is_initialized = True
 
@@ -509,6 +522,20 @@ class ExtractionStorageManager:
                     ),
                 )
 
+            # Extract duration_ms from metadata or config if available
+            extracted_duration_ms: int | None = None
+            if document.metadata and document.metadata.custom_attributes:
+                val = document.metadata.custom_attributes.get("duration_ms")
+                if isinstance(val, (int, float)):
+                    extracted_duration_ms = int(val)
+            if (
+                extracted_duration_ms is None
+                and "duration_ms" in document.extractor.config_parameters
+            ):
+                val = document.extractor.config_parameters.get("duration_ms")
+                if isinstance(val, (int, float)):
+                    extracted_duration_ms = int(val)
+
             # Insert extraction record
             cursor.execute(
                 "INSERT INTO extraction_records ("
@@ -517,10 +544,10 @@ class ExtractionStorageManager:
                 "normalized_output_sha256, extracted_at, status, extractor_name, "
                 "extractor_version, extractor_strategy, extractor_config_sha256, "
                 "element_count, table_count, word_count, character_count, "
-                "page_count, warning_count, error_count, canonical_json_path, "
+                "page_count, warning_count, error_count, duration_ms, canonical_json_path, "
                 "full_text, full_markdown, warnings_json, errors_json"
                 ") VALUES ("
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
                 ")",
                 (
                     document.ingestion_id,
@@ -544,6 +571,7 @@ class ExtractionStorageManager:
                     document.metadata.page_count,
                     len(document.warnings),
                     len(document.errors),
+                    extracted_duration_ms,
                     canonical_json_path,
                     document.full_text,
                     document.full_markdown,
@@ -1200,14 +1228,10 @@ class ExtractionStorageManager:
             else 0
         )
         tbl_cnt = (
-            row["table_count"]
-            if "table_count" in keys and row["table_count"] is not None
-            else 0
+            row["table_count"] if "table_count" in keys and row["table_count"] is not None else 0
         )
         pg_cnt = (
-            row["page_count"]
-            if "page_count" in keys and row["page_count"] is not None
-            else None
+            row["page_count"] if "page_count" in keys and row["page_count"] is not None else None
         )
 
         return StoredDocumentSummary(
@@ -1244,6 +1268,13 @@ class ExtractionStorageManager:
         canon_avail = bool(canon_p and Path(canon_p).is_file())
         canon_id_val = str(row["extraction_record_sha256"]) if canon_avail else None
 
+        extracted_dt = datetime.fromisoformat(row["extracted_at"])
+        duration_ms_val = (
+            row["duration_ms"]
+            if "duration_ms" in row.keys() and row["duration_ms"] is not None
+            else None
+        )
+
         return StoredExtractionRecord(
             extraction_id=row["extraction_id"],
             document_id=row["document_id"],
@@ -1253,7 +1284,9 @@ class ExtractionStorageManager:
             normalized_content_sha256=row["normalized_content_sha256"],
             extraction_record_sha256=row["extraction_record_sha256"],
             normalized_output_sha256=row["normalized_output_sha256"],
-            extracted_at=datetime.fromisoformat(row["extracted_at"]),
+            extracted_at=extracted_dt,
+            extraction_timestamp=extracted_dt.isoformat(),
+            duration_ms=duration_ms_val,
             status=ExtractionStatus(row["status"]),
             extractor_name=row["extractor_name"],
             extractor_version=row["extractor_version"],

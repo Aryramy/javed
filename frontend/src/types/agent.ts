@@ -128,7 +128,19 @@ export interface AgentThreadStateResponse {
   todos: AgentTodoItem[];
   checkpoint_id: string | null;
   exists: boolean;
+  active_model?: string | null;
+  active_provider?: string | null;
+  provider_switch_history?: Array<{
+    from_provider: string;
+    to_provider: string;
+    timestamp: string;
+    reason?: string;
+  }>;
   tool_calls?: ToolActivityRecord[];
+  total_tokens?: number;
+  total_cost_usd?: number;
+  total_prompt_tokens?: number;
+  total_completion_tokens?: number;
 }
 
 export interface AgentRuntimeStatusResponse {

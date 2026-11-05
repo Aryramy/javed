@@ -216,11 +216,19 @@ export const extractionService = {
   },
 
   /**
-   * Retrieve full document details including metadata, historical extractions, and preview.
+   * Retrieve full document details including metadata, historical extractions, and bounded preview.
    */
-  async getDocumentDetails(documentId: string, maxChars = 25000): Promise<DocumentDetailResponse> {
+  async getDocumentDetails(
+    documentId: string,
+    maxChars = 25000,
+    offsetChars = 0,
+  ): Promise<DocumentDetailResponse> {
+    const params = new URLSearchParams({
+      max_chars: String(maxChars),
+      offset_chars: String(offsetChars),
+    })
     return requestJson<DocumentDetailResponse>(
-      `/api/v1/extraction/documents/${encodeURIComponent(documentId)}?max_chars=${encodeURIComponent(maxChars)}`,
+      `/api/v1/extraction/documents/${encodeURIComponent(documentId)}?${params.toString()}`,
     )
   },
 

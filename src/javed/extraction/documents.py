@@ -466,7 +466,8 @@ class DoclingDocumentExtractor:
                 )
 
             duration = time.perf_counter() - t0
-            logger.info("Docling converted %s in %.2fs", clean_name, duration)
+            duration_ms = max(int(duration * 1000), 1)
+            logger.info("Docling converted %s in %.2fs (%d ms)", clean_name, duration, duration_ms)
 
             # 5. Transform DoclingDocument to Canonical NormalizedDocument
             return self._transform_docling_document(
@@ -478,6 +479,7 @@ class DoclingDocumentExtractor:
                 source_sha256=source_sha256,
                 excel_sheet_names=excel_sheet_names,
                 byte_count=len(content),
+                duration_ms=duration_ms,
             )
         finally:
             if quarantine_to_clean:
@@ -516,6 +518,7 @@ class DoclingDocumentExtractor:
         source_sha256: str,
         excel_sheet_names: list[str],
         byte_count: int,
+        duration_ms: int | None = None,
     ) -> NormalizedDocument:
         """Map a DoclingDocument instance to a finalized NormalizedDocument."""
         elements: list[ExtractionElement] = []
@@ -721,6 +724,10 @@ class DoclingDocumentExtractor:
 
         # Assemble metadata
         table_count = sum(1 for e in elements if e.table is not None)
+        custom_attrs: dict[str, Any] = {}
+        if duration_ms is not None:
+            custom_attrs["duration_ms"] = duration_ms
+
         meta = DocumentMetadata(
             title=title,
             page_count=len(pages_seen) if pages_seen else None,
@@ -728,6 +735,7 @@ class DoclingDocumentExtractor:
             table_count=table_count,
             word_count=total_words,
             character_count=total_chars,
+            custom_attributes=custom_attrs,
         )
 
         status = ExtractionStatus.PARTIAL_SUCCESS if len(warnings) > 0 else ExtractionStatus.SUCCESS

@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import type { SourceType, StoredDocumentSummary } from '@/types/extraction'
+import { formatDocumentDate } from '@/utils/formatters'
 
 interface DocumentListProps {
   documents: StoredDocumentSummary[]
@@ -202,7 +203,7 @@ export const DocumentList = ({
                     <td className="py-3.5 px-4 whitespace-nowrap text-muted-foreground font-mono text-[11px]">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                        {new Date(doc.last_ingested_at).toLocaleDateString()}
+                        {formatDocumentDate(doc.last_ingested_at)}
                       </div>
                     </td>
 

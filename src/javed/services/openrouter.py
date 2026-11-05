@@ -847,7 +847,7 @@ class OpenRouterService:
                 type="error",
                 error=f"Inference timed out after {self.timeout}s waiting for OpenRouter response.",
             )
-        except httpx.ConnectError as ce:
+        except (httpx.ConnectError, OSError) as ce:
             logger.error("OpenRouter connection error: %s", ce)
             yield ChatStreamEvent(
                 type="error",

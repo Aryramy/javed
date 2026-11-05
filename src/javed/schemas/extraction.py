@@ -128,6 +128,15 @@ class DocumentDetailResponse(BaseModel):
     text_preview: str = Field(default="", description="Full canonical plain text.")
     markdown_preview: str = Field(default="", description="Full canonical markdown.")
     is_truncated: bool = Field(default=False, description="Whether previews were truncated.")
+    offset_chars: int = Field(
+        default=0, description="Offset character index for bounded preview pagination."
+    )
+    total_text_chars: int = Field(
+        default=0, description="Total characters in full plain text representation."
+    )
+    total_markdown_chars: int = Field(
+        default=0, description="Total characters in full markdown representation."
+    )
 
 
 class ExtractionTelemetryResponse(BaseModel):

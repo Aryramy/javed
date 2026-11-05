@@ -12,10 +12,24 @@ import {
   Table as TableIcon,
   Code,
   History,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Info,
 } from 'lucide-react'
 import { TableView } from './TableView'
+import { MarkdownContent } from '../chat/MarkdownContent'
 import { extractionService } from '@/services/extractionService'
 import type { DocumentDetailResponse, TableSummary } from '@/types/extraction'
+import {
+  formatDocumentDate,
+  formatExtractionTimestamp,
+  formatDuration,
+  getStatusBadgeClasses,
+  normalizePageMarkers,
+} from '@/utils/formatters'
+
+const PAGE_SIZE = 25000
 
 interface ExtractionViewerProps {
   documentId: string | null
@@ -32,28 +46,33 @@ export const ExtractionViewer = ({
 }: ExtractionViewerProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [activeTab, setActiveTab] = useState<TabType>('text')
+  const [markdownMode, setMarkdownMode] = useState<'preview' | 'source'>('preview')
   const [detail, setDetail] = useState<DocumentDetailResponse | null>(null)
+  const [currentOffset, setCurrentOffset] = useState<number>(0)
   const [loading, setLoading] = useState(false)
+  const [pagingLoading, setPagingLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
 
-  // Fetch document details when opened
+  // Fetch document details when opened or when documentId changes
   useEffect(() => {
     if (!isOpen || !documentId) {
       setDetail(null)
+      setCurrentOffset(0)
       return
     }
 
     let isMounted = true
     setLoading(true)
     setError(null)
+    setCurrentOffset(0)
 
     extractionService
-      .getDocumentDetails(documentId)
+      .getDocumentDetails(documentId, PAGE_SIZE, 0)
       .then((data) => {
         if (isMounted) {
           setDetail(data)
-          // Default to tables tab if document is primarily tables (e.g. spreadsheet)
+          // Default to tables tab if document is primarily spreadsheet with tables
           if (data.document.source_type === 'xlsx' && data.tables.length > 0) {
             setActiveTab('tables')
           } else {
@@ -76,6 +95,21 @@ export const ExtractionViewer = ({
       isMounted = false
     }
   }, [isOpen, documentId])
+
+  // Handle bounded pagination page turns
+  const handlePageChange = async (newOffset: number) => {
+    if (!documentId || newOffset < 0) return
+    setPagingLoading(true)
+    try {
+      const data = await extractionService.getDocumentDetails(documentId, PAGE_SIZE, newOffset)
+      setDetail(data)
+      setCurrentOffset(newOffset)
+    } catch (err) {
+      alert(`Failed to load page: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPagingLoading(false)
+    }
+  }
 
   // Native <dialog> lifecycle
   useEffect(() => {
@@ -105,10 +139,11 @@ export const ExtractionViewer = ({
 
   if (!isOpen) return null
 
-  const handleCopyText = async (content: string) => {
+  const handleCopyPreview = async (content: string) => {
     await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    const charCount = content.length
+    setCopyFeedback(`Copied ${charCount.toLocaleString()} chars`)
+    setTimeout(() => setCopyFeedback(null), 2500)
   }
 
   const handleDownloadRaw = async () => {
@@ -159,7 +194,7 @@ export const ExtractionViewer = ({
 
   // Convert stored table info to table summary format for TableView component
   const tablesSummaries: TableSummary[] =
-    detail?.tables.map((t) => {
+    detail?.tables?.map((t) => {
       let headers: string[] = []
       try {
         headers = JSON.parse(t.headers_json || '[]')
@@ -174,6 +209,33 @@ export const ExtractionViewer = ({
         sheet_name: t.sheet_name,
       }
     }) || []
+
+  // Compute active preview content & pagination limits with graceful legacy fallback
+  const fallbackText = (detail?.extractions?.[0] as unknown as { full_text?: string })?.full_text || ''
+  const activeContent =
+    activeTab === 'text'
+      ? (detail?.text_preview ?? fallbackText)
+      : (detail?.markdown_preview ?? fallbackText)
+  const totalChars =
+    activeTab === 'text'
+      ? (detail?.total_text_chars || activeContent.length)
+      : (detail?.total_markdown_chars || activeContent.length)
+
+  const offset = detail?.offset_chars ?? currentOffset
+  const showingStart = totalChars > 0 ? offset + 1 : 0
+  const showingEnd = Math.min(offset + activeContent.length, totalChars)
+
+  const hasNextPage = offset + activeContent.length < totalChars
+  const hasPrevPage = offset > 0
+
+  const isOutputsIdentical =
+    Boolean(detail?.text_preview &&
+    detail?.markdown_preview &&
+    detail.text_preview === detail.markdown_preview &&
+    detail.text_preview.length > 0)
+
+  // Document actually exceeds 25,000 character limit
+  const isDocTruncated = Boolean(detail?.is_truncated && (totalChars > PAGE_SIZE || activeContent.length >= PAGE_SIZE))
 
   return (
     <dialog
@@ -206,12 +268,12 @@ export const ExtractionViewer = ({
               <span>•</span>
               <span title="Content Hash">SHA: {detail.document.source_sha256.slice(0, 10)}...</span>
               <span>•</span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1" title="Last Ingested Date">
                 <Calendar className="w-3 h-3" />
-                {new Date(detail.document.last_ingested_at).toLocaleDateString()}
+                {formatDocumentDate(detail.document.last_ingested_at)}
               </span>
               <span>•</span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1" title="Document Version">
                 <Layers className="w-3 h-3" />
                 v{detail.document.version_count}
               </span>
@@ -299,27 +361,59 @@ export const ExtractionViewer = ({
           </button>
         </nav>
 
-        {/* Copy Button for Text/Markdown */}
+        {/* Action Controls for Text/Markdown (Copy Preview & Pagination) */}
         {(activeTab === 'text' || activeTab === 'markdown') && detail && (
-          <button
-            type="button"
-            onClick={() =>
-              handleCopyText(activeTab === 'text' ? detail.text_preview : detail.markdown_preview)
-            }
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
-          >
-            {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                Copied
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                Copy
-              </>
+          <div className="flex items-center gap-2">
+            {activeTab === 'markdown' && (
+              <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMarkdownMode('preview')}
+                  className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+                    markdownMode === 'preview'
+                      ? 'bg-primary/20 text-primary font-medium'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="Render formatted preview"
+                >
+                  <Eye className="w-3 h-3" />
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarkdownMode('source')}
+                  className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+                    markdownMode === 'source'
+                      ? 'bg-primary/20 text-primary font-medium'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="View raw markdown source"
+                >
+                  <Code className="w-3 h-3" />
+                  Source
+                </button>
+              </div>
             )}
-          </button>
+
+            <button
+              type="button"
+              onClick={() => handleCopyPreview(activeContent)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+              title="Copy visible preview characters to clipboard"
+            >
+              {copyFeedback ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-emerald-400">{copyFeedback}</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  Copy Preview
+                </>
+              )}
+            </button>
+          </div>
         )}
       </div>
 
@@ -352,35 +446,121 @@ export const ExtractionViewer = ({
 
         {!loading && !error && detail && (
           <>
-            {/* Truncation warning pill */}
-            {detail.is_truncated && (
-              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>Text and markdown previews are truncated to 25,000 characters.</span>
-              </div>
-            )}
-
             {/* TAB 1: PLAIN TEXT */}
             {activeTab === 'text' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Characters: {detail.text_preview.length.toLocaleString()}</span>
+              <div className="space-y-3">
+                {/* Truncation warning pill: strictly on text/markdown when document exceeds page */}
+                {isDocTruncated && (
+                  <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Document text is bounded to 25,000 characters per page. Use navigation controls below to step through full content.</span>
+                  </div>
+                )}
+
+                {isOutputsIdentical && (
+                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2 font-mono">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>Extractor produced identical plain text and markdown representations for this document.</span>
+                  </div>
+                )}
+
+                {/* Character Counter & Bounded Pagination */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                  <span>
+                    Showing {showingStart.toLocaleString()}–{showingEnd.toLocaleString()} of {totalChars.toLocaleString()} characters
+                  </span>
+
+                  {(hasPrevPage || hasNextPage) && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(Math.max(offset - PAGE_SIZE, 0))}
+                        disabled={!hasPrevPage || pagingLoading}
+                        className="p-1 rounded border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Previous page"
+                        aria-label="Previous character page"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(offset + PAGE_SIZE)}
+                        disabled={!hasNextPage || pagingLoading}
+                        className="p-1 rounded border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Next page"
+                        aria-label="Next character page"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
+
                 <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
-                  {detail.text_preview || 'No plain text extracted for this document.'}
+                  {normalizePageMarkers(activeContent) || 'No plain text extracted for this document.'}
                 </div>
               </div>
             )}
 
             {/* TAB 2: MARKDOWN */}
             {activeTab === 'markdown' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Markdown Syntax</span>
+              <div className="space-y-3">
+                {/* Truncation warning pill: strictly on text/markdown when document exceeds page */}
+                {isDocTruncated && (
+                  <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Document markdown is bounded to 25,000 characters per page. Use navigation controls below to step through full content.</span>
+                  </div>
+                )}
+
+                {isOutputsIdentical && (
+                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2 font-mono">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>Extractor produced identical plain text and markdown representations for this document.</span>
+                  </div>
+                )}
+
+                {/* Character Counter & Bounded Pagination */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                  <span>
+                    Showing {showingStart.toLocaleString()}–{showingEnd.toLocaleString()} of {totalChars.toLocaleString()} characters
+                  </span>
+
+                  {(hasPrevPage || hasNextPage) && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(Math.max(offset - PAGE_SIZE, 0))}
+                        disabled={!hasPrevPage || pagingLoading}
+                        className="p-1 rounded border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Previous page"
+                        aria-label="Previous character page"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(offset + PAGE_SIZE)}
+                        disabled={!hasNextPage || pagingLoading}
+                        className="p-1 rounded border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Next page"
+                        aria-label="Next character page"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
-                  {detail.markdown_preview || 'No markdown extracted for this document.'}
-                </div>
+
+                {markdownMode === 'preview' ? (
+                  <div className="p-5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 select-text max-h-[55vh] overflow-y-auto">
+                    <MarkdownContent content={normalizePageMarkers(activeContent) || 'No markdown extracted for this document.'} />
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed select-text max-h-[55vh] overflow-y-auto">
+                    {activeContent || 'No markdown extracted for this document.'}
+                  </div>
+                )}
               </div>
             )}
 
@@ -414,45 +594,53 @@ export const ExtractionViewer = ({
                   Execution Run Ledger
                 </h3>
                 <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900">
-                  {detail.extractions.map((rec) => (
-                    <div key={rec.extraction_id} className="p-3.5 space-y-2 hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                  {detail.extractions.map((rec) => {
+                    const statusClass = getStatusBadgeClasses(rec.status)
+                    const durationText = formatDuration(rec.duration_ms)
+                    const timestampText = formatExtractionTimestamp(rec.extracted_at || rec.extraction_timestamp)
+
+                    return (
+                      <div key={rec.extraction_id} className="p-3.5 space-y-2 hover:bg-zinc-800/40 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold uppercase ${statusClass}`}
+                            >
+                              {rec.status}
+                            </span>
+                            <span className="text-xs font-medium text-foreground font-mono">
+                              {rec.extractor_name} v{rec.extractor_version}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono" title="Extraction ID">
+                              ({rec.extraction_id.slice(0, 12)})
+                            </span>
+                          </div>
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold uppercase ${
-                              rec.status === 'SUCCESS'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                : 'bg-destructive/10 text-destructive border border-destructive/20'
-                            }`}
+                            className="text-[11px] text-muted-foreground font-mono flex items-center gap-1"
+                            title="Execution duration"
                           >
-                            {rec.status}
-                          </span>
-                          <span className="text-xs font-medium text-foreground font-mono">
-                            {rec.extractor_name} v{rec.extractor_version}
+                            <Clock className="w-3 h-3 text-cyan-400" />
+                            {durationText}
                           </span>
                         </div>
-                        <span className="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {rec.duration_ms}ms
-                        </span>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                        <span>Timestamp: {new Date(rec.extraction_timestamp).toLocaleString()}</span>
-                        <span>Elements: {rec.element_count}</span>
-                        <span>Tables: {rec.table_count}</span>
-                        {rec.page_count && <span>Pages: {rec.page_count}</span>}
-                        {rec.word_count && <span>Words: {rec.word_count.toLocaleString()}</span>}
-                      </div>
-
-                      {rec.error_message && (
-                        <div className="p-2 rounded bg-destructive/10 text-destructive text-xs font-mono">
-                          {rec.error_code && `[${rec.error_code}] `}
-                          {rec.error_message}
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-mono">
+                          <span title="Extraction timestamp">Timestamp: {timestampText}</span>
+                          <span>Elements: {rec.element_count}</span>
+                          <span>Tables: {rec.table_count}</span>
+                          {rec.page_count && <span>Pages: {rec.page_count}</span>}
+                          {rec.word_count && <span>Words: {rec.word_count.toLocaleString()}</span>}
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {rec.error_message && (
+                          <div className="p-2 rounded bg-destructive/10 text-destructive text-xs font-mono">
+                            {rec.error_code && `[${rec.error_code}] `}
+                            {rec.error_message}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -462,4 +650,3 @@ export const ExtractionViewer = ({
     </dialog>
   )
 }
-

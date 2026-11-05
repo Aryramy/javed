@@ -42,6 +42,10 @@ describe('Backend UI Integration Components', () => {
             uptime_seconds: 42.0,
             active_ws_connections: 1,
             capabilities: { rest_api: true, websocket: true, sse: true, ai_chat: false },
+            stage: 'Stage 4',
+            active_brick: 'BRICK-007 In Progress',
+            provider_gateway_status: 'Provider Gateway Active',
+            runtime_status: 'Deep Agents Runtime Active',
           }),
         })
       }
@@ -126,7 +130,7 @@ describe('Backend UI Integration Components', () => {
     renderWithProviders(<ChatView />)
 
     expect(screen.getAllByText(/BACKEND/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText(/Stage 1 Transport Verified/i)).toBeInTheDocument()
-    expect(screen.getByText(/Conversational AI Gateway/i)).toBeInTheDocument()
+    expect(screen.getByTestId('authoritative-stage-status')).toBeInTheDocument()
+    expect(screen.getByText(/Stage 4 • BRICK-007 In Progress/i)).toBeInTheDocument()
   })
 })

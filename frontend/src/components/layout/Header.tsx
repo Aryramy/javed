@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpen }) => {
   const { mode, setMode } = useMode()
-  const { status, latencyMs, reconnectAttempts } = useBackend()
+  const { status, latencyMs, reconnectAttempts, systemStatus } = useBackend()
   const navigate = useNavigate()
 
   const handleModeSwitch = (newMode: 'user' | 'dev') => {
@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpe
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground font-medium hidden sm:block">
-              Stage 1 • Foundation & UI Shell
+              {systemStatus ? `${systemStatus.stage} • ${systemStatus.active_brick}` : 'Stage 4 • BRICK-007 In Progress'}
             </p>
           </div>
         </div>

@@ -453,6 +453,13 @@ async def get_document_details(
         bool,
         Query(description="Whether to reload text/markdown preview."),
     ] = True,
+    offset_chars: Annotated[
+        int,
+        Query(
+            ge=0,
+            description="Offset character index for bounded preview pagination.",
+        ),
+    ] = 0,
     max_chars: Annotated[
         int,
         Query(
@@ -476,15 +483,25 @@ async def get_document_details(
     text_preview = ""
     markdown_preview = ""
     is_truncated = False
+    total_text_chars = 0
+    total_markdown_chars = 0
 
     if include_content and doc.current_extraction_id:
         normalized_doc = await storage.load_normalized_document_async(doc.current_extraction_id)
         if normalized_doc:
             full_txt = normalized_doc.full_text or ""
             full_md = normalized_doc.full_markdown or ""
-            text_preview = full_txt[:max_chars]
-            markdown_preview = full_md[:max_chars]
-            is_truncated = len(full_txt) > max_chars or len(full_md) > max_chars
+            total_text_chars = len(full_txt)
+            total_markdown_chars = len(full_md)
+            text_preview = full_txt[offset_chars : offset_chars + max_chars]
+            markdown_preview = full_md[offset_chars : offset_chars + max_chars]
+            is_truncated = (
+                (offset_chars + max_chars < total_text_chars)
+                or (offset_chars + max_chars < total_markdown_chars)
+                or (offset_chars > 0)
+                or (total_text_chars > max_chars)
+                or (total_markdown_chars > max_chars)
+            )
 
     return DocumentDetailResponse(
         document=doc,
@@ -493,6 +510,9 @@ async def get_document_details(
         text_preview=text_preview,
         markdown_preview=markdown_preview,
         is_truncated=is_truncated,
+        offset_chars=offset_chars,
+        total_text_chars=total_text_chars,
+        total_markdown_chars=total_markdown_chars,
     )
 
 

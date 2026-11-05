@@ -46,6 +46,7 @@ from javed.schemas.mcp import (
     parse_namespaced_tool_id,
     validate_server_id,
 )
+from javed.schemas.providers import ProviderBindingResponse, ProviderSelectionRequest
 from javed.schemas.system import PingResponse, SystemStatusResponse
 
 __all__ = [
@@ -79,6 +80,8 @@ __all__ = [
     "ModelCatalogResponse",
     "ModelInfo",
     "PingResponse",
+    "ProviderBindingResponse",
+    "ProviderSelectionRequest",
     "ReadyResponse",
     "ServerConfig",
     "ServerStatus",

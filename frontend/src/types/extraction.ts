@@ -41,14 +41,16 @@ export interface StoredExtractionRecord {
   version_id: string
   extractor_name: string
   extractor_version: string
-  extraction_timestamp: string
-  duration_ms: number
+  extracted_at?: string
+  extraction_timestamp?: string
+  duration_ms?: number | null
   status: string
-  exit_code: number
+  exit_code?: number
   element_count: number
   table_count: number
   page_count?: number | null
   word_count?: number | null
+  character_count?: number | null
   raw_byte_count?: number | null
   extraction_record_sha256: string
   canonical_json_available?: boolean
@@ -109,6 +111,9 @@ export interface DocumentDetailResponse {
   text_preview: string
   markdown_preview: string
   is_truncated: boolean
+  offset_chars?: number
+  total_text_chars?: number
+  total_markdown_chars?: number
 }
 
 export interface ExtractionTelemetryResponse {

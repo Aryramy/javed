@@ -8,7 +8,7 @@ import type {
   AgentThreadStateResponse,
   AgentTodoItem,
 } from '../types/agent';
-import type { CostTier, StreamUsage } from '../types/chat';
+import type { CostTier, ProviderId, StreamUsage } from '../types/chat';
 
 export interface StreamAgentParams {
   thread_id: string;
@@ -16,8 +16,17 @@ export interface StreamAgentParams {
   model?: string;
   cost_tier?: CostTier;
   session_id?: string;
+  provider_id?: ProviderId;
+  configuration_version?: string;
   signal?: AbortSignal;
-  onRunStarted?: (data: { run_id: string; thread_id: string; model?: string; cost_tier?: CostTier }) => void;
+  onRunStarted?: (data: {
+    run_id: string;
+    thread_id: string;
+    model?: string;
+    cost_tier?: CostTier;
+    provider_id?: string;
+    configuration_version?: string;
+  }) => void;
   onPlanning?: (todos: AgentTodoItem[]) => void;
   onPlanUpdated?: (todos: AgentTodoItem[]) => void;
   onToken?: (token: string) => void;
@@ -153,6 +162,8 @@ export const agentService = {
       model,
       cost_tier,
       session_id,
+      provider_id,
+      configuration_version,
       signal,
       onRunStarted,
       onPlanning,
@@ -184,6 +195,8 @@ export const agentService = {
         model,
         cost_tier,
         session_id,
+        provider_id,
+        configuration_version,
       }),
       signal,
     });
@@ -241,6 +254,8 @@ export const agentService = {
                   thread_id: event.data.thread_id ?? thread_id,
                   model: event.data.model,
                   cost_tier: event.data.cost_tier,
+                  provider_id: event.data.provider_id as string | undefined,
+                  configuration_version: event.data.configuration_version as string | undefined,
                 });
                 break;
 
