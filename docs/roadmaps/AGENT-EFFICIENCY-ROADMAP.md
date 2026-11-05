@@ -88,12 +88,15 @@ flowchart TD
 ---
 
 ### Milestone 5: Mandatory Root-Cause & Design Gate Enforcement
+- **Status**: **READY FOR ACCEPTANCE** (Implemented src/javed/agent/efficiency/briefs.py & gate.py, 60 passing deterministic tests in 	ests/test_agent_efficiency_gate.py, zero live runtime modifications).
 - **Objective**: Enforce the mandatory Pre-Edit Brief contract, preventing unguided code edits.
 - **Scope**:
-  - Implement pre-edit brief validator asserting presence of all required fields (Root Cause, Affected Symbols, Files to Modify, Files NOT to Modify, Regression Risks, Rollback Strategy).
-  - Block write operations (`edit_file`, `write_file`) if the active task lacks an approved brief.
-  - Integrate brief presentation into Developer Mode telemetry.
-- **Verification**: Pre-edit gate rejects incomplete briefs fail-closed; verified across simulated defect tasks.
+  - Implement task classifications (DEFECT, FEATURE, DOCUMENTATION, REFACTOR, SECURITY_FIX, MIGRATION, INVESTIGATION).
+  - Implement structured Pre-Edit Brief schemas with evidence validation and credential redaction.
+  - Implement fail-closed PreEditGate write authorization supporting CREATE, MODIFY, DELETE, RENAME.
+  - Authorize line ranges with context allowance; invalidate approvals on Git HEAD or file hash changes.
+  - Connect write gate checks to Milestone 4 WatchdogEngine terminal and blocked states.
+- **Verification**: 60 deterministic tests verifying structural rejection, symptom detection, secret redaction, range bounding, and watchdog state enforcement. Fail-closed write authorization verified.
 
 ---
 
