@@ -76,6 +76,7 @@ flowchart TD
 ---
 
 ### Milestone 4: Hard Execution Limits & Watchdog Engine
+- **Status**: **READY FOR ACCEPTANCE** (Implemented src/javed/agent/efficiency/, 42 deterministic tests passing, zero live runtime coupling).
 - **Objective**: Build a deterministic watchdog layer enforcing time, iteration, file, patch, test, token, and cost budgets.
 - **Scope**:
   - Implement task budget definitions for all 5 task classes in `src/javed/agent/watchdog.py`.

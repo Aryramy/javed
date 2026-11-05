@@ -174,6 +174,10 @@ No code modification is permitted in the repository until the state machine tran
 
 ## 5. Hard Execution Limits & Watchdog
 
+> [!NOTE] Implementation Status
+> The hard execution limits and watchdog engine specified below were implemented and verified in **Milestone 4** in src/javed/agent/efficiency/ with 42 deterministic unit tests. Full specification details are recorded in docs/architecture/AGENT-EXECUTION-BUDGETS.md.
+
+
 To guarantee that tasks remain bounded in time, cost, and complexity, the state machine incorporates an active **Execution Watchdog**.
 
 ### 5.1 Enforceable Budget Limits by Task Class
