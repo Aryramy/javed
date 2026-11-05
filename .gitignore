@@ -57,3 +57,8 @@ Thumbs.db
 *.swp
 *.swo
 scratch/
+
+# Graphify Local Pilot Artifacts (Disposable & Uncommitted)
+graphify-out/
+.graphify/
+
