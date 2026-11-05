@@ -39,7 +39,7 @@
 | **TASK-040** | BRICK-004 | Implement Deep Agents + LangGraph Runtime & Checkpointer | **VERIFIED** | Authorized by Owner on 2026-10-25 | Deep Agents harness with LangGraph cyclic execution, SQLite checkpointer, task planning via write_todos, 3-layer positive tool allowlist, thread validation, and concurrency serialization. 55 pytest, 41 vitest, 19 Playwright passed. Formally accepted by Project Owner on 2026-10-25. |
 | **TASK-050** | BRICK-005 | Build 4-Tier Tool Sandbox, HITL Approval Modal & Initial MCP Integration | **VERIFIED** | Authorized by Owner on 2026-10-26 | Formally accepted by Project Owner on 2026-10-28. Phases 0–10 complete: 4-Tier sandbox, dynamic MCP registry (protocol 2026-07-28), 3-layer authorization, HITL approval modal, SQLite approvals ledger, argument redaction, full Developer & User Mode UI, partial-init teardown safety, full deterministic sweep (165 backend, 62 vitest, 0 ruff errors, 0 leak), REPORT-005 accepted. |
 | **TASK-060** | BRICK-006 | Integrate Deterministic Playwright Browser, Playwright MCP Evaluation & Live Preview | **VERIFIED** | Authorized by Owner on 2026-10-28 | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **IN PROGRESS** | Authorized by Owner on 2026-10-29 | Phase 6 Storage Manager & Metadata Registry Completed (13/13 storage tests, 168 extraction tests, 397/397 full regression tests passed, 0 leaks, $0.00 spend). Awaiting Phase 7 authorization. |
+| **TASK-070** | BRICK-007 | Implement Crawl4AI & Docling Extraction Pipeline | **READY FOR ACCEPTANCE** | Authorized by Owner on 2026-10-29 | All 10 Phases Completed & Verified (216/216 backend extraction tests, 126/126 frontend Vitest tests, 100% offline Docling, zero-trust Crawl4AI, multi-provider atomic resolution, zero leaks, REPORT-007 delivered). Awaiting Project Owner acceptance. |
 | **TASK-080** | BRICK-008 | Build Browser Use and Authenticated Navigation Subsystem | **NOT STARTED** | Requires BRICK-007 Verification | OpenCLI-based authenticated navigation with dedicated JAVED profiles, deterministic Playwright & Playwright MCP foundation, Stagehand eval-only, native owner takeover, redirect route checks, subresource guards, and single-use fail-closed approvals. Anti-bot/stealth/captcha-takeover bypasses removed by owner decision. |
 | **TASK-090** | BRICK-009 | Build Persistent Memory, Fact Registry & Semantic RAG | **NOT STARTED** | Requires BRICK-008 Verification | Qdrant vector store with LangGraph orchestration, Mem0 eval-only, LangGraph Store/SQLite local structured memory, deterministic provenance-aware chunking, benchmarked English & Arabic embeddings, memory governance, and hash integrity. Urdu support removed by owner decision. |
 | **TASK-100** | BRICK-010 | Build Managed Model Context Protocol (MCP) Server Ecosystem & UI Controls | **NOT STARTED** | Requires BRICK-009 Verification | Official & GitHub MCP registry discovery, JAVED Private Registry authority, SecureMCPGateway execution, Playwright/Time/GitHub/Context7 approved servers, conditional DBHub/Notion/MarkItDown, and 8-stage execution filter. Microsoft Fabric & Azure MCP removed by owner decision. |
@@ -315,7 +315,7 @@
 ---
 
 ### TASK-070: BRICK-007 Crawl4AI & Docling Extraction Pipeline
-- **Status**: **IN PROGRESS** (Phase 3B Schema Integrity, Timeout Enforcement & Security Hardening Completed; Awaiting Phase 4 Authorization)
+- **Status**: **READY FOR ACCEPTANCE** (All 10 Phases Completed; Hardening & REPORT-007 Delivered; Awaiting Project Owner Acceptance)
 - **Anchor Commit**: 83cdeea (Verified BRICK-006 synchronized on master)
 - **Working Branch**: feat/brick-007-extraction
 - **Scope & Objectives**:
@@ -501,9 +501,9 @@
   - **TASK-070-P7 (Phase 7)**: LangChain Extraction Tools & Agent Runtime Integration — `VERIFIED`
   - **TASK-070-P8 (Phase 8)**: REST API & Developer Mode Telemetry — `VERIFIED`
   - **TASK-070-P9 (Phase 9)**: React Document Ingestion UI & Extraction Viewer — `VERIFIED`
-  - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 (TASK-080 preserved for BRICK-008)
-- **Milestone Status**: **IN PROGRESS** (Phase 9 Completed and Verified; Awaiting Phase 10 Authorization).
-- **Stop Condition**: Phase 9 React Document Ingestion UI & Extraction Viewer complete. Mandatory Stop: Await explicit Project Owner review and Phase 10 authorization before running full milestone hardening and drafting `REPORT-007.md`.
+  - **TASK-070-P10 (Phase 10)**: Full Regression Gate, Hardening & REPORT-007 — `VERIFIED`
+- **Milestone Status**: **READY FOR ACCEPTANCE** (All 10 Phases Completed and Verified; REPORT-007 Delivered; Awaiting Project Owner Acceptance).
+- **Stop Condition**: Phase 10 Complete. Mandatory Stop: Await explicit Project Owner acceptance before merging `feat/brick-007-extraction` into `master` or initiating BRICK-008.
 
 
 ---
