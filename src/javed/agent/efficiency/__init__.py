@@ -41,6 +41,9 @@ from javed.agent.efficiency.ledger import (
     FailureClassification,
     FileReadRecord,
 )
+from javed.agent.efficiency.metrics import (
+    TaskMetricsReport,
+)
 from javed.agent.efficiency.nodes import (
     CoderNode,
     FinalReviewerNode,
@@ -123,6 +126,7 @@ __all__ = [
     "TaskBudgetProfile",
     "TaskCheckpoint",
     "TaskClass",
+    "TaskMetricsReport",
     "TaskType",
     "TesterNode",
     "TesterOutput",
