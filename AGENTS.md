@@ -1,9 +1,9 @@
 # AGENTS.md — Agent Onboarding and Operating Protocol
 
 > **Project**: Javed — New JARVIS<br/>
-> **Status**: STAGE 4 READY FOR ACCEPTANCE (BRICK-007 All 10 Phases Completed; REPORT-007 Delivered; Awaiting Acceptance)<br/>
-> **Current Stage**: Stage 4 — Crawl4AI & Docling Extraction Pipeline<br/>
-> **Active Brick**: BRICK-007 (READY FOR ACCEPTANCE — All 10 Phases Completed; REPORT-007 Delivered; Awaiting Acceptance)<br/>
+> **Status**: STAGE 4 VERIFIED (BRICK-007 Formally Accepted on 2026-11-05; Merged into master at Commit 4b1463b; Awaiting BRICK-008 Authorization)<br/>
+> **Current Stage**: Stage 4 Complete — Crawl4AI & Docling Extraction Pipeline (VERIFIED)<br/>
+> **Active Brick**: BRICK-007 (VERIFIED); BRICK-008 (NOT STARTED — Awaiting Authorization)<br/>
 > **Last Revision**: 2026-11-05
 
 ---
@@ -22,7 +22,7 @@ Every AI agent, subagent, or developer working on **Javed** must execute the fol
 
 ## 2. Core Operational Constraints
 
-- **Strict Stage Boundaries**: BRICK-001 through BRICK-006 are **VERIFIED**. The active milestone is **BRICK-007 (Crawl4AI & Docling Extraction Pipeline)**, currently `READY FOR ACCEPTANCE`. Do not begin BRICK-008 or merge into master until explicitly authorized by the Project Owner.
+- **Strict Stage Boundaries**: BRICK-001 through BRICK-007 are **VERIFIED**. BRICK-008 (Browser Use and Authenticated Navigation) is **NOT STARTED**. Do not begin BRICK-008 until explicitly authorized by the Project Owner.
 - **Brick-by-Brick Workflow**: Implementation proceeds strictly one brick at a time. Advance to the next brick **only** after explicit user acceptance of the previous brick.
 - **Mandatory Live UI Verification**: Every functional brick must be verified through a live UI. Mocked or simulated success presented as actual functionality is strictly prohibited.
 - **Free & Open-Source First**: Prefer proven, active, compatible FOSS libraries. OpenRouter is the **sole** preapproved proprietary paid service, accessed strictly via a replaceable adapter.

@@ -3,11 +3,11 @@
 
 > **Project**: Javed — New JARVIS<br/>
 > **Brick**: `BRICK-007`<br/>
-> **Status**: **`READY FOR ACCEPTANCE`**<br/>
+> **Status**: **`VERIFIED`**<br/>
 > **Milestone Stage**: Stage 4 — Crawl4AI & Docling Extraction Pipeline<br/>
 > **Author**: Antigravity Full-Stack AI Engineering Team<br/>
 > **Date**: 2026-11-05<br/>
-> **Acceptance Authority**: Project Owner Explicit Sign-Off (Pending Review)<br/>
+> **Acceptance Authority**: Formally Accepted by Project Owner on 2026-11-05 (Merge Commit `4b1463b`)<br/>
 > **Working Branch**: `feat/brick-007-extraction`<br/>
 > **Baseline Anchor**: Commit `3110d62` (Verified BRICK-006 merged into `master`)<br/>
 > **Final Implementation Anchor**: Commit `0d7df0b` (`fix(router): atomically resolve Auto Router provider and model`)<br/>
@@ -244,24 +244,24 @@ Live UI verification was performed against the running FastAPI backend (`http://
 
 | Document | Updated State | Authority Reference |
 |---|---|---|
-| `docs/PROGRESS.md` | Promoted BRICK-007 status to **`READY FOR ACCEPTANCE`** | [PROGRESS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/PROGRESS.md) |
-| `docs/TASKS.md` | Marked `TASK-070-P10` **`VERIFIED`**; `TASK-070` **`READY FOR ACCEPTANCE`** | [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) |
-| `docs/bricks/BRICK-007.md` | All 10 phases marked completed; Stop Condition enforced | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
+| `docs/PROGRESS.md` | Promoted BRICK-007 status to **`VERIFIED`** | [PROGRESS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/PROGRESS.md) |
+| `docs/TASKS.md` | Marked `TASK-070` **`VERIFIED`**; `TASK-080` **`NOT STARTED`** | [TASKS.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/TASKS.md) |
+| `docs/bricks/BRICK-007.md` | Marked **`VERIFIED`** (Merged into `master` at `4b1463b`) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
 | `docs/ROADMAP.md` | Stage 4 ready for acceptance; Stage 5 (BRICK-008) unblocked upon sign-off | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
 
 ---
 
-## 9. Sign-Off Request & Stop Condition
+## 9. Formal Acceptance Recorded & Stop Condition
 
-> [!IMPORTANT]
-> **MANDATORY STOP CONDITION ENFORCED**:
-> BRICK-007 (Crawl4AI & Docling Web and Document Extraction Pipeline) is fully implemented, verified, and hardened.
+> [!NOTE]
+> **MILESTONE FORMALLY ACCEPTED BY PROJECT OWNER ON 2026-11-05**:
+> BRICK-007 (Crawl4AI & Docling Web and Document Extraction Pipeline) is fully verified, accepted, and merged into master at commit `4b1463b`.
 > - **Total Extraction Tests Passed**: 216 / 216 backend tests
 > - **Total Frontend Tests Passed**: 126 / 126 tests across 18 test suites
 > - **Provider & Agent Tests Passed**: 51 / 51 tests
 > - **Process Hygiene**: 0 leaked processes; 0 leaked credentials
 > - **Total Spend**: $0.00 USD
 > 
-> In accordance with project operational protocol, work on the feature branch `feat/brick-007-extraction` is now halted in **`READY FOR ACCEPTANCE`** state.
+> In accordance with project operational protocol, BRICK-007 is fully VERIFIED and synchronized on master.
 > 
-> **Next Action**: Awaiting Project Owner explicit review, acceptance of `REPORT-007.md`, and authorization to merge `feat/brick-007-extraction` into `master` before proceeding to **BRICK-008** (Browser Use & Authenticated Navigation).
+> **Next Action**: Per Project Owner directive, BRICK-008 is NOT STARTED. Awaiting explicit Project Owner instruction before initiating Stage 5 / BRICK-008.
