@@ -17,3 +17,14 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock scrollIntoView for jsdom
 window.HTMLElement.prototype.scrollIntoView = () => {}
+
+// Mock HTMLDialogElement methods for jsdom
+if (typeof HTMLDialogElement !== 'undefined') {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true
+  }
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false
+    this.dispatchEvent(new Event('close'))
+  }
+}

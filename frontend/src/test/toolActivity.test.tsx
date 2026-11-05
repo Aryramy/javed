@@ -115,4 +115,30 @@ describe('ToolActivityCard Component', () => {
     expect(screen.getByTestId('tool-activity-args')).toHaveTextContent('"timezone": "UTC"');
     expect(screen.getByTestId('tool-activity-time')).toBeInTheDocument();
   });
+  it('renders authoritative tool classification badges and fails closed to DENIED', () => {
+    // 1. ALLOWED_READ_ONLY
+    const readOnlyRecord: ToolActivityRecord = {
+      ...baseRecord,
+      classification: 'ALLOWED_READ_ONLY',
+    };
+    const { rerender } = render(<ToolActivityCard activity={readOnlyRecord} />);
+    const badge = screen.getByTestId('tool-activity-classification');
+    expect(badge).toHaveTextContent('ALLOWED_READ_ONLY');
+
+    // 2. APPROVAL_REQUIRED
+    const approvalRecord: ToolActivityRecord = {
+      ...baseRecord,
+      classification: 'APPROVAL_REQUIRED',
+    };
+    rerender(<ToolActivityCard activity={approvalRecord} />);
+    expect(screen.getByTestId('tool-activity-classification')).toHaveTextContent('APPROVAL_REQUIRED');
+
+    // 3. Missing classification fails closed to DENIED
+    const missingRecord: ToolActivityRecord = {
+      ...baseRecord,
+      classification: undefined,
+    };
+    rerender(<ToolActivityCard activity={missingRecord} />);
+    expect(screen.getByTestId('tool-activity-classification')).toHaveTextContent('DENIED');
+  });
 });

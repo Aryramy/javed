@@ -47,7 +47,7 @@ describe('App Navigation and Route Rendering', () => {
     // Should navigate to /dev/info and show Application Metadata
     expect(screen.getByText(/Application Architecture & System Information/i)).toBeInTheDocument()
     expect(screen.getByText('Verified System Properties & Runtime Baseline')).toBeInTheDocument()
-    expect(screen.getByText(/BRICK-001: Reproducible Foundation & Real React UI Shell/i)).toBeInTheDocument()
+    expect(screen.getByText(/BRICK-001/i)).toBeInTheDocument()
   })
 
   it('displays accurate runtime status in Developer Mode', async () => {

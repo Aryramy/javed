@@ -99,6 +99,43 @@ export const ToolActivityCard: React.FC<ToolActivityCardProps> = ({
     }
   };
 
+  const getClassificationBadge = (classification?: string) => {
+    const policy = classification || 'DENIED';
+    switch (policy) {
+      case 'ALLOWED_READ_ONLY':
+        return (
+          <span
+            data-testid="tool-activity-classification"
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0"
+            title="Tool Policy: ALLOWED_READ_ONLY"
+          >
+            ALLOWED_READ_ONLY
+          </span>
+        );
+      case 'APPROVAL_REQUIRED':
+        return (
+          <span
+            data-testid="tool-activity-classification"
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0"
+            title="Tool Policy: APPROVAL_REQUIRED"
+          >
+            APPROVAL_REQUIRED
+          </span>
+        );
+      case 'DENIED':
+      default:
+        return (
+          <span
+            data-testid="tool-activity-classification"
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/30 shrink-0"
+            title={`Tool Policy: ${policy}`}
+          >
+            {policy}
+          </span>
+        );
+    }
+  };
+
   const displayName = activity.tool_name || activity.tool_id;
   const hasArgs = activity.arguments && Object.keys(activity.arguments).length > 0;
   const hasResult = Boolean(activity.result_summary);
@@ -150,6 +187,8 @@ export const ToolActivityCard: React.FC<ToolActivityCardProps> = ({
               {activity.server_id}
             </span>
           )}
+
+          {getClassificationBadge(activity.classification)}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

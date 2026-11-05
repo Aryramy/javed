@@ -41,6 +41,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="Optional model ID; falls back to default if omitted",
     )
+    provider_id: str | None = Field(
+        default=None,
+        description="Optional provider selection: 'auto', 'openrouter', or 'cheaper_inference'",
+    )
     cost_tier: CostTier | None = Field(
         default=None,
         description="Optional cost tier for openrouter/auto (low, medium, high, xhigh, max)",
@@ -48,6 +52,14 @@ class ChatRequest(BaseModel):
     session_id: str | None = Field(
         default=None,
         description="Optional conversation/session identifier for Auto Router session stickiness",
+    )
+    thread_id: str | None = Field(
+        default=None,
+        description="Optional thread ID bound to this conversation",
+    )
+    configuration_version: str | None = Field(
+        default=None,
+        description="Optional configuration version token bound to this conversation",
     )
     temperature: float = Field(
         default=0.7,
@@ -84,6 +96,10 @@ class StreamUsage(BaseModel):
     cost_source: Literal["upstream", "rate_card", "character_estimate"] = Field(
         default="upstream",
         description="Source of cost calculation: upstream, rate_card, or estimate",
+    )
+    provider_id: str | None = Field(
+        default=None,
+        description="Inference provider used for this completion",
     )
     selected_model: str | None = Field(
         default=None,
@@ -123,9 +139,13 @@ class ChatStreamEvent(BaseModel):
         default=None,
         description="Usage statistics (present when type='usage')",
     )
+    provider_id: str | None = Field(
+        default=None,
+        description="Inference provider used for this stream event",
+    )
     selected_model: str | None = Field(
         default=None,
-        description="Concrete model selected by OpenRouter",
+        description="Concrete model selected by inference provider",
     )
     requested_model: str | None = Field(
         default=None,
@@ -150,6 +170,10 @@ class ChatResponse(BaseModel):
 
     id: str = Field(description="Unique completion identifier")
     model: str = Field(description="Model used for inference")
+    provider_id: str | None = Field(
+        default=None,
+        description="Inference provider used for this response",
+    )
     selected_model: str | None = Field(
         default=None,
         description="Concrete model selected by OpenRouter",

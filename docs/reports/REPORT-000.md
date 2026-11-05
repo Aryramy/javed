@@ -77,7 +77,7 @@ All planning deliverables have been audited, corrected, verified against project
 ### F. Multilingual Voice Realities
 - **Finding**: XTTS-v2 was claimed to support Urdu without qualification, and Piper's maintenance status was unverified.
 - **Correction**:
-  1. *Local TTS Status*: Local TTS selection for Urdu, English, and Arabic reopened as **`EVALUATING`**. Documented that base XTTS-v2 officially supports 17 languages (including Arabic and English) but **does not officially support Urdu** in its base release, and its CPML license restricts commercial use. Piper TTS has sparse Arabic support and lacks official Urdu checkpoints.
+  1. *Local TTS Status*: Local TTS selection for Urdu, English, and Arabic reopened as **EVALUATING**. Documented that base XTTS-v2 officially supports 17 languages (including Arabic and English) but **does not officially support Urdu** in its base release, and its CPML license restricts commercial use. Piper TTS has sparse Arabic support and lacks official Urdu checkpoints. *(Note: Urdu language support subsequently REMOVED BY PROJECT OWNER DECISION per ADR-008)*.
   2. *OpenRouter Audio Gateway*: Recorded `openai/whisper-large-v3-turbo` (STT), `elevenlabs/eleven-v4-turbo` (TTS), and voice `george` as provisional cloud candidates accessed via the OpenRouter gateway (`https://openrouter.ai/api/v1`).
   3. *Commercial Isolation*: Explicitly distinguished accessing ElevenLabs models via the preapproved OpenRouter gateway from entering direct commercial ElevenLabs SaaS agreements (which remain unapproved).
   4. *Measurable Targets*: Converted unverified latency claims into empirical targets (< 1.2s round-trip, < 50ms barge-in cut-off), noting that API model availability does not prove real-time conversation feasibility.

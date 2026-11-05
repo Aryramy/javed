@@ -116,6 +116,10 @@ class AgentStreamRequest(BaseModel):
         default=None,
         description="Optional model ID (defaults to Settings.openrouter_default_model)",
     )
+    provider_id: str | None = Field(
+        default=None,
+        description="Optional provider selection: 'auto', 'openrouter', or 'cheaper_inference'",
+    )
     cost_tier: CostTier | None = Field(
         default=None,
         description="Cost tier for openrouter/auto (low, medium, high, xhigh, max)",
@@ -123,6 +127,10 @@ class AgentStreamRequest(BaseModel):
     session_id: str | None = Field(
         default=None,
         description="Optional OpenRouter session ID for prompt caching and stickiness",
+    )
+    configuration_version: str | None = Field(
+        default=None,
+        description="Optional configuration version token bound to this conversation thread",
     )
     plugins: list[dict[str, Any]] | None = Field(
         default=None,
@@ -156,6 +164,9 @@ class ToolActivityRecord(BaseModel):
     tool_call_id: str = Field(description="Unique tool call or invocation ID")
     tool_id: str = Field(description="Canonical namespaced tool ID (e.g. time__get_current_time)")
     server_id: str = Field(default="unknown", description="MCP server identity")
+    classification: Literal["ALLOWED_READ_ONLY", "APPROVAL_REQUIRED", "DENIED"] = Field(
+        default="DENIED", description="Authoritative tool permission tier"
+    )
     tool_name: str | None = Field(default=None, description="Human friendly display name")
     description: str | None = Field(default=None, description="Tool purpose or summary")
     arguments: dict[str, Any] = Field(default_factory=dict, description="Input arguments")
@@ -217,9 +228,37 @@ class AgentThreadStateResponse(BaseModel):
         default=None,
         description="Active model identifier associated with this thread run",
     )
+    active_provider: str | None = Field(
+        default=None,
+        description="Active provider identifier associated with this thread run",
+    )
+    configuration_version: str | None = Field(
+        default=None,
+        description="Configuration version token bound to this thread",
+    )
+    provider_switch_history: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Audit history of provider switches on this thread",
+    )
     tool_calls: list[ToolActivityRecord] = Field(
         default_factory=list,
         description="Tool activity records reconstructed for this thread",
+    )
+    total_tokens: int = Field(
+        default=0,
+        description="Cumulative tokens consumed across runs in this thread",
+    )
+    total_cost_usd: float = Field(
+        default=0.0,
+        description="Cumulative cost in USD consumed across runs in this thread",
+    )
+    total_prompt_tokens: int = Field(
+        default=0,
+        description="Cumulative prompt tokens consumed across runs in this thread",
+    )
+    total_completion_tokens: int = Field(
+        default=0,
+        description="Cumulative completion tokens consumed across runs in this thread",
     )
 
 

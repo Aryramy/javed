@@ -22,8 +22,9 @@ This directory preserves Architecture Decision Records (ADRs) for project **Jave
 | **[ADR-003](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-003.md)** | Agent Orchestration Runtime (Deep Agents + LangGraph vs CrewAI) | 2026-10-22 | **APPROVED** | Agent Core, Checkpointing, State Graph |
 | **[ADR-004](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-004.md)** | Storage, Vector Retrieval & Memory Strategy (SQLite -> PostgreSQL + pgvector) | 2026-10-22 | **APPROVED** | Persistence, Semantic Memory, Checkpointing |
 | **[ADR-005](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-005.md)** | Dual-Engine Browser Automation (Playwright Python + Browser Use) | 2026-10-22 | **APPROVED** | Browser Automation & Web Navigation |
-| **[ADR-006](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-006.md)** | Web and Document Extraction Pipeline (Crawl4AI + Docling) | 2026-10-22 | **APPROVED** | Web Scraping, PDF/DOCX/XLSX Extraction |
-| **[ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md)** | Multilingual Voice Architecture & Pipeline (STT, TTS, VAD, English/Urdu/Arabic) | 2026-10-22 | **APPROVED BASELINE (Local Models EVALUATING)** | Audio I/O, Voice Streaming, Barge-in |
+| **[ADR-006](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-006.md)** | Web and Document Extraction Pipeline (Crawl4AI + Docling) | 2026-10-29 | **APPROVED** | Web Scraping, PDF/DOCX/XLSX Extraction |
+| **[ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md)** | Multilingual Voice Architecture & Pipeline (STT, TTS, VAD, English/Urdu/Arabic) | 2026-10-22 | **SUPERSEDED IN PART (Urdu REMOVED BY OWNER DECISION)** | Audio I/O, Voice Streaming, Barge-in |
+| **[ADR-008](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-008.md)** | Guided Integration Roadmap & Boundary Architecture for BRICK-008 through BRICK-012 | 2026-11-02 | **APPROVED** | BRICK-008 to BRICK-012 Architectural Governance |
 
 ---
 

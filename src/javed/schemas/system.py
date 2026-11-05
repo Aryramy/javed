@@ -23,6 +23,22 @@ class SystemStatusResponse(BaseModel):
         default=False,
         description="Whether isolated E2E scripted test mode is enabled",
     )
+    stage: str = Field(
+        default="Stage 4",
+        description="Authoritative active stage",
+    )
+    active_brick: str = Field(
+        default="BRICK-007 In Progress",
+        description="Active milestone brick",
+    )
+    provider_gateway_status: str = Field(
+        default="Provider Gateway Active",
+        description="Provider Gateway state",
+    )
+    runtime_status: str = Field(
+        default="Deep Agents Runtime Active",
+        description="Agent runtime state",
+    )
     capabilities: dict[str, bool] = Field(description="Explicit map of implemented capabilities")
 
 

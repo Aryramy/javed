@@ -1,7 +1,6 @@
 """FastAPI application factory and main entry point for Project Javed."""
 
 import logging
-import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -18,9 +17,13 @@ from javed.api.v1.browser_ws import BrowserWebSocketManager, browser_websocket_e
 from javed.api.v1.router import api_v1_router
 from javed.browser.streamer import BrowserFrameStreamer
 from javed.config import Settings, get_settings
+from javed.extraction.tools import ExtractionToolsManager
 from javed.mcp.gateway import SecureMCPGateway
 from javed.mcp.registry import DynamicMCPRegistry
 from javed.mcp.servers import create_playwright_mcp_config, create_time_server_config
+from javed.providers.cheaper_inference import CheaperInferenceService
+from javed.providers.registry import ProviderRegistry
+from javed.providers.router import InferenceRouter
 from javed.services.openrouter import OpenRouterService
 from javed.transport.sse import SSEManager
 from javed.transport.websocket import WebSocketManager
@@ -37,19 +40,30 @@ logger = logging.getLogger("javed.main")
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """Enforce maximum request body size limit on incoming HTTP requests."""
 
-    def __init__(self, app: FastAPI, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: FastAPI,
+        max_bytes: int,
+        max_upload_bytes: int = 25 * 1024 * 1024,
+    ) -> None:
         super().__init__(app)
         self.max_bytes = max_bytes
+        self.max_upload_bytes = max_upload_bytes
 
     async def dispatch(self, request: Request, call_next) -> Response:
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_bytes:
+        limit = (
+            self.max_upload_bytes
+            if request.url.path.startswith("/api/v1/extraction/upload")
+            else self.max_bytes
+        )
+        if content_length and int(content_length) > limit:
             return JSONResponse(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 content={
                     "error": {
                         "code": "REQUEST_ENTITY_TOO_LARGE",
-                        "message": f"Request body exceeds limit of {self.max_bytes} bytes",
+                        "message": f"Request body exceeds limit of {limit} bytes",
                     }
                 },
             )
@@ -90,18 +104,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("Agent runtime initialization deferred or degraded: %s", e)
 
-    # If E2E test mode is active, ensure time tool has approval_required policy
-    if os.getenv("JAVED_E2E_TEST_MODE") == "1":
+    # Ensure time__get_current_time is authoritatively configured as ALLOWED_READ_ONLY
+    try:
+        if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
+            if not app.state.mcp_registry.get_tool("time__get_current_time"):
+                await app.state.mcp_registry.discover_tools("time")
+            app.state.mcp_registry.set_tool_permission(
+                "time__get_current_time", "allowed_read_only"
+            )
+            logger.info(
+                "Authoritative policy: time__get_current_time configured as ALLOWED_READ_ONLY"
+            )
+    except Exception as e:
+        logger.warning("Could not configure time MCP tool policy: %s", e)
+
+    # Safely initialize extraction storage on startup to avoid concurrency locks
+    if hasattr(app.state, "extraction_tools_manager") and app.state.extraction_tools_manager:
         try:
-            if hasattr(app.state, "mcp_registry") and app.state.mcp_registry:
-                if not app.state.mcp_registry.get_tool("time__get_current_time"):
-                    await app.state.mcp_registry.discover_tools("time")
-                app.state.mcp_registry.set_tool_permission(
-                    "time__get_current_time", "approval_required"
-                )
-                logger.info("E2E Test Mode: time__get_current_time set to APPROVAL_REQUIRED")
+            await app.state.extraction_tools_manager.storage.initialize_async()
+            logger.info("Extraction storage initialized cleanly on startup")
         except Exception as e:
-            logger.warning("Could not auto-configure time MCP tools for E2E: %s", e)
+            logger.warning("Extraction storage initialization deferred: %s", e)
+
+    # Initialize ProviderRegistry on startup
+    if hasattr(app.state, "provider_registry") and app.state.provider_registry:
+        try:
+            await app.state.provider_registry.initialize()
+            logger.info("ProviderRegistry initialized cleanly on startup")
+        except Exception as e:
+            logger.warning("ProviderRegistry initialization deferred: %s", e)
 
     # Yield control to run the application
     yield
@@ -120,6 +151,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await app.state.agent_runtime.close()
         except Exception as e:
             logger.warning("Error closing agent runtime: %s", e)
+
+    if hasattr(app.state, "cheaper_service") and app.state.cheaper_service:
+        try:
+            await app.state.cheaper_service.close()
+            logger.info("Cheaper Inference service closed cleanly")
+        except Exception as e:
+            logger.warning("Error closing Cheaper Inference service: %s", e)
+
+    if hasattr(app.state, "extraction_tools_manager") and app.state.extraction_tools_manager:
+        try:
+            await app.state.extraction_tools_manager.close_async()
+            logger.info("Extraction tools manager closed cleanly")
+        except Exception as e:
+            logger.warning("Error closing extraction tools manager: %s", e)
 
     if hasattr(app.state, "browser_ws_manager") and app.state.browser_ws_manager:
         try:
@@ -156,6 +201,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ws_manager = WebSocketManager(app_settings)
     app.state.sse_manager = SSEManager()
     app.state.openrouter_service = OpenRouterService(app_settings)
+    app.state.cheaper_service = CheaperInferenceService(app_settings)
+    app.state.provider_registry = ProviderRegistry(app_settings)
+    app.state.inference_router = InferenceRouter(
+        settings=app_settings,
+        registry=app.state.provider_registry,
+        openrouter_service=app.state.openrouter_service,
+        cheaper_service=app.state.cheaper_service,
+    )
     app.state.browser_streamer = BrowserFrameStreamer()
     app.state.browser_ws_manager = BrowserWebSocketManager(
         app_settings, streamer=app.state.browser_streamer
@@ -168,10 +221,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.warning("Could not register default MCP servers: %s", exc)
     app.state.mcp_gateway = SecureMCPGateway(app.state.mcp_registry)
 
+    app.state.extraction_tools_manager = ExtractionToolsManager()
+
     app.state.agent_runtime = AgentRuntimeManager(
         app_settings,
         openrouter_service=app.state.openrouter_service,
         mcp_gateway=app.state.mcp_gateway,
+        enable_extraction=True,
+        extraction_tools_manager=app.state.extraction_tools_manager,
+        inference_router=app.state.inference_router,
+        provider_registry=app.state.provider_registry,
     )
 
     # 1. Body Size Limiter Middleware
@@ -182,7 +241,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=app_settings.allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Correlation-ID", "X-Javed-Owner-Token"],
     )
 

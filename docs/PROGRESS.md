@@ -1,9 +1,9 @@
 # Project Progress & Live State Registry — JARVIS
 
 > **Document ID**: `PROG-001`<br/>
-> **Version**: 7.0 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 NOT STARTED)<br/>
+> **Version**: 7.12 (BRICK-001 through BRICK-006 VERIFIED; Stage 4 / BRICK-007 Complete & READY FOR ACCEPTANCE)<br/>
 > **Status**: AUTHORITATIVE STATE SNAPSHOT<br/>
-> **Last Updated**: 2026-10-29
+> **Last Updated**: 2026-11-05
 
 ---
 
@@ -12,13 +12,13 @@
 | Parameter | Current Value | Authority Reference |
 |---|---|---|
 | **Project** | **Javed — New JARVIS** | [README.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/README.md) |
-| **Current Stage** | **Stage 3 / BRICK-006 — Deterministic Playwright Execution & Playwright MCP Evaluation (`VERIFIED`)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
-| **Current Brick** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation (`VERIFIED`)** | [BRICK-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-006.md) |
-| **Brick Status** | **`VERIFIED`** | Formally approved and accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
+| **Current Stage** | **Stage 4 / BRICK-007 — Crawl4AI & Docling Extraction Pipeline (`READY FOR ACCEPTANCE`)** | [ROADMAP.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/ROADMAP.md) |
+| **Current Brick** | **BRICK-007: Crawl4AI & Docling Extraction Pipeline (`READY FOR ACCEPTANCE`)** | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
+| **Brick Status** | **`READY FOR ACCEPTANCE`** (Phases 1–10 Complete & Verified; REPORT-007 Delivered; Awaiting Owner Review & Merge) | [BRICK-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/bricks/BRICK-007.md) |
 | **Last Verified Milestone** | **BRICK-006: Deterministic Playwright Execution & Playwright MCP Evaluation** | Formally accepted by Project Owner on 2026-10-29 ([REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md); Merge Commit `3110d62`) |
-| **Application Code** | **BRICK-006 Phases 0–10 Complete & Verified** (Deterministic Python Playwright engine with ephemeral contexts, 5 deterministic browser tools, SSRF & sensitive input security guard, FastAPI `/ws/browser` WebSocket broadcaster, React `BrowserPreviewPanel` with live canvas & HUD, official `@playwright/mcp` 3-tier host gateway evaluation, LangGraph agent binding with durable SQLite checkpoints, exactly-once approval resumption, 4/4 live OpenRouter browser acceptance tests (< $0.005 USD spend), 224/224 full backend regression pytests passed in 164.86s, 59/59 browser suite pytests passed, 74/74 Vitest frontend tests passed across 13 files, 0 Ruff errors, 0 Oxlint errors, clean Vite build, 0 subprocess leaks on Windows) | Strict execution boundary |
-| **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.159.1, playwright 1.58.0, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.17, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.3, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
-| **Overall Status** | **BRICK-006 VERIFIED & MERGED (Stage 3 Complete; Stage 4 / BRICK-007 NOT STARTED — Awaiting Owner Authorization)** | Authoritative Status |
+| **Application Code** | **BRICK-007 Complete & Verified** (`src/javed/extraction/`, `frontend/src/views/user/DocumentsView.tsx`, `frontend/src/components/extraction/`, `src/javed/providers/`; 216/216 backend extraction tests passed; 126/126 full frontend vitest tests passed; 46/46 provider registry tests passed; 5/5 persistence tests passed; production build verified in 1.34s; 0 Ruff errors; 0 process/thread leaks; $0.00 spend) | Strict execution boundary |
+| **Installed Packages** | **Python 3.12.15, uv 0.13.3, FastAPI 0.162.0, crawl4ai 0.9.5, docling 2.144.0, pypdfium2 5.14.0, torch 2.15.0+cpu, torchvision 0.29.2+cpu, playwright 1.49.1, @playwright/mcp 0.0.83, deepagents 0.7.32, langgraph 1.2.18, langgraph-checkpoint-sqlite 3.1.2, langchain-openrouter 0.2.9, langchain[mcp] 1.4.7, fastmcp 4.1.4, mcp 2.3.0, mcp-server-time 2026.10.19, jsonschema 4.26.0, Node 24.19.0, React 19.3.1, Vite 8.3.5** | Host environment |
+| **Overall Status** | **BRICK-007 READY FOR ACCEPTANCE (REPORT-007 Delivered; Awaiting Project Owner Sign-Off)** | Authoritative Status |
 
 
 ---
@@ -34,7 +34,7 @@ stateDiagram-v2
     BRICK_003_OpenRouter --> BRICK_004_LangGraph: VERIFIED (2026-10-25)
     BRICK_004_LangGraph --> BRICK_005_Tools_HITL: VERIFIED (2026-10-28)
     BRICK_005_Tools_HITL --> BRICK_006_Playwright: VERIFIED (2026-10-29)
-    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: NOT STARTED
+    BRICK_006_Playwright --> BRICK_007_Crawl4AI_Docling: READY FOR ACCEPTANCE (2026-11-05)
     BRICK_007_Crawl4AI_Docling --> BRICK_008_BrowserUse: Blocked
     BRICK_008_BrowserUse --> BRICK_009_Memory_RAG: Blocked
     BRICK_009_Memory_RAG --> BRICK_010_MCP: Blocked
@@ -52,13 +52,12 @@ stateDiagram-v2
 | **BRICK-004** | Deep Agents & LangGraph Runtime | **`VERIFIED`** | [REPORT-004.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-004.md) | Formally approved and accepted by Project Owner on 2026-10-25. Verified: 55 pytest, 41 vitest, 19 Playwright Chrome E2E passed. Security hardened. |
 | **BRICK-005** | Tool Registry, Validation, Permissions (HITL) & Initial MCP | **`VERIFIED`** | [REPORT-005.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-005.md) | Formally approved and accepted by Project Owner on 2026-10-28. All Phases 0–10 verified (165 deterministic backend pytests, 8 live OpenRouter pytests, 62 vitest, 17 Playwright E2E passed, 0 ruff errors, 0 leak). |
 | **BRICK-006** | Deterministic Playwright Execution & Playwright MCP Eval | **`VERIFIED`** | [REPORT-006.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-006.md) | Formally accepted by Project Owner on 2026-10-29. Phases 0–10 complete: deterministic Python Playwright engine, 5 deterministic tools, SSRF & sensitive input guards, WebSocket preview streamer, @playwright/mcp 3-tier gateway evaluation, LangGraph agent binding, exactly-once approval resumption, 4/4 live OpenRouter tests, 224 backend pytests, 74 vitest tests, REPORT-006 accepted, merged into master (3110d62). |
-| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 formal owner acceptance. |
-| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | `NOT STARTED` | Pending | Blocked pending BRICK-006 verification. |
-| **BRICK-008** | Intelligent Browser Navigation using Browser Use | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. |
-| **BRICK-009** | Persistent Memory & Knowledge Retrieval (RAG) | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. |
-| **BRICK-010** | Managed Model Context Protocol (MCP) Server Ecosystem | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. |
-| **BRICK-011** | Advanced Tasks, Subagents & Durable Execution | `NOT STARTED` | Pending | Blocked pending BRICK-010 verification. |
-| **BRICK-012** | Real-Time Multilingual Voice (Urdu/English/Arabic) | `NOT STARTED` | Pending | Blocked pending BRICK-011 verification. |
+| **BRICK-007** | Crawl4AI & Docling Extraction Pipeline | **`READY FOR ACCEPTANCE`** | [REPORT-007.md](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/reports/REPORT-007.md) | All Phases 1–10 complete: 216 backend extraction tests passed, 126 frontend vitest tests passed, 46 provider registry tests passed, 5 persistence tests passed; production build verified in 1.34s; 0 leaks; $0.00 spend. Full verification report REPORT-007 delivered. Awaiting Project Owner acceptance and merge. |
+| **BRICK-008** | Browser Use and Authenticated Navigation | `NOT STARTED` | Pending | Blocked pending BRICK-007 verification. OpenCLI dedicated profile candidate, Playwright/Playwright MCP foundation, Stagehand eval-only, native owner takeover. Anti-bot/stealth bypasses removed by owner decision. |
+| **BRICK-009** | Persistent Memory and Semantic RAG | `NOT STARTED` | Pending | Blocked pending BRICK-008 verification. Qdrant vector store, LangGraph orchestration, Mem0 eval-only, LangGraph Store/SQLite, deterministic chunker, benchmarked English & Arabic embeddings. Urdu removed by owner decision. |
+| **BRICK-010** | Managed MCP Ecosystem | `NOT STARTED` | Pending | Blocked pending BRICK-009 verification. Official & GitHub registry discovery, JAVED Private Registry authority, SecureMCPGateway, Playwright/Time/GitHub/Context7 approved, conditional DBHub/Notion/MarkItDown. Fabric & Azure MCP removed by owner decision. |
+| **BRICK-011** | Advanced Tasks and Subagents | `NOT STARTED` | Pending | Blocked pending BRICK-010 verification. Deep Agents on LangGraph, 6 specialized subagents, narrow allowlists, budget limits, cancellation propagation. |
+| **BRICK-012** | Real-Time English and Arabic Voice | `NOT STARTED` | Pending | Blocked pending BRICK-011 verification. LiveKit, Silero VAD, faster-whisper, Kokoro English TTS, Piper fallback, benchmarked Arabic TTS. Urdu removed by owner decision. |
 | **BRICK-013** | Production Hardening, PG Migration & Release | `NOT STARTED` | Pending | Blocked pending BRICK-012 verification. |
 
 ---
@@ -73,7 +72,8 @@ The Project Owner explicitly approved the BRICK-000 architectural baseline on 20
 - [ADR-004](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-004.md): Storage, Vector Retrieval & Memory Strategy (SQLite -> PostgreSQL + pgvector) — **APPROVED**
 - [ADR-005](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-005.md): Dual-Engine Browser Automation (Playwright Python + Browser Use) — **APPROVED**
 - [ADR-006](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-006.md): Web and Document Extraction Pipeline (Crawl4AI + Docling) — **APPROVED**
-- [ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md): Multilingual Voice Architecture Baseline — **APPROVED BASELINE (Local TTS Models for Urdu/Arabic Explicitly Remain EVALUATING)**
+- [ADR-007](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-007.md): Multilingual Voice Architecture Baseline — **SUPERSEDED IN PART (Urdu REMOVED BY PROJECT OWNER DECISION; English & Arabic Voice Bounded per ADR-008)**
+- [ADR-008](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-008.md): Guided Integration Roadmap for BRICK-008 through BRICK-012 — **APPROVED (Owner Architecture Directive 2026-11-02)**
 
 ---
 
@@ -280,6 +280,42 @@ edact_browser_tool_args automatically redacting sensitive input values for execu
   - Authored comprehensive verification report `docs/reports/REPORT-006.md`.
   - Promoted status to `READY FOR ACCEPTANCE` and enforced mandatory stop condition awaiting Project Owner review.
 
+- **BRICK-007 Phase 8 Implementation & Verification (2026-11-03)**:
+  - Implemented 11 FastAPI endpoints in `src/javed/api/v1/extraction.py` and OpenAPI schemas in `src/javed/schemas/extraction.py`.
+  - Configured SSE real-time crawl streaming, 25MB body upload limit, and clean lifespan resource management in `app.state`.
+  - 12/12 targeted tests passed (`tests/test_extraction_api.py`), 195 extraction tests passed, 424/424 full deterministic regression tests passed, 0 ruff errors.
+
+- **BRICK-007 Phase 9 Implementation & Verification (2026-11-03)**:
+  - Evaluated native `<dialog>` best practices via Modern Web Guidance (`npx.cmd -y modern-web-guidance@latest search "accessible modal dialog"`).
+  - Implemented `frontend/src/types/extraction.ts` and `frontend/src/services/extractionService.ts` for full API, streaming, and export actions.
+  - Implemented `DocumentUploadZone.tsx` (drag-and-drop, format whitelisting, 25MB validation), `WebCrawlModal.tsx` (accessible native dialog, SSRF warning, live SSE progress), `TableView.tsx` (sheet-aware, pagination, CSV/JSON exports), `ExtractionViewer.tsx` (accessible native dialog, 4 tabs, clipboard copy, raw download), `DocumentList.tsx` (filter chips, version indicators, view/download/delete actions), and `ExtractionTelemetryCard.tsx`.
+  - Transformed `frontend/src/views/user/DocumentsView.tsx` into a comprehensive ingestion workspace.
+  - Authored `frontend/src/test/extraction.test.tsx` with 15 tests (15/15 passed). Full frontend suite: 89/89 tests passed across 14 test suites. Production build: `tsc -b && vite build` in 844ms.
+  - Backend extraction suite: 200/200 passed. Zero ruff errors, zero process/thread leaks, $0.00 spend.
 
 
 
+
+
+
+---
+
+## 5. Owner Architecture Directive & Explicit Exclusions (2026-11-02)
+
+On 2026-11-02, the Project Owner issued the binding **Owner Architecture Directive: Guided Integration Roadmap for BRICK-008 through BRICK-012** ([ADR-008](file:///c:/Users/arehman/Desktop/AI Projects/Javed/docs/decisions/ADR-008.md)).
+
+### 5.1 Explicitly Removed Technologies
+The following candidates and capabilities are formally removed from the roadmap, task registry, and architecture:
+1. **Microsoft Fabric MCP Server** — `REMOVED BY PROJECT OWNER DECISION`
+2. **Azure MCP Server** — `REMOVED BY PROJECT OWNER DECISION`
+3. **beyahcuruk-del/captcha-takeover** — `REMOVED BY PROJECT OWNER DECISION`
+4. **scrapfly/Antibot-Detector** — `REMOVED BY PROJECT OWNER DECISION`
+5. **rebrowser/rebrowser-bot-detector** — `REMOVED BY PROJECT OWNER DECISION`
+6. **Urdu Language Support** — `REMOVED BY PROJECT OWNER DECISION` (STT, TTS, memory, embeddings, retrieval tests, and voices are strictly bounded to English and Arabic).
+
+### 5.2 Approved Core Integration Stack
+- **BRICK-008**: Microsoft Playwright, Playwright MCP, native JAVED tools, OpenCLI (primary authenticated session candidate via dedicated JAVED Chrome profile), Stagehand (eval only), Browser Use (reference only), Native Owner Takeover.
+- **BRICK-009**: LangGraph, BRICK-007 `NormalizedDocument`, Qdrant (primary vector store candidate), Mem0 (eval only), LangGraph Store & SQLite, JAVED deterministic chunker, benchmark-selected English & Arabic embeddings.
+- **BRICK-010**: Official MCP Registry & GitHub MCP Registry (discovery), JAVED Private MCP Registry (authority), `SecureMCPGateway`, Playwright/Time/GitHub/Context7 approved servers, conditional DBHub/Notion/MarkItDown.
+- **BRICK-011**: Deep Agents, LangGraph, JAVED HITL, BRICK-009 memory/RAG, BRICK-010 managed MCP, 6 specialized subagents (Research, Document-Analysis, Analytics, Browser-Operator, Coding, Report-Generation).
+- **BRICK-012**: LiveKit, Silero VAD, faster-whisper, Kokoro (English primary), Piper (fallback), benchmarked Arabic TTS. `VoxBigBrain` and `AI_assist` (reference only).

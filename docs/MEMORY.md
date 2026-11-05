@@ -38,12 +38,12 @@ This document captures durable technical insights, discovered platform constrain
 - **Insight**: Generic text extraction libraries (`pypdf`, `pdfplumber`) discard layout geometry and collapse multi-column text and tables into unreadable text streams.
 - **Pattern**: Use **Docling** (by IBM Research). Its TableFormer model parses complex multi-line tables, reading orders, and headers into structured formats, preserving exact page and bounding box provenance.
 
-### 2.6 Multilingual Voice Realities & Empirical Grounding
-- **Insight**: Off-the-shelf TTS models trained predominantly on English datasets sound distorted and robotic when synthesizing Urdu or Arabic phonemes. Base **XTTS-v2** officially supports 17 languages (including Arabic and English) but **does not officially support Urdu** in its base release, and its CPML license restricts commercial use. **Piper TTS** has sparse Arabic support and lacks official Urdu checkpoints.
+### 2.6 Real-Time Voice Realities & Empirical Grounding (English & Arabic)
+- **Insight**: Off-the-shelf TTS models trained predominantly on English datasets sound distorted when synthesizing non-English phonemes. Base **XTTS-v2** officially supports 17 languages (including Arabic and English) but **does not officially support Urdu** in its base release, and its CPML license restricts commercial use. **Piper TTS** has sparse Arabic support and lacks official Urdu checkpoints. On 2026-11-02, **Urdu language support was REMOVED BY PROJECT OWNER DECISION** (ADR-008), formally bounding the system to English and Arabic.
 - **Pattern**:
-  1. Maintain **replaceable voice adapter interfaces** (`BaseVoiceAdapter`).
-  2. Local TTS models for Urdu and Arabic remain in **`EVALUATING`** status; fine-tuned community checkpoints or alternative open architectures must be empirically benchmarked in BRICK-012.
-  3. The **OpenRouter audio gateway** (`openai/whisper-large-v3-turbo` for STT, `elevenlabs/eleven-v4-turbo` for TTS) serves as an approved provisional cloud pipeline.
+  1. Maintain **replaceable voice adapter interfaces** (BaseVoiceAdapter).
+  2. Real-time media transport uses **LiveKit**; VAD uses **Silero VAD**; STT uses **aster-whisper**; English TTS uses **Kokoro** (with Piper fallback); Arabic TTS is selected via a dedicated benchmark. Local Arabic TTS models remain in **EVALUATING** status. Urdu language support is **REMOVED BY PROJECT OWNER DECISION**.
+  3. The **OpenRouter audio gateway** (openai/whisper-large-v3-turbo for STT, elevenlabs/eleven-v4-turbo for TTS) serves as an approved provisional cloud pipeline.
   4. Latency (< 1.2s round-trip) and barge-in (< 50ms cut-off) are **empirical performance targets**, not pre-verified claims. Real-time conversational responsiveness must be validated through live network testing.
 
 ---

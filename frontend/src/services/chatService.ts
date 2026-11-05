@@ -2,13 +2,16 @@
  * Chat and streaming client service for Project Javed.
  */
 
-import type { ChatStreamEvent, CostTier, ModelCatalogResponse, StreamUsage } from '../types/chat';
+import type { ChatStreamEvent, CostTier, ModelCatalogResponse, ProviderId, StreamUsage } from '../types/chat';
 
 export interface StreamChatParams {
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[];
   model?: string;
   cost_tier?: CostTier;
   session_id?: string;
+  provider_id?: ProviderId;
+  thread_id?: string;
+  configuration_version?: string;
   temperature?: number;
   max_tokens?: number;
   signal?: AbortSignal;
@@ -63,6 +66,9 @@ export const chatService = {
       model,
       cost_tier,
       session_id,
+      provider_id,
+      thread_id,
+      configuration_version,
       temperature,
       max_tokens,
       signal,
@@ -84,6 +90,9 @@ export const chatService = {
         model,
         cost_tier,
         session_id,
+        provider_id,
+        thread_id,
+        configuration_version,
         temperature: temperature ?? 0.7,
         max_tokens,
         stream: true,

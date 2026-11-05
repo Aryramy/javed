@@ -14,8 +14,10 @@ import {
   RefreshCw,
   Workflow,
   Wrench,
+  Loader2,
 } from 'lucide-react';
 import { ModelSelector } from '../../components/chat/ModelSelector';
+import { ProviderSelector } from '../../components/chat/ProviderSelector';
 import { TokenCostMeter } from '../../components/chat/TokenCostMeter';
 import { MarkdownContent } from '../../components/chat/MarkdownContent';
 import { TaskPlanPanel } from '../../components/chat/TaskPlanPanel';
@@ -23,6 +25,7 @@ import { ApprovalCard } from '../../components/chat/ApprovalCard';
 import { ToolActivityCard } from '../../components/chat/ToolActivityCard';
 import { chatService } from '../../services/chatService';
 import { agentService } from '../../services/agentService';
+import { providerService } from '../../services/providerService';
 import { useBackend, useMode } from '../../context';
 import { cn } from '../../lib/utils';
 import { AssistantRuntimeProvider, useExternalStoreRuntime } from '@assistant-ui/react';
@@ -32,6 +35,8 @@ import type {
   CostTier,
   ModelCatalogResponse,
   ModelInfo,
+  ProviderId,
+  ProviderInfo,
   StreamUsage,
 } from '../../types/chat';
 import type {
@@ -193,9 +198,22 @@ export const ChatView: React.FC = () => {
   const [toolActivities, setToolActivities] = useState<ToolActivityRecord[]>([]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('javed_selected_provider');
+      if (saved === 'auto' || saved === 'openrouter' || saved === 'cheaper_inference') {
+        return saved;
+      }
+    }
+    return 'auto';
+  });
   const [models, setModels] = useState<ModelInfo[]>(DEFAULT_MODELS);
   const [selectedModelId, setSelectedModelId] = useState<string>('openrouter/auto');
   const [costTier, setCostTier] = useState<CostTier>('low');
+  const [configurationVersion, setConfigurationVersion] = useState<string>('v-init');
+  const [isProviderSwitching, setIsProviderSwitching] = useState<boolean>(false);
+  const [providerSwitchError, setProviderSwitchError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string>(() => `session-${crypto.randomUUID()}`);
   const [catalogMeta, setCatalogMeta] = useState<ModelCatalogResponse | null>(null);
   const [input, setInput] = useState<string>('');
@@ -209,6 +227,31 @@ export const ChatView: React.FC = () => {
     totalCostUsd: 0,
     messageCount: 0,
   });
+  const [lastRoute, setLastRoute] = useState<{ provider: string; model: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('javed_last_route');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const recordRoute = useCallback((provId?: string | null, modelId?: string | null) => {
+    const rawProv = provId || selectedProviderId;
+    let provName = 'OpenRouter';
+    if (rawProv === 'cheaper_inference') provName = 'Cheaper Inference';
+    else if (rawProv === 'auto') provName = (modelId && modelId.includes('deepseek')) ? 'Cheaper Inference' : 'OpenRouter';
+    else if (rawProv === 'openrouter') provName = 'OpenRouter';
+
+    const resolvedModel = modelId || selectedModelId || 'deepseek-v4.1-flash-1017';
+    const newRoute = { provider: provName, model: resolvedModel };
+    setLastRoute(newRoute);
+    try {
+      localStorage.setItem('javed_last_route', JSON.stringify(newRoute));
+    } catch {
+      // ignore
+    }
+  }, [selectedProviderId, selectedModelId]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -242,6 +285,129 @@ export const ChatView: React.FC = () => {
     loadCatalog();
   }, []);
 
+  // Load provider registry and confirm atomic initial binding on mount
+  useEffect(() => {
+    let mounted = true;
+    async function loadProviders() {
+      try {
+        const resp = await providerService.getProviders();
+        if (mounted && resp && resp.providers) {
+          setProviders(resp.providers);
+
+          let targetProv: ProviderId = resp.default_provider || 'auto';
+          let savedThread = threadId;
+
+          if (typeof window !== 'undefined') {
+            const savedBound = localStorage.getItem('javed_bound_provider');
+            if (savedBound) {
+              try {
+                const parsed = JSON.parse(savedBound);
+                if (parsed.provider_id) targetProv = parsed.provider_id;
+                if (parsed.thread_id) savedThread = parsed.thread_id;
+              } catch {
+                // ignore corrupted entry
+              }
+            } else {
+              const saved = localStorage.getItem('javed_selected_provider');
+              if (saved === 'auto' || saved === 'openrouter' || saved === 'cheaper_inference') {
+                targetProv = saved;
+              }
+            }
+          }
+
+          // Atomically confirm binding with backend without leaking host paths or secrets
+          try {
+            const bindRes = await providerService.bindProvider({
+              provider_id: targetProv,
+              interaction_mode: interactionMode,
+              current_thread_id: savedThread,
+              create_new_thread: false,
+            });
+            if (mounted) {
+              setSelectedProviderId(bindRes.provider_id);
+              setSelectedModelId(bindRes.effective_model_id);
+              setThreadId(bindRes.thread_id);
+              setConfigurationVersion(bindRes.configuration_version);
+            }
+          } catch (bindErr) {
+            console.warn('Initial provider bind failed; defaulting to safe local state:', bindErr);
+            if (mounted) {
+              setSelectedProviderId(targetProv);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Using default providers; registry endpoint not ready:', e);
+      }
+    }
+    loadProviders();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleSelectProvider = async (providerId: ProviderId) => {
+    // 1. Block switching while active execution, pending approvals, or ongoing switch
+    if (
+      isStreaming ||
+      isProviderSwitching ||
+      agentStatus === 'running' ||
+      agentStatus === 'planning' ||
+      agentStatus === 'streaming' ||
+      pendingApprovals.length > 0
+    ) {
+      return;
+    }
+
+    setIsProviderSwitching(true);
+    setProviderSwitchError(null);
+
+    try {
+      // 2. Validate backend-side, allocate isolated thread, resolve effective model
+      const res = await providerService.bindProvider({
+        provider_id: providerId,
+        cost_tier: costTier,
+        interaction_mode: interactionMode,
+        current_thread_id: threadId,
+        create_new_thread: true,
+      });
+
+      // 3. Atomically update provider, model, thread, version
+      setSelectedProviderId(res.provider_id);
+      setSelectedModelId(res.effective_model_id);
+      setThreadId(res.thread_id);
+      setConfigurationVersion(res.configuration_version);
+
+      // 4. Reset thread-local transient state for fresh provider thread
+      setAgentTodos([]);
+      setToolActivities([]);
+      setPendingApprovals([]);
+      setCheckpointId(null);
+
+      // Safe non-secret localStorage persistence (zero keys, zero base URLs)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          'javed_bound_provider',
+          JSON.stringify({
+            provider_id: res.provider_id,
+            effective_model_id: res.effective_model_id,
+            configuration_version: res.configuration_version,
+            thread_id: res.thread_id,
+          })
+        );
+        localStorage.setItem('javed_selected_provider', res.provider_id);
+        localStorage.setItem('javed_active_thread_id', res.thread_id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Provider switch rejected:', msg);
+      setProviderSwitchError(msg);
+      // Preserves previous confirmed provider, model, and thread!
+    } finally {
+      setIsProviderSwitching(false);
+    }
+  };
+
   // Save interaction mode & thread ID to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -274,6 +440,21 @@ export const ChatView: React.FC = () => {
         }
         if (state.tool_calls) {
           setToolActivities(state.tool_calls);
+        }
+        if (state.total_tokens && state.total_tokens > 0) {
+          setTotals({
+            totalPromptTokens: state.total_prompt_tokens ?? 0,
+            totalCompletionTokens: state.total_completion_tokens ?? 0,
+            totalTokens: state.total_tokens,
+            totalCostUsd: state.total_cost_usd ?? 0,
+            messageCount: state.messages ? state.messages.length : 1,
+          });
+        }
+        if (state.active_provider) {
+          const prov = state.active_provider as ProviderId;
+          if (prov === 'auto' || prov === 'openrouter' || prov === 'cheaper_inference') {
+            setSelectedProviderId(prov);
+          }
         }
       }
 
@@ -394,7 +575,7 @@ export const ChatView: React.FC = () => {
   const handleSubmit = useCallback(
     async (textToSend?: string) => {
       const promptText = (textToSend ?? input).trim();
-      if (!promptText || isStreaming) return;
+      if (!promptText || isStreaming || isProviderSwitching) return;
 
       setInput('');
 
@@ -438,13 +619,18 @@ export const ChatView: React.FC = () => {
           await agentService.streamAgent({
             thread_id: threadId,
             message: promptText,
-            model: selectedModelId,
-            cost_tier: selectedModelId === 'openrouter/auto' ? costTier : undefined,
+            provider_id: selectedProviderId,
+            model: selectedProviderId === 'auto' ? undefined : selectedModelId,
+            cost_tier: (selectedProviderId === 'auto' || selectedModelId === 'openrouter/auto') ? costTier : undefined,
             session_id: sessionId,
+            configuration_version: configurationVersion,
             signal: controller.signal,
             onRunStarted: (data) => {
               setActiveRunId(data.run_id);
               setAgentStatus('running');
+              if (data.provider_id || data.model) {
+                recordRoute(data.provider_id, data.model);
+              }
             },
             onPlanning: (todos) => {
               setAgentTodos(todos);
@@ -495,6 +681,7 @@ export const ChatView: React.FC = () => {
                     status: 'AWAITING_APPROVAL',
                     approval_id: approval.approval_id,
                     server_id: approval.server_id || copy[existingIndex].server_id,
+                    classification: 'APPROVAL_REQUIRED',
                     arguments: approval.arguments,
                     tool_call_id: approval.tool_call_id || copy[existingIndex].tool_call_id,
                   };
@@ -506,6 +693,7 @@ export const ChatView: React.FC = () => {
                     tool_call_id: approval.tool_call_id || `tc-${Date.now()}`,
                     tool_id: approval.tool_id,
                     server_id: approval.server_id,
+                    classification: 'APPROVAL_REQUIRED',
                     tool_name: approval.tool_id,
                     arguments: approval.arguments,
                     status: 'AWAITING_APPROVAL',
@@ -564,6 +752,7 @@ export const ChatView: React.FC = () => {
                   tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                   tool_id: data.tool,
                   server_id: data.server_id || 'unknown',
+                  classification: data.classification || 'DENIED',
                   tool_name: data.tool,
                   description: data.description,
                   arguments: data.input,
@@ -599,7 +788,8 @@ export const ChatView: React.FC = () => {
                     ...copy[existingIndex],
                     status: isTerminal ? existingStatus : 'EXECUTING',
                     started_at: copy[existingIndex].started_at || now,
-                    server_id: data.server_id || copy[existingIndex].server_id,
+                    server_id: data.server_id || copy[existingIndex].server_id || 'unknown',
+                    classification: data.classification || copy[existingIndex].classification || 'DENIED',
                     description: data.description || copy[existingIndex].description,
                     arguments:
                       data.input && Object.keys(data.input).length > 0
@@ -614,6 +804,7 @@ export const ChatView: React.FC = () => {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
                     server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     description: data.description,
                     arguments: data.input,
@@ -645,6 +836,8 @@ export const ChatView: React.FC = () => {
                   copy[existingIndex] = {
                     ...current,
                     status: 'COMPLETED',
+                    server_id: data.server_id || current.server_id || 'unknown',
+                    classification: data.classification || current.classification || 'DENIED',
                     result_summary: data.output,
                     completed_at: now,
                     elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -656,7 +849,8 @@ export const ChatView: React.FC = () => {
                   {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
-                    server_id: 'unknown',
+                    server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     arguments: {},
                     status: 'COMPLETED',
@@ -688,6 +882,8 @@ export const ChatView: React.FC = () => {
                   copy[existingIndex] = {
                     ...current,
                     status: 'FAILED',
+                    server_id: data.server_id || current.server_id || 'unknown',
+                    classification: data.classification || current.classification || 'DENIED',
                     error_message: data.error,
                     completed_at: now,
                     elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -699,7 +895,8 @@ export const ChatView: React.FC = () => {
                   {
                     tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                     tool_id: data.tool,
-                    server_id: 'unknown',
+                    server_id: data.server_id || 'unknown',
+                    classification: data.classification || 'DENIED',
                     tool_name: data.tool,
                     arguments: {},
                     status: 'FAILED',
@@ -729,6 +926,7 @@ export const ChatView: React.FC = () => {
               });
 
               if (data.usage) {
+                recordRoute(data.usage.provider_id, data.usage.selected_model);
                 setCurrentUsage(data.usage);
                 setTotals((prev) => ({
                   totalPromptTokens: prev.totalPromptTokens + data.usage!.prompt_tokens,
@@ -812,9 +1010,12 @@ export const ChatView: React.FC = () => {
       try {
         await chatService.streamChat({
           messages: historyPayload,
-          model: selectedModelId,
-          cost_tier: selectedModelId === 'openrouter/auto' ? costTier : undefined,
+          provider_id: selectedProviderId,
+          model: selectedProviderId === 'auto' ? undefined : selectedModelId,
+          cost_tier: (selectedProviderId === 'auto' || selectedModelId === 'openrouter/auto') ? costTier : undefined,
           session_id: sessionId,
+          thread_id: threadId,
+          configuration_version: configurationVersion,
           signal: controller.signal,
           onToken: (token: string) => {
             if (ttftRecorded === null) {
@@ -845,6 +1046,7 @@ export const ChatView: React.FC = () => {
             });
           },
           onUsage: (usage: StreamUsage) => {
+            recordRoute(usage.provider_id, usage.selected_model);
             setCurrentUsage(usage);
             const duration = Math.round(performance.now() - startTime);
 
@@ -903,7 +1105,7 @@ export const ChatView: React.FC = () => {
         abortControllerRef.current = null;
       }
     },
-    [input, isStreaming, messages, selectedModelId, costTier, sessionId, interactionMode, threadId, checkpointId]
+    [input, isStreaming, isProviderSwitching, messages, selectedModelId, costTier, sessionId, interactionMode, threadId, checkpointId, selectedProviderId, configurationVersion]
   );
 
   const handleApproveTool = async (approvalId: string) => {
@@ -989,6 +1191,7 @@ export const ChatView: React.FC = () => {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
                 server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 description: data.description,
                 arguments: data.input,
@@ -1021,6 +1224,8 @@ export const ChatView: React.FC = () => {
               copy[existingIndex] = {
                 ...current,
                 status: 'COMPLETED',
+                server_id: data.server_id || current.server_id || 'unknown',
+                classification: data.classification || current.classification || 'DENIED',
                 result_summary: data.output,
                 completed_at: now,
                 elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -1032,7 +1237,8 @@ export const ChatView: React.FC = () => {
               {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
-                server_id: 'unknown',
+                server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 arguments: {},
                 status: 'COMPLETED',
@@ -1065,6 +1271,8 @@ export const ChatView: React.FC = () => {
               copy[existingIndex] = {
                 ...current,
                 status: 'FAILED',
+                server_id: data.server_id || current.server_id || 'unknown',
+                classification: data.classification || current.classification || 'DENIED',
                 error_message: data.error,
                 completed_at: now,
                 elapsed_ms: elapsed ?? current.elapsed_ms,
@@ -1076,7 +1284,8 @@ export const ChatView: React.FC = () => {
               {
                 tool_call_id: data.tool_call_id || `tc-${Date.now()}`,
                 tool_id: data.tool,
-                server_id: 'unknown',
+                server_id: data.server_id || 'unknown',
+                classification: data.classification || 'DENIED',
                 tool_name: data.tool,
                 arguments: {},
                 status: 'FAILED',
@@ -1238,10 +1447,10 @@ export const ChatView: React.FC = () => {
             prev.map((t) =>
               t.approval_id === data.approval_id
                 ? {
-                    ...t,
-                    status: 'REJECTED',
-                    error_message: data.reason || 'Tool execution was rejected by user.',
-                  }
+                  ...t,
+                  status: 'REJECTED',
+                  error_message: data.reason || 'Tool execution was rejected by user.',
+                }
                 : t
             )
           );
@@ -1398,12 +1607,10 @@ export const ChatView: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Server className="w-3.5 h-3.5 text-primary" />
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground" data-testid="authoritative-stage-status">
+            <Server className="w-3.5 h-3.5 text-primary shrink-0" />
             <span>
-              {interactionMode === 'agent'
-                ? 'Stage 1 Transport Verified • Deep Agents Runtime Active (BRICK-004)'
-                : 'Stage 1 Transport Verified • AI Gateway Active (BRICK-003)'}
+              {systemStatus?.stage ?? 'Stage 4'} • {systemStatus?.active_brick ?? 'BRICK-007 In Progress'} • {systemStatus?.provider_gateway_status ?? 'Provider Gateway Active'} • {systemStatus?.runtime_status ?? 'Deep Agents Runtime Active'}
             </span>
           </div>
         </div>
@@ -1474,13 +1681,28 @@ export const ChatView: React.FC = () => {
                 </div>
               )}
 
+              <ProviderSelector
+                providers={providers}
+                selectedProviderId={selectedProviderId}
+                onSelectProvider={handleSelectProvider}
+                disabled={isStreaming || isProviderSwitching || agentStatus === 'streaming' || agentStatus === 'planning' || pendingApprovals.length > 0}
+                interactionMode={interactionMode}
+                isDeveloperMode={mode === 'dev'}
+              />
+
               <ModelSelector
                 models={models}
                 selectedModelId={selectedModelId}
                 onSelectModel={setSelectedModelId}
                 costTier={costTier}
                 onSelectCostTier={setCostTier}
-                disabled={isStreaming}
+                disabled={isStreaming || isProviderSwitching}
+                selectedProviderId={selectedProviderId}
+                cheaperInferenceModel={
+                  providers.find((p) => p.id === 'cheaper_inference')?.chat_model ||
+                  'deepseek-v4.1-flash-1017'
+                }
+                lastRoute={lastRoute}
               />
               <TokenCostMeter currentUsage={currentUsage} totals={totals} isStreaming={isStreaming} />
             </div>
@@ -1644,11 +1866,10 @@ export const ChatView: React.FC = () => {
                     )}
 
                     <div
-                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 shadow-md ${
-                        isUser
+                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 shadow-md ${isUser
                           ? 'bg-cyan-600/90 text-white rounded-tr-none'
                           : 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none'
-                      }`}
+                        }`}
                     >
                       {isUser ? (
                         <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
@@ -1760,6 +1981,35 @@ export const ChatView: React.FC = () => {
 
           {/* Composer Input Area */}
           <div className="p-3 border-t border-zinc-800/80 bg-zinc-900/60">
+            {providerSwitchError && (
+              <div
+                id="provider-switch-error-alert"
+                data-testid="provider-switch-error-alert"
+                className="mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between"
+              >
+                <span>{providerSwitchError}</span>
+                <button
+                  type="button"
+                  onClick={() => setProviderSwitchError(null)}
+                  className="text-zinc-400 hover:text-zinc-200 px-1 font-bold"
+                  aria-label="Dismiss provider error"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
+
+            {isProviderSwitching && (
+              <div
+                id="provider-switching-banner"
+                data-testid="provider-switching-banner"
+                className="mb-2 p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs flex items-center gap-2 font-mono"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Confirming provider switch and allocating atomic runtime thread...</span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1775,17 +2025,19 @@ export const ChatView: React.FC = () => {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  isStreaming
-                    ? interactionMode === 'agent'
-                      ? 'Agent is planning and executing...'
-                      : 'Javed is streaming response...'
-                    : interactionMode === 'agent'
-                    ? 'Instruct Javed Agent (Enter to submit, Shift+Enter for new line)...'
-                    : 'Message Javed (Enter to send, Shift+Enter for new line)...'
+                  isProviderSwitching
+                    ? 'Confirming provider binding...'
+                    : isStreaming
+                      ? interactionMode === 'agent'
+                        ? 'Agent is planning and executing...'
+                        : 'Javed is streaming response...'
+                      : interactionMode === 'agent'
+                        ? 'Instruct Javed Agent (Enter to submit, Shift+Enter for new line)...'
+                        : 'Message Javed (Enter to send, Shift+Enter for new line)...'
                 }
                 rows={1}
-                disabled={isStreaming}
-                className="flex-1 max-h-32 min-h-[44px] py-2.5 pl-3.5 pr-12 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/40 text-xs text-zinc-100 placeholder:text-zinc-500 outline-none transition-all resize-none font-sans"
+                disabled={isStreaming || isProviderSwitching}
+                className="flex-1 max-h-32 min-h-[44px] py-2.5 pl-3.5 pr-12 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/40 text-xs text-zinc-100 placeholder:text-zinc-500 outline-none transition-all resize-none font-sans disabled:opacity-50 disabled:cursor-not-allowed"
               />
 
               <div className="absolute right-2 flex items-center">
@@ -1805,14 +2057,13 @@ export const ChatView: React.FC = () => {
                     type="submit"
                     id="send-message-button"
                     data-testid="send-message-button"
-                    disabled={!input.trim()}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                      input.trim()
+                    disabled={!input.trim() || isProviderSwitching}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${input.trim() && !isProviderSwitching
                         ? interactionMode === 'agent'
                           ? 'bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-md shadow-blue-500/20'
                           : 'bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold shadow-md shadow-cyan-500/20'
                         : 'bg-zinc-800/60 text-zinc-600 cursor-not-allowed'
-                    }`}
+                      }`}
                     title="Send message"
                     onClick={() => handleSubmit()}
                   >

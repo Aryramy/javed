@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpen }) => {
   const { mode, setMode } = useMode()
-  const { status, latencyMs, reconnectAttempts } = useBackend()
+  const { status, latencyMs, reconnectAttempts, systemStatus } = useBackend()
   const navigate = useNavigate()
 
   const handleModeSwitch = (newMode: 'user' | 'dev') => {
@@ -44,14 +44,14 @@ export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, setMobileMenuOpe
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tight text-base text-foreground">
-                JARVIS
+                JAVED
               </span>
               <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">
-                Javed
+                AI Assistant
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground font-medium hidden sm:block">
-              Stage 1 • Foundation & UI Shell
+              {systemStatus ? `${systemStatus.stage} • ${systemStatus.active_brick}` : 'Stage 4 • BRICK-007 In Progress'}
             </p>
           </div>
         </div>

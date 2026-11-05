@@ -15,6 +15,15 @@ from javed.schemas.chat import (
     StreamUsage,
 )
 from javed.schemas.events import EventEnvelope
+from javed.schemas.extraction import (
+    CrawlRequest,
+    DeleteDocumentResponse,
+    DocumentDetailResponse,
+    DocumentListResponse,
+    ExtractionResponse,
+    ExtractionTelemetryResponse,
+    TableSummary,
+)
 from javed.schemas.health import DependencyStatus, LiveResponse, ReadyResponse
 from javed.schemas.mcp import (
     ConnectionState,
@@ -37,6 +46,7 @@ from javed.schemas.mcp import (
     parse_namespaced_tool_id,
     validate_server_id,
 )
+from javed.schemas.providers import ProviderBindingResponse, ProviderSelectionRequest
 from javed.schemas.system import PingResponse, SystemStatusResponse
 
 __all__ = [
@@ -49,9 +59,15 @@ __all__ = [
     "ChatResponse",
     "ChatStreamEvent",
     "ConnectionState",
+    "CrawlRequest",
+    "DeleteDocumentResponse",
     "DependencyStatus",
     "DiscoveredTool",
+    "DocumentDetailResponse",
+    "DocumentListResponse",
     "EventEnvelope",
+    "ExtractionResponse",
+    "ExtractionTelemetryResponse",
     "LiveResponse",
     "MCPApprovalUnavailableError",
     "MCPGatewayError",
@@ -64,11 +80,14 @@ __all__ = [
     "ModelCatalogResponse",
     "ModelInfo",
     "PingResponse",
+    "ProviderBindingResponse",
+    "ProviderSelectionRequest",
     "ReadyResponse",
     "ServerConfig",
     "ServerStatus",
     "StreamUsage",
     "SystemStatusResponse",
+    "TableSummary",
     "ToolApprovalPolicy",
     "ToolPermission",
     "TransportType",

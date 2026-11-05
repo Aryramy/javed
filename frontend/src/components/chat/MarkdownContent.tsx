@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Check, Copy } from 'lucide-react';
+import { normalizeMarkdownTables } from '../../utils/formatters';
 
 interface MarkdownContentProps {
   content: string;
 }
 
 export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => {
+  const normalizedContent = normalizeMarkdownTables(content);
+
   return (
     <div className="prose prose-invert max-w-none text-sm leading-relaxed space-y-2">
       <Markdown
+        remarkPlugins={[remarkGfm]}
         components={{
           code({ className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
@@ -30,6 +35,38 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
             return (
               <CodeBlock language={match ? match[1] : ''} code={codeString} />
             );
+          },
+          table({ children }) {
+            return (
+              <div className="my-3 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/70 shadow-sm">
+                <table className="min-w-full divide-y divide-zinc-800 text-left text-xs font-mono">
+                  {children}
+                </table>
+              </div>
+            );
+          },
+          thead({ children }) {
+            return (
+              <thead className="bg-zinc-900/90 text-zinc-300 font-semibold uppercase tracking-wider text-[11px]">
+                {children}
+              </thead>
+            );
+          },
+          tbody({ children }) {
+            return <tbody className="divide-y divide-zinc-800/60 text-zinc-300">{children}</tbody>;
+          },
+          tr({ children }) {
+            return <tr className="hover:bg-zinc-900/50 transition-colors">{children}</tr>;
+          },
+          th({ children }) {
+            return (
+              <th className="px-3.5 py-2.5 text-xs font-semibold text-zinc-200 border-b border-zinc-800">
+                {children}
+              </th>
+            );
+          },
+          td({ children }) {
+            return <td className="px-3.5 py-2 text-xs text-zinc-300 whitespace-nowrap">{children}</td>;
           },
           p({ children }) {
             return <p className="mb-2 last:mb-0 text-zinc-200">{children}</p>;
@@ -64,7 +101,7 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => 
           },
         }}
       >
-        {content}
+        {normalizedContent}
       </Markdown>
     </div>
   );

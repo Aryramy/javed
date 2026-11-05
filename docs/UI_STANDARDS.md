@@ -66,7 +66,7 @@ flowchart LR
 |    Status: COMPLETED (0.42s)]               |  +-------------------------------------+  |
 |                                             |  +-------------------------------------+  |
 |  [Agent Reasoning & Step Planner Expander]  |  | MEMORY & SOURCE PROVENANCE          |  |
-|                                             |  | Fact: User preferred language: Urdu |  |
+|                                             |  | Fact: User preferred language: Arabic |  |
 |                                             |  +-------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 | PROMPT CONSOLE: [Microphone (VAD)] [Attachment Clip] [Multi-line Input Area...] [Send/Stop] |

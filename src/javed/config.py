@@ -66,6 +66,30 @@ class Settings(BaseModel):
         default="openrouter/auto",
         description="Default LLM model identifier",
     )
+    openrouter_model: str | None = Field(
+        default=None,
+        description="Explicit OpenRouter model override (defaults to openrouter_default_model)",
+    )
+    openrouter_stt_base_url: str | None = Field(
+        default=None,
+        description="OpenRouter Speech-to-Text Base URL",
+    )
+    openrouter_stt_model: str | None = Field(
+        default=None,
+        description="OpenRouter Speech-to-Text Model ID",
+    )
+    openrouter_tts_base_url: str | None = Field(
+        default=None,
+        description="OpenRouter Text-to-Speech Base URL",
+    )
+    openrouter_tts_model: str | None = Field(
+        default=None,
+        description="OpenRouter Text-to-Speech Model ID",
+    )
+    openrouter_tts_voice: str | None = Field(
+        default=None,
+        description="OpenRouter Text-to-Speech Voice ID",
+    )
     openrouter_daily_budget_usd: float | None = Field(
         default=None,
         description="Optional application-side daily LLM spend limit in USD (None if uncapped)",
@@ -89,6 +113,56 @@ class Settings(BaseModel):
     app_url: str = Field(
         default="http://localhost:5173",
         description="Application origin for OpenRouter analytics",
+    )
+
+    # Cheaper Inference LLM & Media Settings
+    cheaper_inference_api_key: str | None = Field(
+        default=None,
+        description="Cheaper Inference API Key",
+    )
+    cheaper_inference_base_url: str = Field(
+        default="https://api.cheaperinference.com/v1",
+        description="Cheaper Inference API Base URL",
+    )
+    cheaper_inference_model: str | None = Field(
+        default=None,
+        description="Cheaper Inference primary chat/agent model ID",
+    )
+    cheaper_inference_stt_base_url: str | None = Field(
+        default=None,
+        description="Cheaper Inference Speech-to-Text Base URL",
+    )
+    cheaper_inference_stt_model: str | None = Field(
+        default=None,
+        description="Cheaper Inference Speech-to-Text Model ID",
+    )
+    cheaper_inference_tts_base_url: str | None = Field(
+        default=None,
+        description="Cheaper Inference Text-to-Speech Base URL",
+    )
+    cheaper_inference_tts_model: str | None = Field(
+        default=None,
+        description="Cheaper Inference Text-to-Speech Model ID",
+    )
+    cheaper_inference_tts_voice: str | None = Field(
+        default=None,
+        description="Cheaper Inference Text-to-Speech Voice ID",
+    )
+    cheaper_inference_realtime_url: str | None = Field(
+        default=None,
+        description="Cheaper Inference Real-time Voice WebSocket URL",
+    )
+    cheaper_inference_realtime_model: str | None = Field(
+        default=None,
+        description="Cheaper Inference Real-time Voice Model ID",
+    )
+    cheaper_inference_realtime_max_session_usd: float | None = Field(
+        default=None,
+        description="Budget ceiling per real-time voice session in USD",
+    )
+    cheaper_inference_timeout_seconds: float = Field(
+        default=60.0,
+        description="Timeout for upstream Cheaper Inference requests in seconds",
     )
 
     # Deep Agents & LangGraph Runtime Settings
@@ -176,6 +250,8 @@ def get_settings() -> Settings:
 
     env = os.getenv("JAVED_ENV", "development").strip().lower()
 
+    cheaper_rt_budget = os.getenv("CHEAPER_INFERENCE_REALTIME_MAX_SESSION_USD")
+
     kwargs = {
         "env": env,
         "host": os.getenv("JAVED_HOST", "127.0.0.1"),
@@ -184,10 +260,34 @@ def get_settings() -> Settings:
         "openrouter_api_key": os.getenv("OPENROUTER_API_KEY"),
         "openrouter_base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         "openrouter_default_model": os.getenv("OPENROUTER_DEFAULT_MODEL", "openrouter/auto"),
+        "openrouter_model": os.getenv("OPENROUTER_MODEL"),
+        "openrouter_stt_base_url": os.getenv("OPENROUTER_STT_BASE_URL"),
+        "openrouter_stt_model": os.getenv("OPENROUTER_STT_MODEL"),
+        "openrouter_tts_base_url": os.getenv("OPENROUTER_TTS_BASE_URL"),
+        "openrouter_tts_model": os.getenv("OPENROUTER_TTS_MODEL"),
+        "openrouter_tts_voice": os.getenv("OPENROUTER_TTS_VOICE"),
         "openrouter_daily_budget_usd": daily_budget,
         "openrouter_timeout_seconds": float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")),
         "openrouter_auto_router_cost_tier": os.getenv("OPENROUTER_AUTO_ROUTER_COST_TIER", "low"),
         "openrouter_system_prompt": os.getenv("OPENROUTER_SYSTEM_PROMPT"),
+        "cheaper_inference_api_key": os.getenv("CHEAPER_INFERENCE_API_KEY"),
+        "cheaper_inference_base_url": os.getenv(
+            "CHEAPER_INFERENCE_BASE_URL", "https://api.cheaperinference.com/v1"
+        ),
+        "cheaper_inference_model": os.getenv("CHEAPER_INFERENCE_MODEL"),
+        "cheaper_inference_stt_base_url": os.getenv("CHEAPER_INFERENCE_STT_BASE_URL"),
+        "cheaper_inference_stt_model": os.getenv("CHEAPER_INFERENCE_STT_MODEL"),
+        "cheaper_inference_tts_base_url": os.getenv("CHEAPER_INFERENCE_TTS_BASE_URL"),
+        "cheaper_inference_tts_model": os.getenv("CHEAPER_INFERENCE_TTS_MODEL"),
+        "cheaper_inference_tts_voice": os.getenv("CHEAPER_INFERENCE_TTS_VOICE"),
+        "cheaper_inference_realtime_url": os.getenv("CHEAPER_INFERENCE_REALTIME_URL"),
+        "cheaper_inference_realtime_model": os.getenv("CHEAPER_INFERENCE_REALTIME_MODEL"),
+        "cheaper_inference_realtime_max_session_usd": (
+            float(cheaper_rt_budget) if cheaper_rt_budget else None
+        ),
+        "cheaper_inference_timeout_seconds": float(
+            os.getenv("CHEAPER_INFERENCE_TIMEOUT_SECONDS", "60.0")
+        ),
         "agent_checkpoint_db_path": os.getenv(
             "JAVED_AGENT_CHECKPOINT_DB_PATH", "data/checkpoints.db"
         ),

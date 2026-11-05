@@ -29,6 +29,10 @@ export interface SystemStatusResponse {
   uptime_seconds: number
   active_ws_connections: number
   e2e_test_mode?: boolean
+  stage?: string
+  active_brick?: string
+  provider_gateway_status?: string
+  runtime_status?: string
   capabilities: {
     rest_api: boolean
     websocket: boolean
