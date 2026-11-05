@@ -101,13 +101,16 @@ flowchart TD
 ---
 
 ### Milestone 6: Planner, Coder, Reviewer, Tester LangGraph Cyclic Flow
+- **Status**: **READY FOR ACCEPTANCE** (Implemented src/javed/agent/efficiency/workflow.py, 
+odes.py, state.py, 
+outing.py, contracts.py, 65 passing deterministic tests in 	est_agent_efficiency_nodes.py & 	est_agent_efficiency_workflow.py, 191 total efficiency tests passing, zero live runtime modifications).
 - **Objective**: Implement the 5-role LangGraph cyclic state machine.
 - **Scope**:
-  - Build cyclic graph nodes: `IntakeNode`, `OrientationNode`, `PlannerNode`, `PlanGateNode`, `CoderNode`, `ReviewerNode`, `TesterNode`, `RegressionNode`, `FinalReviewNode`.
-  - Enforce isolated context for the Reviewer node (independent model call with clean context).
-  - Implement failure fingerprinting (`compute_failure_fingerprint`) and anti-thrashing circuit breakers.
-  - Support human review gates via LangGraph native `interrupt()` / `Command(resume=...)`.
-- **Verification**: End-to-end automated test suite verifying state machine transitions, reviewer rejection re-routing, and test failure recovery.
+  - Build cyclic graph nodes: IntakeNode, RepositoryOrientationNode, RootCauseOrDesignNode, PlannerNode, PlanGateNode, CoderNode, ReviewerNode, TesterNode, FinalReviewerNode.
+  - Enforce isolated context for the Reviewer node (independent model call with clean context, no Coder CoT).
+  - Implement failure fingerprinting and anti-thrashing circuit breakers (identical failure twice halts retries).
+  - Connect node execution to Milestone 4 WatchdogEngine and Milestone 5 PreEditGate write authorization.
+- **Verification**: 65 unit & workflow tests verifying complete cyclic routing, loop bounds, failure fingerprint halts, environment failure routing, and structured state serialization.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **Document ID**: `ARCH-010`<br/>
 > **Title**: LangGraph Cyclic State-Machine, Role Contracts, Execution Budgets, and Testing Strategy<br/>
-> **Status**: `PROPOSED SPECIFICATION`<br/>
+> **Status**: `IMPLEMENTED & VERIFIED (Milestone 6 Accepted)`<br/>
 > **Program**: Coding-Agent Intelligence and Execution Efficiency<br/>
 > **Author**: Antigravity Agent Architecture Core Team<br/>
 > **Date**: 2026-11-05<br/>

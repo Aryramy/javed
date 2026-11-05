@@ -1,4 +1,4 @@
-"""__init__.py — JAVED Coding-Agent Efficiency & Execution Watchdog Module."""
+"""__init__.py — JAVED Coding-Agent Efficiency, Watchdog & LangGraph Workflow Module."""
 
 from javed.agent.efficiency.briefs import (
     EvidenceItem,
@@ -15,6 +15,17 @@ from javed.agent.efficiency.budgets import (
     TaskClass,
     get_budget_profile,
 )
+from javed.agent.efficiency.contracts import (
+    CoderOutput,
+    FinalReviewerOutcome,
+    FinalReviewerOutput,
+    NodeResult,
+    PlanGateOutcome,
+    PlannerOutput,
+    ReviewerOutcome,
+    ReviewerOutput,
+    TesterOutput,
+)
 from javed.agent.efficiency.gate import (
     ApprovalStatus,
     BriefApprovalRecord,
@@ -29,6 +40,27 @@ from javed.agent.efficiency.ledger import (
     ActionStatus,
     FailureClassification,
     FileReadRecord,
+)
+from javed.agent.efficiency.nodes import (
+    CoderNode,
+    FinalReviewerNode,
+    IntakeNode,
+    PlanGateNode,
+    PlannerNode,
+    RepositoryOrientationNode,
+    ReviewerNode,
+    RootCauseOrDesignNode,
+    TesterNode,
+)
+from javed.agent.efficiency.routing import (
+    route_from_final_reviewer,
+    route_from_plan_gate,
+    route_from_reviewer,
+    route_from_tester,
+)
+from javed.agent.efficiency.state import (
+    CodingTaskState,
+    WorkflowState,
 )
 from javed.agent.efficiency.subprocess_control import (
     SUBPROCESS_TIMEOUTS,
@@ -45,6 +77,9 @@ from javed.agent.efficiency.watchdog import (
     WatchdogEngine,
     WatchdogState,
 )
+from javed.agent.efficiency.workflow import (
+    CodingWorkflowEngine,
+)
 
 __all__ = [
     "DEFAULT_BUDGET_PROFILES",
@@ -55,15 +90,33 @@ __all__ = [
     "ApprovalStatus",
     "BriefApprovalRecord",
     "BudgetWarningEvent",
+    "CoderNode",
+    "CoderOutput",
+    "CodingTaskState",
+    "CodingWorkflowEngine",
     "EvidenceItem",
     "EvidenceType",
     "ExecutionCounters",
     "FailureClassification",
     "FileReadRecord",
+    "FinalReviewerNode",
+    "FinalReviewerOutcome",
+    "FinalReviewerOutput",
+    "IntakeNode",
+    "NodeResult",
     "OwnerBudgetOverride",
+    "PlanGateNode",
+    "PlanGateOutcome",
+    "PlannerNode",
+    "PlannerOutput",
     "PreEditBrief",
     "PreEditGate",
+    "RepositoryOrientationNode",
+    "ReviewerNode",
+    "ReviewerOutcome",
+    "ReviewerOutput",
     "RootCauseConfidence",
+    "RootCauseOrDesignNode",
     "SUBPROCESS_TIMEOUTS",
     "SubprocessResult",
     "TargetLineRange",
@@ -71,13 +124,20 @@ __all__ = [
     "TaskCheckpoint",
     "TaskClass",
     "TaskType",
+    "TesterNode",
+    "TesterOutput",
     "WatchdogEngine",
     "WatchdogState",
+    "WorkflowState",
     "WriteAuthorizationDecision",
     "WriteAuthorizationResult",
     "WriteOperation",
     "get_budget_profile",
     "get_timeout_for_category",
+    "route_from_final_reviewer",
+    "route_from_plan_gate",
+    "route_from_reviewer",
+    "route_from_tester",
     "run_bounded_subprocess",
     "terminate_process_tree",
 ]
